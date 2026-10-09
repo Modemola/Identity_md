@@ -367,13 +367,13 @@ function milestoneCard(p, m, c, total, isTeam, historyEl) {
   const pct = total ? Number((m.amount * 10000n) / total) / 100 : 0;
   const actions = [];
   const id = BigInt(p.id);
-  const canCheck = m.gate.anyone || (m.gate.team && isTeam);
-
-  if (m.outcome === 0 && st.cls !== "checking") {
-    if (canCheck) {
+  if (m.outcome === 0 && st.cls !== "checking" && m.gate.open) {
+    if (isTeam && m.gate.funded) {
       actions.push(h("button", { class: "btn primary small", onclick: (e) => act(e.currentTarget, "Ask the swarm", () => send({ address: config.vault, abi: vaultAbi, functionName: "check", args: [id, m.index] })) }, "Ask the swarm now · 0.5 IMD from budget"));
-    } else if (m.gate.team && !m.gate.anyone) {
-      actions.push(h("span", { class: "muted" }, "The team can ask for an early check. From the deadline, anyone can."));
+    } else if (isTeam) {
+      actions.push(h("span", { class: "muted" }, "Top up the check budget below to ask the swarm."));
+    } else {
+      actions.push(h("span", { class: "muted" }, `Only the team can ask the swarm to confirm this. If it is not proven by ${when(m.deadline + c.grace)}, it burns.`));
     }
   }
   if (!m.settled && (m.outcome === 1 || (m.outcome === 0 && now() > m.deadline + c.grace))) {
@@ -444,13 +444,21 @@ function renderHistory(el, index, hist) {
 }
 
 function budgetBox(p) {
-  if (p.open === 0) return null;
+  if (p.open === 0) {
+    if (p.budget === 0n) return null;
+    return h(
+      "div",
+      { class: "summary", style: "margin-bottom:40px;display:flex;gap:12px;align-items:center;flex-wrap:wrap" },
+      h("span", {}, h("b", {}, `${fmt(p.budget, IMD_DECIMALS)} IMD`), " of unused check budget is waiting for the creator."),
+      h("button", { class: "btn small", onclick: (e) => act(e.currentTarget, "Return budget", () => send({ address: config.vault, abi: vaultAbi, functionName: "withdrawBudget", args: [BigInt(p.id)] })) }, "Return it to the creator"),
+    );
+  }
   const input = h("input", { type: "number", min: "0", step: "0.5", value: "0.5", style: "max-width:140px" });
   return h(
     "div",
     { class: "summary", style: "margin-bottom:40px" },
     h("b", {}, "Top up the check budget"),
-    h("p", { class: "muted", style: "margin:4px 0 12px" }, "Each check costs 0.5 IMD, paid to the IMD swarm. Anyone can add budget; whatever is left goes back to the creator when the pledge ends."),
+    h("p", { class: "muted", style: "margin:4px 0 12px" }, "Each check costs 0.5 IMD, paid to the IMD swarm. Anyone can add budget; whatever is left can be returned to the creator once every milestone is settled."),
     h(
       "div",
       { style: "display:flex;gap:8px;align-items:center" },
@@ -517,7 +525,7 @@ function viewNew() {
     budgetIn.min = "0";
     summary.replaceChildren(
       h("b", {}, `${state.milestones.length} milestone${state.milestones.length === 1 ? "" : "s"} · `, `${fmt(total, dec)} ${state.token?.symbol ?? "tokens"} locked`),
-      h("div", { class: "muted" }, "Each check costs 0.5 IMD from the budget. Budget for at least one check per milestone; a second gives room for a retry. Unused budget is returned when the pledge ends, and a kept milestone's check is refunded by the Referee Fund when it can."),
+      h("div", { class: "muted" }, "Each check costs 0.5 IMD from the budget. Budget for at least one check per milestone; a second gives room for a retry. Unused budget goes back to you when the pledge ends, and a kept milestone's check is refunded by the Referee Fund when it can."),
     );
     for (const m of state.milestones) m.preview();
   }
@@ -748,7 +756,7 @@ function viewHow() {
         "div",
         { class: "steps" },
         step("01", "Lock", "The team locks tokens in the KEPT vault, split across up to eight milestones, each with a deadline and a check the swarm can answer."),
-        step("02", "The swarm checks", "From the deadline, anyone can ask the IMD oracle. A panel of agents answers and the network signs the verdict for the KEPT contract, which verifies it onchain."),
+        step("02", "The swarm checks", "The team asks the IMD oracle to confirm each milestone. A panel of agents answers and the network signs the verdict for the KEPT contract, which verifies it onchain."),
         step("03", "Kept or burned", "Delivered: that tranche goes to the team. Not proven within three days of the deadline: it is burned. Unproven means broken."),
       ),
       h("section", { class: "block" },

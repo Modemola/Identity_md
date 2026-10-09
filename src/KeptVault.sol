@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {OracleAttestation, OracleAttestationConsumer} from "./OracleAttestation.sol";
 import {IIntake} from "./interfaces/IIntake.sol";
 import {Questions} from "./libraries/Questions.sol";
@@ -42,12 +43,12 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         uint128 amount;
         Outcome outcome;
         bool settled;
-        bool rebated;
         uint8 attempts;
-        uint8 refusals;
         uint64 askedAt;
         bytes32 inFlight;
         address inFlightIntake;
+        /// @dev The oracle signer when the check was asked: a later rotation cannot strand it.
+        address inFlightSigner;
         uint256 inFlightPrice;
     }
 
@@ -273,8 +274,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     // ------------------------------------------------------------------ checks
 
     /// @notice Buys one oracle check for a milestone, paid from the pledge budget.
-    /// @dev Before the deadline only the creator or beneficiary may ask (to prove early delivery).
-    /// From the deadline until `deadline + GRACE` anyone may.
+    /// @dev Only the creator or beneficiary may ask: unproven means broken, so a check can only ever
+    /// help the team, and nobody else can spend the pledge's attempts or budget. Open from creation
+    /// (to prove early delivery) until `deadline + GRACE`.
     function check(uint256 pledgeId, uint8 index) external nonReentrant returns (bytes32 requestId) {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
@@ -284,9 +286,7 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
             _clear(pledgeId, index, m);
         }
         if (block.timestamp > uint256(m.deadline) + GRACE) revert CheckWindowClosed();
-        if (block.timestamp < m.deadline && msg.sender != p.creator && msg.sender != p.beneficiary) {
-            revert NotAllowed();
-        }
+        if (msg.sender != p.creator && msg.sender != p.beneficiary) revert NotAllowed();
         if (m.attempts >= MAX_ATTEMPTS) revert AttemptsExhausted();
 
         IIntake target = intake;
@@ -311,6 +311,7 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         _tickets[address(target)][requestId] = Ticket(pledgeId, index);
         m.inFlight = requestId;
         m.inFlightIntake = address(target);
+        m.inFlightSigner = oracleSigner;
         m.inFlightPrice = price;
         m.askedAt = uint64(block.timestamp);
         emit CheckRequested(pledgeId, index, requestId, m.attempts, price);
@@ -331,7 +332,7 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         Milestone storage m = _milestones[t.pledgeId][t.index];
         if (m.inFlight != requestId || m.inFlightIntake != msg.sender) revert UnknownRequest();
 
-        _verifyAttestation(a, signature);
+        _verifyWith(a, signature, m.inFlightSigner);
         // Panel evidence needs the panel's own agreement. Chain evidence may be signed with
         // `agreed < quorum` when members split and the deployer's rerun of the recipe settled it,
         // which is the protocol's documented behaviour; the rerun is the stronger evidence there.
@@ -347,13 +348,14 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         uint256 price = m.inFlightPrice;
         m.inFlight = bytes32(0);
         m.inFlightIntake = address(0);
+        m.inFlightSigner = address(0);
         m.inFlightPrice = 0;
         emit Verdict(t.pledgeId, t.index, a.requestId, kept, a.agreed, a.quorum, a.panelSize);
         if (!kept) return;
 
+        // Kept is final, so this runs at most once per milestone.
         m.outcome = Outcome.Kept;
-        if (!m.rebated && price != 0 && refereeFund >= price) {
-            m.rebated = true;
+        if (price != 0 && refereeFund >= price) {
             refereeFund -= price;
             p.budget += price;
             totalBudgets += price;
@@ -397,14 +399,19 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         p.open -= 1;
         p.token.safeTransfer(to, amount);
         emit Settled(pledgeId, index, m.outcome, to, amount);
+    }
 
-        if (p.open == 0 && p.budget != 0) {
-            uint256 left = p.budget;
-            p.budget = 0;
-            totalBudgets -= left;
-            imd.safeTransfer(p.creator, left);
-            emit BudgetReturned(pledgeId, p.creator, left);
-        }
+    /// @notice Returns a finished pledge's unused check budget to its creator. Anyone may trigger it;
+    /// the IMD always goes to the creator. Kept apart from `settle` so a refund can never block a payout.
+    function withdrawBudget(uint256 pledgeId) external nonReentrant returns (uint256 left) {
+        Pledge storage p = _pledge(pledgeId);
+        if (p.open != 0) revert NotOpen();
+        left = p.budget;
+        if (left == 0) revert NothingPending();
+        p.budget = 0;
+        totalBudgets -= left;
+        imd.safeTransfer(p.creator, left);
+        emit BudgetReturned(pledgeId, p.creator, left);
     }
 
     // ------------------------------------------------------------------ views
@@ -492,8 +499,8 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         return string(Questions.body(spec, m.deadline, panelSize, quorum, VALID_FOR));
     }
 
-    /// @notice Who may call `check` right now, and why not if nobody can.
-    function checkOpen(uint256 pledgeId, uint8 index) external view returns (bool anyone, bool team) {
+    /// @notice Whether the team can call `check` right now, and if the budget covers it.
+    function checkOpen(uint256 pledgeId, uint8 index) external view returns (bool open, bool funded) {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
         if (m.outcome != Outcome.Open || m.settled || m.attempts >= MAX_ATTEMPTS) return (false, false);
@@ -501,8 +508,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
             return (false, false);
         }
         if (block.timestamp > uint256(m.deadline) + GRACE) return (false, false);
-        team = true;
-        anyone = block.timestamp >= m.deadline;
+        open = true;
+        uint256 price = intake.priceOf(action, address(imd));
+        funded = price != 0 && p.budget >= price;
     }
 
     // ------------------------------------------------------------------ admin
@@ -562,7 +570,22 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         emit CheckCleared(pledgeId, index, m.inFlight);
         m.inFlight = bytes32(0);
         m.inFlightIntake = address(0);
+        m.inFlightSigner = address(0);
         m.inFlightPrice = 0;
+    }
+
+    /// @dev `_verifyAttestation`, against the signer a check was asked under rather than the current one.
+    function _verifyWith(OracleAttestation.Attestation calldata a, bytes calldata signature, address signer)
+        private
+        view
+    {
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp > a.expiresAt) revert AttestationExpired(a.expiresAt);
+        // forge-lint: disable-next-line(block-timestamp)
+        if (a.issuedAt > block.timestamp + ISSUED_AT_TOLERANCE) revert AttestationNotYetValid(a.issuedAt);
+        if (!SignatureChecker.isValidSignatureNowCalldata(signer, attestationDigest(a), signature)) {
+            revert BadSignature();
+        }
     }
 
     function _setProtocol(address intake_, bytes32 action_, address signer_) private {

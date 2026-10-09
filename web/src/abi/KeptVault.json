@@ -327,12 +327,12 @@
   ],
   "outputs": [
    {
-    "name": "anyone",
+    "name": "open",
     "type": "bool",
     "internalType": "bool"
    },
    {
-    "name": "team",
+    "name": "funded",
     "type": "bool",
     "internalType": "bool"
    }
@@ -1138,6 +1138,25 @@
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "withdrawBudget",
+  "inputs": [
+   {
+    "name": "pledgeId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "left",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "event",

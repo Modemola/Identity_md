@@ -12,13 +12,11 @@ import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {SpecifiedAmount} from "./libraries/SpecifiedAmount.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IRefereeFund {
     function fundReferee(uint256 amount) external;
-}
-
-interface IApprove {
-    function approve(address spender, uint256 amount) external returns (bool);
 }
 
 /// @notice Immutable IMD fee hook for the single KEPT/IMD launch pool. Every fee it collects goes to
@@ -181,7 +179,7 @@ contract KeptHook is IUnlockCallback {
         amount = imd.balanceOfSelf();
         if (amount != 0) {
             address target = vault;
-            IApprove(Currency.unwrap(imd)).approve(target, amount);
+            SafeERC20.forceApprove(IERC20(Currency.unwrap(imd)), target, amount);
             IRefereeFund(target).fundReferee(amount);
         }
         emit Swept(amount);

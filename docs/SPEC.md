@@ -54,15 +54,18 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
    amounts and the IMD budget. Fee-on-transfer tokens are refused (exact balance delta).
    Each deadline must be at least one hour and at most three years ahead.
 2. `check(pledgeId, index)` buys a question:
-   - before the deadline only the creator or beneficiary may call it (to prove early delivery);
-   - from the deadline until `deadline + GRACE` (3 days) anyone may;
+   - only the creator or beneficiary may call it, from creation (to prove early delivery) until
+     `deadline + GRACE` (3 days). Unproven means broken, so a check can only ever help the team;
+     keeping it team-only means nobody else can burn its attempts or budget;
    - at most `MAX_ATTEMPTS` (3) per milestone, one in flight at a time;
    - the price comes out of the pledge budget; anyone can top it up with `fund`.
 3. The Intake calls `onOracleResult(requestId, attestation, signature)`. KEPT accepts it
    only from the Intake that took the request, only for a request it made, only when signed
    by the oracle signer in KEPT's EIP-712 domain, for the right question chain, with at least
-   the snapshotted panel size and quorum, `agreed >= quorum`, issued after the ask, and as a
-   bool. `true` marks the milestone `Kept` and pays the rebate if the fund can. `false` is
+   the snapshotted panel size and quorum, `agreed >= quorum` for panel evidence (chain evidence
+   may be settled by the deployer's rerun with fewer), issued after the ask, and as a
+   bool. The signature is checked against the oracle signer recorded when the check was asked,
+   so a signer rotation cannot strand a check already in flight. `true` marks the milestone `Kept` and pays the rebate if the fund can. `false` is
    recorded and the milestone stays `Open`. The callback only verifies and stores (it must fit
    200k gas); tokens move in `settle`.
 4. A check with no answer after 24 hours can be cleared by anyone (`clearStale`), freeing the
@@ -72,7 +75,8 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
    - still `Open` after `deadline + GRACE` with nothing in flight → `Broken`, and the tranche
      is sent to `0x…dEaD`.
    Unproven means broken: the burden of proof is on the team.
-6. When the last milestone settles, the unused IMD budget returns to the creator.
+6. Once every milestone is settled, `withdrawBudget` (callable by anyone) returns the unused IMD
+   budget to the creator. It is separate from `settle` so a refund can never block a payout.
 
 ## Trust model
 
@@ -87,14 +91,15 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
 - Known limits: a creator controls the strings in their own question, so the panel is the last
   line of defence against wording games (the character set blocks quoting tricks; quorum 7 of 9
   by default). A milestone the swarm cannot confirm is broken, so teams should pick templates
-  they can prove. Third parties can spend at most 3 checks per milestone, and only after the
-  deadline. The page-text template tells the panel the quoted text is a literal string, never an
+  they can prove. Value thresholds must be above zero. The page-text template tells the panel the quoted text is a literal string, never an
   instruction.
 - Verdicts arrive only through the Intake callback, bound to the Intake request that asked.
   There is deliberately no public `submit` for re-delivery: KEPT cannot recompute the oracle's
-  question hash, so a public path would let a valid verdict for one milestone be replayed onto
+  question hash (the oracle pins the block window and may add definitions after the request), so
+  a public path would let a valid verdict for one milestone be replayed onto
   another. A callback that never lands times out after 24 hours and the milestone can be asked
-  again. The heaviest callback path (kept + rebate) is tested to stay under 150k of the 200k gas.
+  again. KEPT therefore trusts IMD's Intake to hand each request its own verdict, as every other
+  oracle consumer does; each verdict can be used once. The heaviest callback path (kept + rebate) is tested to stay under 150k of the 200k gas.
 - Rebasing tokens, whose balances shrink without a transfer, are not supported; fee-on-transfer
   tokens are refused at creation.
 
