@@ -6,7 +6,7 @@
 forge test
 ```
 
-75 tests (2 Robinhood fork tests skip offline): vault lifecycle and every callback guard, the
+76 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
 protocol's EIP-712 conformance vector, a production oracle signature, hook fee accounting on a
 local v4 PoolManager in both currency orders, and stateful invariants (128 runs × 128 calls each).
 
