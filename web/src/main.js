@@ -184,6 +184,19 @@ const notLive = () =>
     "The contracts are being built and audited by the IMD swarm. This page goes live with real pledges the moment they deploy.",
   );
 
+/** Shown whenever the owner has proposed a new Intake or oracle signer: it is public for 7 days first. */
+function pendingBanner(c) {
+  const p = c?.pendingChange;
+  if (!p) return null;
+  return h(
+    "div",
+    { class: "banner warn" },
+    h("b", {}, "Protocol change pending. "),
+    "The KEPT owner proposed a new oracle Intake ", addrLink(p.intake), " and signer ", addrLink(p.signer),
+    `. It cannot take effect before ${when(p.readyAt)}. Every change waits seven days in public.`,
+  );
+}
+
 // ------------------------------------------------------------------ home
 
 async function viewHome() {
@@ -230,6 +243,8 @@ async function viewHome() {
       if (m.outcome === 1) kept++;
       if (m.outcome === 2) broken++;
     }
+    const warn = pendingBanner(c);
+    if (warn) statsEl.before(warn);
     statsEl.replaceChildren(
       ...stats(
         [String(pledges.length), "Pledges"],
@@ -292,6 +307,7 @@ async function viewPledge(id) {
       { class: "wrap pledge-head" },
       h("a", { href: link("/"), class: "muted" }, "← All pledges"),
       h("h1", {}, p.name),
+      pendingBanner(c),
       h(
         "div",
         { class: "muted" },

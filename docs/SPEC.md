@@ -81,13 +81,22 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
 - The owner (the KEPT team wallet) can change the Intake, action id and oracle signer, which
   the IMD docs say must stay settable. Every change waits 7 days in public (`proposeProtocol`
   → `executeProtocol`), and requests already in flight stay bound to the Intake that took them.
-  Panel size and quorum changes apply to new pledges only. Ownership can be renounced.
+  Panel size and quorum changes apply to new pledges only. Ownership can be renounced. The
+  website shows a warning on every page while a change is pending.
 - IMD (the payment asset) is immutable.
 - Known limits: a creator controls the strings in their own question, so the panel is the last
   line of defence against wording games (the character set blocks quoting tricks; quorum 7 of 9
   by default). A milestone the swarm cannot confirm is broken, so teams should pick templates
   they can prove. Third parties can spend at most 3 checks per milestone, and only after the
-  deadline.
+  deadline. The page-text template tells the panel the quoted text is a literal string, never an
+  instruction.
+- Verdicts arrive only through the Intake callback, bound to the Intake request that asked.
+  There is deliberately no public `submit` for re-delivery: KEPT cannot recompute the oracle's
+  question hash, so a public path would let a valid verdict for one milestone be replayed onto
+  another. A callback that never lands times out after 24 hours and the milestone can be asked
+  again. The heaviest callback path (kept + rebate) is tested to stay under 150k of the 200k gas.
+- Rebasing tokens, whose balances shrink without a transfer, are not supported; fee-on-transfer
+  tokens are refused at creation.
 
 ## KEPT token and hook
 

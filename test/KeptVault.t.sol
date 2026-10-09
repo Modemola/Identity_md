@@ -266,7 +266,8 @@ contract KeptVaultTest is VaultFixture {
         vault.fundReferee(2 ether);
         uint256 id = _standard();
         bytes32 rid = _check(id, 0, creator);
-        _deliver(id, 0, rid, true);
+        uint256 gas = _deliver(id, 0, rid, true);
+        assertLt(gas, 150_000, "heaviest callback path (kept + rebate) must fit the Intake's 200k gas");
         assertEq(vault.refereeFund(), 2 ether - PRICE);
         assertEq(_budget(id), 10 ether);
         vault.settle(id, 0);

@@ -194,6 +194,7 @@ details.q pre {
 .summary { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
 
 /* ---------------------------------------------------------------- misc */
+.banner.warn { border-color: var(--broken); background: var(--broken-bg); }
 .banner { margin: 18px 0; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--open); background: var(--open-bg); }
 .empty { color: var(--muted); padding: 30px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
 .muted { color: var(--muted); }
