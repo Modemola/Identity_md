@@ -55,6 +55,7 @@ library Questions {
             if (s.target == address(0)) revert BadParameter(2);
             if (!_isViewCall(bytes(s.a))) revert BadParameter(0);
             if (bytes(s.b).length != 0) revert BadParameter(1);
+            if (s.threshold == 0) revert BadParameter(3);
         }
     }
 

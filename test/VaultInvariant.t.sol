@@ -111,6 +111,12 @@ contract VaultHandler is Test {
         } catch {}
     }
 
+    function withdraw(uint256 pledgeSeed) external {
+        uint256 count = vault.pledgeCount();
+        if (count == 0) return;
+        try vault.withdrawBudget(bound(pledgeSeed, 1, count)) {} catch {}
+    }
+
     function clear(uint256 pledgeSeed, uint8 index) external {
         uint256 count = vault.pledgeCount();
         if (count == 0) return;
@@ -149,7 +155,7 @@ contract VaultInvariantTest is Test {
         );
         handler = new VaultHandler(vault, intake, imd, team, key);
         targetContract(address(handler));
-        bytes4[] memory selectors = new bytes4[](8);
+        bytes4[] memory selectors = new bytes4[](9);
         selectors[0] = VaultHandler.create.selector;
         selectors[1] = VaultHandler.donate.selector;
         selectors[2] = VaultHandler.fund.selector;
@@ -158,6 +164,7 @@ contract VaultInvariantTest is Test {
         selectors[5] = VaultHandler.settle.selector;
         selectors[6] = VaultHandler.clear.selector;
         selectors[7] = VaultHandler.wait.selector;
+        selectors[8] = VaultHandler.withdraw.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 

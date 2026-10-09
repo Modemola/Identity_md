@@ -106,7 +106,7 @@ export async function loadMilestone(id, index) {
     askedAt,
     spec,
     question,
-    gate: { anyone: gate[0], team: gate[1] },
+    gate: { open: gate[0], funded: gate[1] },
   };
 }
 

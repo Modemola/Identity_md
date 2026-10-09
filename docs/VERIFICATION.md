@@ -6,7 +6,7 @@
 forge test
 ```
 
-78 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
+83 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
 protocol's EIP-712 conformance vector, a production oracle signature, hook fee accounting on a
 local v4 PoolManager in both currency orders, and stateful invariants (128 runs × 128 calls each).
 
@@ -23,10 +23,10 @@ settled by the deployer's chain rerun, which is why chain-evidence templates acc
 
 ```sh
 forge test --match-contract RobinhoodForkTest \
-  --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 84048406
+  --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 84292071
 ```
 
-Passed on 2026-10-09 at block 83,978,104 and again after the factory-initializer change at block 84,048,406 (2 passed, 0 failed each time) against the real Intake
+Passed on 2026-10-09 at block 83,978,104 again after the factory-initializer change at block 84,048,406, and after the review fixes at block 84,292,071 (2 passed, 0 failed each time) against the real Intake
 `0x1397…ea56`, IMD `0x5f7b…7127` and Uniswap v4 PoolManager `0x8366…0951`:
 
 - `test_checkBuysARealOracleRequest`: a KEPT check pays exactly the live price (0.5 IMD) to the
@@ -43,3 +43,14 @@ fresh block number or an archive RPC.
 
 On 2026-10-09 the exact bodies `KeptVault` generates for all four templates passed
 `POST /requests/check` with no blockers and were accepted by an unpaid `POST /requests/quote`.
+
+## Independent review (2026-10-09)
+
+A full review of `src/` raised ten candidates. Fixed: team-only checks (a third party could
+exhaust a pledge's attempts after the deadline), checks verify against the signer recorded at ask
+time (a rotation stranded in-flight checks), budget refunds moved to `withdrawBudget` (a failed
+refund could block the last payout), `checkOpen` reports whether the budget covers a check, zero
+value thresholds refused, unused milestone fields removed, `forceApprove` in the hook sweep.
+Documented, not changed: verdict-to-question binding relies on the Intake (the oracle question hash
+cannot be recomputed onchain), trivially true milestones are visible on the pledge page for buyers
+to judge, and the Intake is asynchronous so same-transaction callbacks do not arise.

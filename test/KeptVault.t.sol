@@ -179,14 +179,17 @@ contract KeptVaultTest is VaultFixture {
         _check(id, 0, beneficiary);
     }
 
-    function test_anyoneChecksAfterDeadlineUntilGraceEnds() public {
+    function test_onlyTeamChecksEvenAfterDeadline() public {
         uint256 id = _standard();
         vm.warp(T0 + 7 days);
-        _check(id, 0, stranger);
-        vm.warp(T0 + 7 days + 1 days);
-        vault.clearStale(id, 0);
-        vm.warp(T0 + 7 days + 3 days + 1);
         vm.prank(stranger);
+        vm.expectRevert(KeptVault.NotAllowed.selector);
+        vault.check(id, 0);
+        _check(id, 0, beneficiary);
+        vm.warp(T0 + 8 days);
+        vault.clearStale(id, 0);
+        vm.warp(T0 + 10 days + 1);
+        vm.prank(creator);
         vm.expectRevert(KeptVault.CheckWindowClosed.selector);
         vault.check(id, 0);
     }
@@ -257,7 +260,9 @@ contract KeptVaultTest is VaultFixture {
         vault.settle(id, 0);
         assertEq(team.balanceOf(beneficiary), 100 ether);
         assertEq(team.balanceOf(address(vault)), 0);
-        assertEq(imd.balanceOf(creator), 1_000 ether - PRICE, "unused budget returned");
+        vm.prank(stranger);
+        vault.withdrawBudget(id);
+        assertEq(imd.balanceOf(creator), 1_000 ether - PRICE, "unused budget returned to the creator");
         assertEq(vault.totalBudgets(), 0);
     }
 
@@ -271,6 +276,7 @@ contract KeptVaultTest is VaultFixture {
         assertEq(vault.refereeFund(), 2 ether - PRICE);
         assertEq(_budget(id), 10 ether);
         vault.settle(id, 0);
+        vault.withdrawBudget(id);
         assertEq(imd.balanceOf(creator), 1_000 ether, "a kept promise cost nothing");
     }
 
@@ -309,13 +315,14 @@ contract KeptVaultTest is VaultFixture {
         assertTrue(settled);
         assertEq(team.balanceOf(vault.BURN()), 100 ether);
         assertEq(team.balanceOf(beneficiary), 0);
+        vault.withdrawBudget(id);
         assertEq(imd.balanceOf(creator), 1_000 ether, "budget returned, no check was bought");
     }
 
     function test_settleWaitsForCheckInFlight() public {
         uint256 id = _standard();
         vm.warp(T0 + 7 days + 3 days);
-        bytes32 rid = _check(id, 0, stranger);
+        bytes32 rid = _check(id, 0, beneficiary);
         vm.warp(T0 + 7 days + 3 days + 2);
         vm.expectRevert(KeptVault.CheckInFlight.selector);
         vault.settle(id, 0);
@@ -327,7 +334,7 @@ contract KeptVaultTest is VaultFixture {
     function test_settleBurnsAfterStaleLastCheck() public {
         uint256 id = _standard();
         vm.warp(T0 + 7 days + 3 days);
-        bytes32 rid = _check(id, 0, stranger);
+        bytes32 rid = _check(id, 0, beneficiary);
         vm.warp(T0 + 7 days + 4 days);
         vault.settle(id, 0);
         assertEq(team.balanceOf(vault.BURN()), 100 ether);
@@ -357,11 +364,11 @@ contract KeptVaultTest is VaultFixture {
         vault.settle(id, 0);
 
         vm.warp(T0 + 4 days);
-        bytes32 r1 = _check(id, 1, stranger);
+        bytes32 r1 = _check(id, 1, creator);
         _deliver(id, 1, r1, false);
 
         vm.warp(T0 + 6 days);
-        bytes32 r2 = _check(id, 2, stranger);
+        bytes32 r2 = _check(id, 2, beneficiary);
         _deliver(id, 2, r2, true);
         vault.settle(id, 2);
 
@@ -371,6 +378,7 @@ contract KeptVaultTest is VaultFixture {
         assertEq(team.balanceOf(beneficiary), 40 ether);
         assertEq(team.balanceOf(vault.BURN()), 20 ether);
         assertEq(team.balanceOf(address(vault)), 0);
+        vault.withdrawBudget(id);
         assertEq(imd.balanceOf(creator), 1_000 ether - 3 * PRICE);
         (,,,,,, uint8 open, uint128 locked, uint256 budget,,) = vault.pledge(id);
         assertEq(open, 0);
@@ -496,6 +504,75 @@ contract KeptVaultTest is VaultFixture {
         assertEq(
             reason, abi.encodeWithSelector(OracleAttestationConsumer.AlreadyConsumed.selector, a.requestId)
         );
+    }
+
+    function test_withdrawBudgetOnlyWhenFinished() public {
+        KeptVault.MilestoneInput[] memory ms = new KeptVault.MilestoneInput[](2);
+        ms[0] = _release(T0 + 2 days, 1 ether);
+        ms[1] = _release(T0 + 4 days, 1 ether);
+        uint256 id = _create(ms, 2 ether);
+        vm.expectRevert(KeptVault.NotOpen.selector);
+        vault.withdrawBudget(id);
+        vm.warp(T0 + 7 days + 1);
+        vault.settle(id, 0);
+        vm.expectRevert(KeptVault.NotOpen.selector);
+        vault.withdrawBudget(id);
+        vault.settle(id, 1);
+        vm.prank(stranger);
+        assertEq(vault.withdrawBudget(id), 2 ether);
+        assertEq(imd.balanceOf(creator), 1_000 ether);
+        assertEq(imd.balanceOf(stranger), 1_000 ether, "the caller gets nothing");
+        vm.expectRevert(KeptVault.NothingPending.selector);
+        vault.withdrawBudget(id);
+    }
+
+    function test_signerRotationDoesNotStrandChecksInFlight() public {
+        uint256 id = _standard();
+        bytes32 rid = _check(id, 0, creator);
+        vm.prank(owner);
+        vault.proposeProtocol(address(intake), ACTION, vm.addr(0xB0B));
+        vm.warp(T0 + 7 days);
+        vault.executeProtocol();
+        assertEq(vault.oracleSigner(), vm.addr(0xB0B));
+        // The answer to the old check is signed by the signer it was asked under.
+        _deliver(id, 0, rid, true);
+        (KeptVault.Outcome o,) = _outcome(id, 0);
+        assertEq(uint8(o), uint8(KeptVault.Outcome.Kept));
+    }
+
+    function test_newChecksUseTheRotatedSigner() public {
+        uint256 id = _create(_one(_release(T0 + 20 days, 1 ether)), 5 ether);
+        vm.prank(owner);
+        vault.proposeProtocol(address(intake), ACTION, vm.addr(0xB0B));
+        vm.warp(T0 + 7 days);
+        vault.executeProtocol();
+        bytes32 rid = _check(id, 0, creator);
+        OracleAttestation.Attestation memory a = _attestation(id, 0, true);
+        bytes memory oldSig = _sign(a, signerKey);
+        vm.prank(address(intake));
+        vm.expectRevert(OracleAttestationConsumer.BadSignature.selector);
+        vault.onOracleResult(rid, a, oldSig);
+        bytes memory newSig = _sign(a, 0xB0B);
+        vm.prank(address(intake));
+        vault.onOracleResult(rid, a, newSig);
+    }
+
+    function test_checkOpenReportsBudget() public {
+        uint256 id = _create(_one(_release(T0 + 7 days, 1 ether)), 0.4 ether);
+        (bool open, bool funded) = vault.checkOpen(id, 0);
+        assertTrue(open);
+        assertFalse(funded);
+        vm.prank(stranger);
+        vault.fund(id, 0.1 ether);
+        (open, funded) = vault.checkOpen(id, 0);
+        assertTrue(open && funded);
+    }
+
+    function test_valueTemplateRejectsZeroThreshold() public {
+        KeptVault.MilestoneInput memory m = _value(T0 + 7 days, 1, address(0xBEEF), 0);
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(Questions.BadParameter.selector, 3));
+        vault.createPledge(IERC20(address(team)), beneficiary, "x", _one(m), 0);
     }
 
     // ---------------------------------------------------------------- admin
