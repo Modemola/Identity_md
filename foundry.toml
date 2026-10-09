@@ -13,8 +13,8 @@ bytecode_hash = "none"
 runs = 256
 
 [profile.default.invariant]
-runs = 64
-depth = 64
+runs = 128
+depth = 128
 fail_on_revert = false
 
 [fmt]

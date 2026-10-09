@@ -158,7 +158,11 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     event BudgetFunded(uint256 indexed pledgeId, address indexed from, uint256 amount);
     event RefereeFunded(address indexed from, uint256 amount);
     event CheckRequested(
-        uint256 indexed pledgeId, uint8 indexed index, bytes32 indexed intakeRequestId, uint8 attempt, uint256 price
+        uint256 indexed pledgeId,
+        uint8 indexed index,
+        bytes32 indexed intakeRequestId,
+        uint8 attempt,
+        uint256 price
     );
     event Verdict(
         uint256 indexed pledgeId,
@@ -229,8 +233,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         for (uint256 i; i < n; ++i) {
             MilestoneInput calldata m = milestones[i];
             if (
-                m.amount == 0 || m.deadline < block.timestamp + MIN_LEAD || m.deadline > block.timestamp + MAX_LEAD
-                    || bytes(m.title).length == 0 || bytes(m.title).length > 120
+                m.amount == 0 || m.deadline < block.timestamp + MIN_LEAD
+                    || m.deadline > block.timestamp + MAX_LEAD || bytes(m.title).length == 0
+                    || bytes(m.title).length > 120
             ) revert InvalidMilestone(i);
             Questions.Spec memory spec = Questions.Spec(m.kind, m.chainId, m.target, m.threshold, m.a, m.b);
             Questions.validate(spec);
@@ -295,8 +300,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         bytes memory body = Questions.body(m.spec, m.deadline, p.panelSize, p.quorum, VALID_FOR);
         uint256 before = imd.balanceOf(address(this));
         imd.forceApprove(address(target), price);
-        requestId =
-            target.request(action, body, IIntake.Callback(address(this), this.onOracleResult.selector), address(imd), price);
+        requestId = target.request(
+            action, body, IIntake.Callback(address(this), this.onOracleResult.selector), address(imd), price
+        );
         imd.forceApprove(address(target), 0);
         if (imd.balanceOf(address(this)) + price != before) revert TransferMismatch();
         if (requestId == bytes32(0) || _known[address(target)][requestId]) revert UnknownRequest();
@@ -311,10 +317,11 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     }
 
     /// @notice The Intake's callback with the oracle's signed verdict.
-    function onOracleResult(bytes32 requestId, OracleAttestation.Attestation calldata a, bytes calldata signature)
-        external
-        nonReentrant
-    {
+    function onOracleResult(
+        bytes32 requestId,
+        OracleAttestation.Attestation calldata a,
+        bytes calldata signature
+    ) external nonReentrant {
         if (!_known[msg.sender][requestId]) {
             if (msg.sender != address(intake)) revert OnlyIntake();
             revert UnknownRequest();
@@ -448,7 +455,18 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
-        return (m.spec.kind, m.title, m.deadline, m.amount, m.outcome, m.settled, m.attempts, m.inFlight, m.askedAt);
+        return
+            (
+                m.spec.kind,
+                m.title,
+                m.deadline,
+                m.amount,
+                m.outcome,
+                m.settled,
+                m.attempts,
+                m.inFlight,
+                m.askedAt
+            );
     }
 
     function milestoneSpec(uint256 pledgeId, uint8 index) external view returns (Questions.Spec memory) {
@@ -475,7 +493,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
         if (m.outcome != Outcome.Open || m.settled || m.attempts >= MAX_ATTEMPTS) return (false, false);
-        if (m.inFlight != bytes32(0) && block.timestamp < uint256(m.askedAt) + ANSWER_TIMEOUT) return (false, false);
+        if (m.inFlight != bytes32(0) && block.timestamp < uint256(m.askedAt) + ANSWER_TIMEOUT) {
+            return (false, false);
+        }
         if (block.timestamp > uint256(m.deadline) + GRACE) return (false, false);
         team = true;
         anyone = block.timestamp >= m.deadline;
@@ -485,7 +505,9 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
 
     /// @notice Starts a public 7-day wait before the Intake, action id or oracle signer change.
     function proposeProtocol(address intake_, bytes32 action_, address signer_) external onlyOwner {
-        if (intake_ == address(0) || action_ == bytes32(0) || signer_ == address(0)) revert InvalidConfiguration();
+        if (intake_ == address(0) || action_ == bytes32(0) || signer_ == address(0)) {
+            revert InvalidConfiguration();
+        }
         uint64 readyAt = uint64(block.timestamp + PROTOCOL_DELAY);
         pendingProtocol = ProtocolChange(intake_, action_, signer_, readyAt);
         emit ProtocolProposed(intake_, action_, signer_, readyAt);
@@ -561,7 +583,11 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         if (p.creator == address(0)) revert UnknownPledge();
     }
 
-    function _milestone(Pledge storage p, uint256 pledgeId, uint8 index) private view returns (Milestone storage) {
+    function _milestone(Pledge storage p, uint256 pledgeId, uint8 index)
+        private
+        view
+        returns (Milestone storage)
+    {
         if (index >= p.count) revert UnknownMilestone();
         return _milestones[pledgeId][index];
     }

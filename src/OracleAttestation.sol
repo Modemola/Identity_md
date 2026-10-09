@@ -91,7 +91,14 @@ library OracleAttestation {
                     a.fromBlock
                 ),
                 abi.encode(
-                    a.toBlock, a.blockHash, a.panelJobId, a.panelSize, a.quorum, a.agreed, a.issuedAt, a.expiresAt
+                    a.toBlock,
+                    a.blockHash,
+                    a.panelJobId,
+                    a.panelSize,
+                    a.quorum,
+                    a.agreed,
+                    a.issuedAt,
+                    a.expiresAt
                 )
             )
         );
@@ -154,7 +161,10 @@ abstract contract OracleAttestationConsumer is EIP712 {
     /// about the question, and whether it is the right one is for the consumer to decide alongside
     /// `questionHash`. A validator can nudge `block.timestamp` by seconds; the window is minutes
     /// to days wide and the tolerance absorbs the other end, so that is not a lever here.
-    function _verifyAttestation(OracleAttestation.Attestation calldata a, bytes calldata signature) internal view {
+    function _verifyAttestation(OracleAttestation.Attestation calldata a, bytes calldata signature)
+        internal
+        view
+    {
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp > a.expiresAt) revert AttestationExpired(a.expiresAt);
         // forge-lint: disable-next-line(block-timestamp)
@@ -202,12 +212,20 @@ abstract contract OracleAttestationConsumer is EIP712 {
         return abi.decode(a.answer, (uint256));
     }
 
-    function decodeAddressList(OracleAttestation.Attestation calldata a) internal pure returns (address[] memory) {
+    function decodeAddressList(OracleAttestation.Attestation calldata a)
+        internal
+        pure
+        returns (address[] memory)
+    {
         _expectType(a, OracleAttestation.ANSWER_ADDRESS_LIST);
         return abi.decode(a.answer, (address[]));
     }
 
-    function decodeBytes32List(OracleAttestation.Attestation calldata a) internal pure returns (bytes32[] memory) {
+    function decodeBytes32List(OracleAttestation.Attestation calldata a)
+        internal
+        pure
+        returns (bytes32[] memory)
+    {
         _expectType(a, OracleAttestation.ANSWER_BYTES32_LIST);
         return abi.decode(a.answer, (bytes32[]));
     }

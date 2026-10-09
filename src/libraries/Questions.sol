@@ -236,7 +236,9 @@ library Questions {
         if (s.length < 3 || s.length > 64) return false;
         if (s[s.length - 2] != "(" || s[s.length - 1] != ")") return false;
         bytes1 first = s[0];
-        if (!((first >= "a" && first <= "z") || (first >= "A" && first <= "Z") || first == "_")) return false;
+        if (!((first >= "a" && first <= "z") || (first >= "A" && first <= "Z") || first == "_")) {
+            return false;
+        }
         for (uint256 i = 1; i < s.length - 2; ++i) {
             bytes1 c = s[i];
             if (!_alnum(c) && c != "_") return false;

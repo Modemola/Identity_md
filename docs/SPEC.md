@@ -44,8 +44,9 @@ character set and length, so they cannot break the JSON body or the question's s
 | `ValueAtLeast` | `chainId`, `target`, `function`, `threshold` | chain | On chain `chainId`, does calling `function` on `target` return a uint256 ≥ `threshold`? |
 
 Supported question chains: Ethereum 1, BNB 56, Robinhood 4663, Base 8453, Arbitrum 42161
-(the list `POST /requests/check` reports). All four templates passed the free check with no
-blockers on 9 Oct 2026.
+(the list `POST /requests/check` reports). On 9 Oct 2026 the exact bodies `KeptVault` generates
+for all four templates passed `POST /requests/check` with no blockers, and were accepted by
+`POST /requests/quote` (unpaid), which applies the same validation as the Intake.
 
 ## Lifecycle
 
