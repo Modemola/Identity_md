@@ -71,7 +71,7 @@ abstract contract HookFixture is Test {
     function _setupHook() internal {
         deployCodeTo(
             "KeptHook.sol:KeptHook",
-            abi.encode(manager, address(imd), address(kept), address(vault)),
+            abi.encode(manager, address(imd), address(kept), address(vault), address(this)),
             _hookAddress()
         );
         hook = KeptHook(_hookAddress());

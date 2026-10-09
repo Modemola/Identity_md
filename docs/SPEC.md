@@ -97,8 +97,8 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
   It charges a fee on the gross IMD leg of every swap: 20% at opening, decaying linearly to 1%
   over 30 minutes (anti-snipe), then 1% forever. Fees accrue as PoolManager ERC-6909 claims;
   anyone can call `sweep()`, which redeems them and deposits the IMD into the KEPT Referee
-  Fund. Fee math is adapted from the accepted imdDRONE hook (launch 909). Permissions
-  `0x20cc`.
+  Fund. Fee math is adapted from the accepted imdDRONE hook (launch 909). Only the launch factory
+  (`$factory`) may initialize the pool, as on the live imd.place hook. Permissions `0x20cc`.
 - The team's launch allocation goes into a public KEPT pledge right after launch, with
   milestones dated inside the hackathon window so judges can see real verdicts and settlements.
 

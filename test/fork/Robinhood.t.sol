@@ -87,7 +87,11 @@ contract RobinhoodForkTest is Test {
     /// @notice The hook trades and sweeps on Robinhood's real PoolManager with real IMD.
     function test_hookTradesAndFundsTheRefereeOnTheLivePoolManager() public {
         address at = address(uint160(0x4b4550540000000000000000000000000000) << 14 | HookFlags.KEPT);
-        deployCodeTo("KeptHook.sol:KeptHook", abi.encode(MANAGER, IMD, address(kept), address(vault)), at);
+        deployCodeTo(
+            "KeptHook.sol:KeptHook",
+            abi.encode(MANAGER, IMD, address(kept), address(vault), address(this)),
+            at
+        );
         KeptHook hook = KeptHook(at);
         bool imd0 = IMD < address(kept);
         PoolKey memory key = PoolKey(
