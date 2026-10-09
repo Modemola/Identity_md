@@ -6,7 +6,7 @@
 forge test
 ```
 
-76 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
+78 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
 protocol's EIP-712 conformance vector, a production oracle signature, hook fee accounting on a
 local v4 PoolManager in both currency orders, and stateful invariants (128 runs × 128 calls each).
 
@@ -23,10 +23,10 @@ settled by the deployer's chain rerun, which is why chain-evidence templates acc
 
 ```sh
 forge test --match-contract RobinhoodForkTest \
-  --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 83978104
+  --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 84048406
 ```
 
-Passed on 2026-10-09 at block 83,978,104 (2 passed, 0 failed) against the real Intake
+Passed on 2026-10-09 at block 83,978,104 and again after the factory-initializer change at block 84,048,406 (2 passed, 0 failed each time) against the real Intake
 `0x1397…ea56`, IMD `0x5f7b…7127` and Uniswap v4 PoolManager `0x8366…0951`:
 
 - `test_checkBuysARealOracleRequest`: a KEPT check pays exactly the live price (0.5 IMD) to the

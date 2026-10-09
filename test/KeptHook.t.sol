@@ -108,6 +108,23 @@ contract KeptHookTest is HookFixture {
         manager.initialize(other, ONE);
     }
 
+    function test_onlyFactoryInitializes() public {
+        address at = address(uint160(0x4b455054000000000000000000000000000001) << 14 | HookFlags.KEPT);
+        deployCodeTo(
+            "KeptHook.sol:KeptHook",
+            abi.encode(manager, address(imd), address(kept), address(vault), address(0xFAC)),
+            at
+        );
+        PoolKey memory other = key;
+        other.hooks = IHooks(at);
+        vm.expectRevert();
+        manager.initialize(other, ONE);
+        assertFalse(KeptHook(at).initialized());
+        vm.prank(address(0xFAC));
+        manager.initialize(other, ONE);
+        assertTrue(KeptHook(at).initialized());
+    }
+
     function test_permissionBits() public view {
         assertTrue(HookFlags.matches(address(hook), HookFlags.KEPT));
         assertEq(uint160(address(hook)) & HookFlags.ALL, 0x20cc);
@@ -115,9 +132,11 @@ contract KeptHookTest is HookFixture {
 
     function test_constructorRejectsBadConfig() public {
         vm.expectRevert(KeptHook.InvalidConfiguration.selector);
-        new KeptHook(manager, address(imd), address(imd), address(vault));
+        new KeptHook(manager, address(imd), address(imd), address(vault), address(this));
         vm.expectRevert(KeptHook.InvalidConfiguration.selector);
-        new KeptHook(manager, address(imd), address(kept), address(0));
+        new KeptHook(manager, address(imd), address(kept), address(0), address(this));
+        vm.expectRevert(KeptHook.InvalidConfiguration.selector);
+        new KeptHook(manager, address(imd), address(kept), address(vault), address(0));
     }
 
     function test_noLiquidityNoFee() public {

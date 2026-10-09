@@ -40,6 +40,8 @@ contract KeptHook is IUnlockCallback {
     address public immutable token;
     /// @notice The KeptVault whose Referee Fund receives every fee.
     address public immutable vault;
+    /// @notice The IMD launch factory: the only account allowed to initialize the pool.
+    address public immutable factory;
     uint256 public openedAt;
     uint256 public collected;
     bool public initialized;
@@ -55,11 +57,12 @@ contract KeptHook is IUnlockCallback {
     event FeeAccrued(uint256 amount);
     event Swept(uint256 amount);
 
-    constructor(IPoolManager manager_, address imd_, address token_, address vault_) {
+    constructor(IPoolManager manager_, address imd_, address token_, address vault_, address factory_) {
         if (
             address(manager_) == address(0) || imd_ == address(0) || token_ == address(0)
-                || vault_ == address(0) || imd_ == token_
+                || vault_ == address(0) || factory_ == address(0) || imd_ == token_
         ) revert InvalidConfiguration();
+        factory = factory_;
         poolManager = manager_;
         imd = Currency.wrap(imd_);
         token = token_;
@@ -80,12 +83,13 @@ contract KeptHook is IUnlockCallback {
         p.afterSwapReturnDelta = true;
     }
 
-    function beforeInitialize(address, PoolKey calldata key, uint160)
+    function beforeInitialize(address sender, PoolKey calldata key, uint160)
         external
         onlyPoolManager
         returns (bytes4)
     {
         if (initialized) revert AlreadyInitialized();
+        if (sender != factory) revert InvalidPool();
         address a = Currency.unwrap(key.currency0);
         address b = Currency.unwrap(key.currency1);
         address pair = Currency.unwrap(imd);
