@@ -1,0 +1,14 @@
+{
+  "name": "kept-launch",
+  "private": true,
+  "type": "module",
+  "description": "Opens the two KEPT launches through the IMD paid API from your own wallet.",
+  "scripts": {
+    "launch": "node launch.mjs"
+  },
+  "dependencies": {
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "viem": "2.56.8"
+  }
+}
