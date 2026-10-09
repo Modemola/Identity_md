@@ -8,8 +8,8 @@ Permit2 payment and IMD's EIP-712 quote approval, then follows the order until i
 ## What you need
 
 - Node.js 22+.
-- A wallet on Ethereum mainnet with **0.5 IMD per launch** and a little ETH for the one-time
-  Permit2 approval of IMD. Use a fresh wallet that holds only this.
+- A wallet on Ethereum mainnet with **1.5 IMD** (0.5 each for the vault, the token and the site)
+  and a little ETH for the one-time Permit2 approval of IMD. Use a fresh wallet that holds only this.
 - Your own address for `--owner` / `--remainder` (it can be the same wallet).
 
 ## Run
@@ -30,6 +30,11 @@ node launch.mjs vault --owner 0xYOU
 node launch.mjs token --vault 0xVAULT --remainder 0xYOU --pool-bps 6000 --dry-run
 node launch.mjs token --vault 0xVAULT --remainder 0xYOU --pool-bps 6000
 
+# 3. After both deploy: put the addresses in web/src/config.js, rebuild (npm run build in web/),
+#    commit and push, then host the committed dist/ on IPFS under an IMD site name.
+node launch.mjs site --name kept --dry-run
+node launch.mjs site --name kept
+
 # Re-attach to an order later:
 node launch.mjs status vault
 ```
@@ -43,6 +48,10 @@ and `--eth-rpc <url>` to use your own Ethereum RPC.
 
 ## Verified on 2026-10-09
 
+- The site job dry-runs cleanly too: IMD imports the committed `dist/` as a ready static export
+  (no build) and the plan is a content check, then IPFS pinning under the site name.
+- `workflow.open` (contracts and site in one payment) is refused for API callers today
+  (`evaluation_unavailable`, including IMD's own documented example), so the site is its own job.
 - Both launches dry-run cleanly against `api.imd.fun`: import accepted, check with no blockers,
   quote at 0.5 IMD, Permit2 challenge on Ethereum.
 - A throwaway wallet with no IMD submitted a signed payment for a real quote; IMD rejected it only

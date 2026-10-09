@@ -3,6 +3,7 @@
 //
 //   node launch.mjs vault --owner 0xYOU [--dry-run]
 //   node launch.mjs token --vault 0xVAULT --remainder 0xYOU [--pool-bps 6000] [--dry-run]
+//   node launch.mjs site [--name kept] [--dry-run]     (after web/src/config.js has the addresses)
 //   node launch.mjs status <label>
 //
 // The private key is read from KEPT_PRIVATE_KEY, or typed in (hidden) when it is not set. Use a
@@ -76,13 +77,13 @@ async function api(path, { method = "GET", body, token, headers = {} } = {}) {
 
 // ------------------------------------------------------------------ launch inputs
 
-async function importRepo() {
+async function importRepo(kind = "contracts") {
   const head = await fetch(`https://api.github.com/repos/modemola/identity_md/commits/${flag("ref", "claude/vigilant-hamilton-ggh3sv")}`)
     .then((r) => r.json())
     .catch(() => ({}));
   const ref = flag("commit", head.sha);
   if (!ref) die("could not resolve the commit; pass --commit <40-hex sha>");
-  const { status, json } = await api("/requests/import", { method: "POST", body: { url: `${REPO}/commit/${ref}`, kind: "contracts" } });
+  const { status, json } = await api("/requests/import", { method: "POST", body: { url: `${REPO}/commit/${ref}`, kind } });
   if (status !== 200 || !json.ok) die(`import refused: ${JSON.stringify(json)}`);
   return json.source;
 }
@@ -135,6 +136,20 @@ function tokenInput(source, vault, remainder, poolBps) {
   };
 }
 
+function siteInput(source, name) {
+  if (source.site?.build !== false || source.site?.exportDir !== "dist") {
+    die(`expected the committed static export in dist/, got ${JSON.stringify(source.site)}`);
+  }
+  return {
+    objective: `Host the KEPT website: the committed static export in dist/ of this repository, unchanged, under the site name ${name}.`,
+    repoUrl: source.repoUrl,
+    baseCommit: source.baseCommit,
+    ipfs: name,
+    shape: "chain",
+    steps: [{ skill: "site-content-check" }],
+  };
+}
+
 // ------------------------------------------------------------------ wallet
 
 async function account() {
@@ -175,9 +190,9 @@ const canon = (v) =>
 
 // ------------------------------------------------------------------ flow
 
-async function open(label, input) {
-  console.log(`\n▸ Free check of the ${label} launch…`);
-  const check = await api("/requests/check", { method: "POST", body: { action: "launch.open", input } });
+async function open(label, input, action = "launch.open") {
+  console.log(`\n▸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}…`);
+  const check = await api("/requests/check", { method: "POST", body: { action, input } });
   if (check.status !== 200) die(`check failed (${check.status}): ${JSON.stringify(check.json)}`);
   if (check.json.blockers?.length) die(`the check found blockers:\n${JSON.stringify(check.json.blockers, null, 2)}`);
   console.log("  The swarm will:");
@@ -185,13 +200,13 @@ async function open(label, input) {
   for (const s of check.json.suggestions || []) console.log(`  suggestion: ${JSON.stringify(s)}`);
 
   const caps = (await api("/requests/capabilities")).json;
-  const launchAction = caps.actions.find((a) => a.action === "launch.open");
+  const launchAction = caps.actions.find((a) => a.action === action);
   const price = BigInt(launchAction.payment.amount);
   console.log(`  Price: ${Number(price) / 1e18} IMD on Ethereum, paid to ${launchAction.payment.payTo}`);
 
   const token = randomBytes(32).toString("hex");
   const requestKey = randomUUID();
-  const quote = await api("/requests/quote", { method: "POST", token, body: { requestKey, action: "launch.open", input } });
+  const quote = await api("/requests/quote", { method: "POST", token, body: { requestKey, action, input } });
   if (quote.status !== 201 && quote.status !== 200) die(`quote refused (${quote.status}): ${JSON.stringify(quote.json)}`);
   const order = quote.json.order;
   mkdirSync(STATE_DIR, { recursive: true });
@@ -228,7 +243,7 @@ async function open(label, input) {
   console.log(`\n  Wallet ${acct.address}: ${Number(bal) / 1e18} IMD, ${Number(eth) / 1e18} ETH on Ethereum`);
   if (bal < price) die(`the wallet needs at least ${Number(price) / 1e18} IMD on Ethereum`);
 
-  const go = await ask(`\nOpen the ${label} launch and pay ${Number(price) / 1e18} IMD? Type "yes": `);
+  const go = await ask(`\nOpen the ${label} order and pay ${Number(price) / 1e18} IMD? Type "yes": `);
   if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
 
   if (allowance < price) {
@@ -299,7 +314,7 @@ async function follow(label, orderId, token) {
     process.stdout.write(`\r  status: ${json.status}            `);
     if (json.status === "admitted") {
       const r = json.admission?.result || {};
-      console.log(`\n\n✓ ${label} launch admitted.`);
+      console.log(`\n\n✓ ${label} admitted.`);
       console.log(`  Job: https://explorer.imd.fun/jobs/${r.jobId}`);
       console.log(`  Status: ${API}${r.statusUrl}`);
       return;
@@ -322,6 +337,12 @@ if (cmd === "vault") {
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
   await open("token", tokenInput(source, addr("vault"), addr("remainder"), poolBps));
+} else if (cmd === "site") {
+  const name = flag("name", "kept");
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(name)) die("--name must be a lowercase site label");
+  const source = await importRepo("site");
+  console.log(`Imported ${source.repoUrl} @ ${source.baseCommit} (static export in ${source.site.exportDir}/)`);
+  await open("site", siteInput(source, name), "job.open");
 } else if (cmd === "status") {
   const label = argv[1];
   const path = new URL(`${label}.json`, STATE_DIR);
