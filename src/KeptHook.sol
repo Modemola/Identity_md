@@ -57,8 +57,8 @@ contract KeptHook is IUnlockCallback {
 
     constructor(IPoolManager manager_, address imd_, address token_, address vault_) {
         if (
-            address(manager_) == address(0) || imd_ == address(0) || token_ == address(0) || vault_ == address(0)
-                || imd_ == token_
+            address(manager_) == address(0) || imd_ == address(0) || token_ == address(0)
+                || vault_ == address(0) || imd_ == token_
         ) revert InvalidConfiguration();
         poolManager = manager_;
         imd = Currency.wrap(imd_);
@@ -80,7 +80,11 @@ contract KeptHook is IUnlockCallback {
         p.afterSwapReturnDelta = true;
     }
 
-    function beforeInitialize(address, PoolKey calldata key, uint160) external onlyPoolManager returns (bytes4) {
+    function beforeInitialize(address, PoolKey calldata key, uint160)
+        external
+        onlyPoolManager
+        returns (bytes4)
+    {
         if (initialized) revert AlreadyInitialized();
         address a = Currency.unwrap(key.currency0);
         address b = Currency.unwrap(key.currency1);
@@ -133,11 +137,13 @@ contract KeptHook is IUnlockCallback {
         return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(fee)), 0), 0);
     }
 
-    function afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
-        external
-        onlyPoolManager
-        returns (bytes4, int128)
-    {
+    function afterSwap(
+        address,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata
+    ) external onlyPoolManager returns (bytes4, int128) {
         bool imd0 = key.currency0 == imd;
         if (((params.amountSpecified < 0) == params.zeroForOne) == imd0) {
             return (IHooks.afterSwap.selector, 0);
