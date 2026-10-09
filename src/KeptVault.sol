@@ -332,9 +332,13 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         if (m.inFlight != requestId || m.inFlightIntake != msg.sender) revert UnknownRequest();
 
         _verifyAttestation(a, signature);
+        // Panel evidence needs the panel's own agreement. Chain evidence may be signed with
+        // `agreed < quorum` when members split and the deployer's rerun of the recipe settled it,
+        // which is the protocol's documented behaviour; the rerun is the stronger evidence there.
+        bool chainEvidence = Questions.isChainEvidence(m.spec.kind);
         if (
             a.chainId != Questions.questionChain(m.spec) || a.panelSize < p.panelSize || a.quorum < p.quorum
-                || a.quorum > a.panelSize || a.agreed < a.quorum || a.agreed > a.panelSize
+                || a.quorum > a.panelSize || (!chainEvidence && a.agreed < a.quorum) || a.agreed > a.panelSize
                 || a.issuedAt < m.askedAt || a.expiresAt < a.issuedAt || a.answer.length != 32
         ) revert InvalidAttestation();
         bool kept = decodeBool(a);

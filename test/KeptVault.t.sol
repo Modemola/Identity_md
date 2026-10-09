@@ -417,7 +417,7 @@ contract KeptVaultTest is VaultFixture {
             if (i == 0) a.chainId = 4663; // question was about Base
             if (i == 1) a.panelSize = 8;
             if (i == 2) a.quorum = 6;
-            if (i == 3) a.agreed = 6;
+            if (i == 3) a.answer = abi.encode(true, true);
             if (i == 4) a.issuedAt = uint64(block.timestamp - 1);
             if (i == 5) a.agreed = 10;
             if (i == 6) a.quorum = 10;
@@ -426,6 +426,31 @@ contract KeptVaultTest is VaultFixture {
             vm.expectRevert(KeptVault.InvalidAttestation.selector);
             vault.onOracleResult(rid, a, sig);
         }
+    }
+
+    function test_panelEvidenceNeedsQuorumAgreement() public {
+        uint256 id = _standard();
+        bytes32 rid = _check(id, 0, creator);
+        OracleAttestation.Attestation memory a = _attestation(id, 0, true);
+        a.agreed = 6;
+        bytes memory sig = _sign(a, signerKey);
+        vm.prank(address(intake));
+        vm.expectRevert(KeptVault.InvalidAttestation.selector);
+        vault.onOracleResult(rid, a, sig);
+    }
+
+    /// @dev Real case: Robinhood request 2cbdce1f (8 Oct 2026) was signed with agreed 139 < quorum 140,
+    /// settled by the deployer's rerun of a chain recipe. KEPT must accept that for chain templates.
+    function test_chainEvidenceAcceptsDeployerSettledVerdict() public {
+        uint256 id = _create(_one(_deployed(T0 + 7 days, 1 ether, 8453, address(0xBEEF))), 10 ether);
+        bytes32 rid = _check(id, 0, creator);
+        OracleAttestation.Attestation memory a = _attestation(id, 0, true);
+        a.agreed = 6;
+        bytes memory sig = _sign(a, signerKey);
+        vm.prank(address(intake));
+        vault.onOracleResult(rid, a, sig);
+        (KeptVault.Outcome o,) = _outcome(id, 0);
+        assertEq(uint8(o), uint8(KeptVault.Outcome.Kept));
     }
 
     function test_callbackRejectsWrongAnswerType() public {
