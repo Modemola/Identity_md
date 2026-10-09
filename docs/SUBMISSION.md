@@ -61,7 +61,18 @@ Milestone 4 needs the Ethereum address before the pledge is created (a CREATE2 a
 known in advance); if that is not ready, replace it with another template. Ask for early checks
 on 1 and 2 as soon as they are delivered: a kept verdict before the deadline settles at once.
 
-## 5. Before submitting
+## 5. Order of operations
+
+1. `node launch.mjs vault --owner 0xYOU` → note the KeptVault address.
+2. `node launch.mjs token --vault 0xVAULT --remainder 0xYOU --pool-bps 6000` → note KeptToken and KeptHook.
+3. Put the three addresses and the vault's deploy block in `web/src/config.js`, rebuild, commit, push.
+4. `node launch.mjs site --name kept` → the site goes live on IPFS under IMD's ENS name.
+5. Create the team pledge (§4) on the site, ask for the first check, post the thread (§3).
+6. File the Radar entry (§1) once the payout question (§6) is answered.
+
+Total cost: 1.5 IMD plus a little ETH for the one-time Permit2 approval.
+
+## 6. Before submitting
 
 - **Payout address.** Radar pays prizes to the deployer of the contract you enter. Both KEPT
   contracts are deployed by the IMD factory, so ask @imdradar how a factory-deployed entry names
