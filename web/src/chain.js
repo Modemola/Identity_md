@@ -45,7 +45,7 @@ export async function tokenInfo(address) {
 }
 
 export async function vaultConstants() {
-  const [grace, maxAttempts, refereeFund, imd, panelSize, quorum, owner, pledgeCount] = await Promise.all([
+  const [grace, maxAttempts, refereeFund, imd, panelSize, quorum, owner, pledgeCount, pending] = await Promise.all([
     read("GRACE"),
     read("MAX_ATTEMPTS"),
     read("refereeFund"),
@@ -54,8 +54,11 @@ export async function vaultConstants() {
     read("quorum"),
     read("owner"),
     read("pledgeCount"),
+    read("pendingProtocol"),
   ]);
-  return { grace, maxAttempts, refereeFund, imd, panelSize, quorum, owner, pledgeCount };
+  const [pIntake, pAction, pSigner, readyAt] = pending;
+  const pendingChange = readyAt ? { intake: pIntake, action: pAction, signer: pSigner, readyAt } : null;
+  return { grace, maxAttempts, refereeFund, imd, panelSize, quorum, owner, pledgeCount, pendingChange };
 }
 
 export async function loadPledge(id) {
