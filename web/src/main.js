@@ -441,7 +441,7 @@ function specLine(m) {
     case 2:
       return ["contract ", h("code", {}, short(x.target)), ` deployed on chain ${x.chainId}`];
     default:
-      return [h("code", {}, x.a), " on ", h("code", {}, short(x.target)), ` (chain ${x.chainId}) ≥ ${x.threshold.toLocaleString("en-US")}`];
+      return [h("code", {}, x.a), " on ", h("code", {}, short(x.target)), ` (chain ${x.chainId}) ≥ `, rawValue(x.threshold)];
   }
 }
 
@@ -943,6 +943,14 @@ function viewHow() {
       h("div", { class: "ctas", style: { display: "flex", gap: "10px", flexWrap: "wrap", margin: "36px 0 0" } }, magnetic(h("a", { class: "btn primary", href: link("/new") }, "Make a pledge", icon("arrow", 16))), h("a", { class: "btn", href: config.repo, target: "_blank", rel: "noopener" }, "Read the contracts")),
     ),
   );
+}
+
+/** A raw uint256, shortened when it is a whole number of 18-decimal units; the exact value is the tooltip. */
+function rawValue(v) {
+  const unit = 10n ** 18n;
+  const full = v.toLocaleString("en-US");
+  if (v >= unit && v % unit === 0n) return h("span", { title: full }, `${(v / unit).toLocaleString("en-US")} × 10¹⁸`);
+  return full;
 }
 
 // ------------------------------------------------------------------ router
