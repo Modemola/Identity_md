@@ -1,15 +1,16 @@
-import { h, s } from "./dom.js";
-import { sevenSeg, liveInterval, reduced } from "./fx.js";
+import { h } from "./dom.js";
+import { sevenSeg, liveInterval, reduced, finePointer } from "./fx.js";
 
-// The Verdict Unit: KEPT's piece of IMD's instrument wall. A bezel, a dark screen, two
-// seven-segment readouts (kept, broken), one lamp per milestone, a scope trace and a terminal
-// that prints what the swarm decided.
+// The Swarm Scope: KEPT's piece of IMD's instrument wall. A bezel around a dark screen where the
+// IMD swarm floats as a sphere of agents around the promise; seven-segment KEPT/BROKEN readouts and
+// one lamp per milestone sit on the glass as a HUD; a terminal underneath prints what the swarm
+// decided, and every line it prints plays out in 3D (a panel links up, a green wave, red embers).
 //
-// It is drawn with SVG and CSS, not WebGL: it cannot fail on a blocked GPU, costs nothing to
-// load, and every moving part is a transform or an opacity change on the compositor. Its only
-// timer is a visibility-aware interval that stops off-screen and in background tabs.
+// The 3D layer (swarm.js) is its own chunk, fetched after first paint when the browser is idle,
+// so the headline and the readouts never wait for it.
 
-const LINES_SHOWN = 7;
+const LINES_SHOWN = 4;
+const TONE_EVENT = { ok: "kept", alarm: "broken", caution: "panel", "": "panel" };
 
 export function verdictUnit({ live }) {
   const kept = sevenSeg(3, "ok");
@@ -17,41 +18,31 @@ export function verdictUnit({ live }) {
   const lamps = h("div", { class: "vu-lamps", role: "list", "aria-label": "Milestones" });
   const log = h("div", { class: "vu-log", "aria-live": "off" });
   const mode = h("span", { class: "vu-mode" }, live ? "LIVE" : "SAMPLE FEED");
-  const scope = s(
-    "svg",
-    { class: "vu-scope", viewBox: "0 0 400 60", preserveAspectRatio: "none", "aria-hidden": "true" },
-    s(
-      "g",
-      { class: "vu-trace" },
-      // Two copies of one period side by side: translating by exactly one period loops seamlessly.
-      s("path", { d: tracePath(0) }),
-      s("path", { d: tracePath(400) }),
+  const agents = h("span", { class: "tnum" }, "—");
+  const stage = h(
+    "div",
+    { class: "vu-stage" },
+    h("div", { class: "vu-glow", "aria-hidden": "true" }),
+    h(
+      "div",
+      { class: "vu-hud" },
+      h("div", { class: "vu-read at-l" }, h("span", { class: "vu-k" }, "KEPT"), kept),
+      h("div", { class: "vu-read at-r" }, h("span", { class: "vu-k" }, "BROKEN"), broken),
+      h("div", { class: "vu-corner a", "aria-hidden": "true" }),
+      h("div", { class: "vu-corner b", "aria-hidden": "true" }),
+      h("div", { class: "vu-corner c", "aria-hidden": "true" }),
+      h("div", { class: "vu-corner d", "aria-hidden": "true" }),
+      h("div", { class: "vu-bl" }, lamps),
+      h("div", { class: "vu-br" }, "AGENTS ", agents, h("br"), "PANEL 9 · QUORUM 7"),
     ),
   );
 
   const unit = h(
     "div",
-    { class: "vu", role: "img", "aria-label": "KEPT verdict unit: milestones kept and broken" },
-    h(
-      "div",
-      { class: "vu-head" },
-      h("span", { class: "lamp ok blink" }),
-      h("span", {}, "KEPT/01 · VERDICT UNIT"),
-      mode,
-    ),
-    h(
-      "div",
-      { class: "vu-screen" },
-      h(
-        "div",
-        { class: "vu-readouts" },
-        h("div", { class: "vu-read" }, h("span", { class: "vu-k" }, "KEPT"), kept),
-        h("div", { class: "vu-read" }, h("span", { class: "vu-k" }, "BROKEN"), broken),
-      ),
-      lamps,
-      scope,
-      log,
-    ),
+    { class: "vu", role: "img", "aria-label": "KEPT swarm scope: the IMD swarm, and milestones kept and broken" },
+    h("div", { class: "vu-head" }, h("span", { class: "lamp ok blink" }), h("span", {}, "KEPT/01 · SWARM SCOPE"), mode),
+    stage,
+    log,
     h(
       "div",
       { class: "vu-foot" },
@@ -61,11 +52,34 @@ export function verdictUnit({ live }) {
     ),
   );
 
+  // ---------------------------------------------------------------- 3D, after first paint
+  let swarm = null;
+  const queued = [];
+  const mount = () => {
+    if (!unit.isConnected) return;
+    import("./swarm.js")
+      .then(({ mountSwarm }) => {
+        if (!unit.isConnected) return;
+        swarm = mountSwarm(stage, { reduced, fine: finePointer });
+        const showCount = (c) => (agents.textContent = c.count ? c.count.toLocaleString("en-US") : "—");
+        showCount(swarm);
+        swarm.onReady = showCount;
+        queued.splice(0).forEach((k) => swarm.pulse(k));
+      })
+      .catch(() => {});
+  };
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 120));
+  // wait for the entrance animation to settle, then for an idle moment
+  setTimeout(() => idle(mount, { timeout: 1200 }), 450);
+
+  const pulse = (kind) => (swarm ? swarm.pulse(kind) : queued.length < 2 && queued.push(kind));
+
+  // ---------------------------------------------------------------- feed
   let feed = [];
   let cursor = 0;
   let stop = null;
 
-  function push(line) {
+  function push(line, animate = true) {
     const row = h(
       "div",
       { class: `vu-line ${line.tone || ""}` },
@@ -75,6 +89,7 @@ export function verdictUnit({ live }) {
     );
     log.append(row);
     while (log.children.length > LINES_SHOWN) log.firstElementChild.remove();
+    if (animate) pulse(TONE_EVENT[line.tone || ""] ?? "panel");
   }
 
   /** `data`: { kept, broken, lamps: ['kept'|'broken'|'open'|'checking'], feed: [{t, who, what, tone}] } */
@@ -83,34 +98,24 @@ export function verdictUnit({ live }) {
     broken.set(data.broken);
     lamps.replaceChildren(
       ...data.lamps.slice(0, 12).map((cls, i) =>
-        h("span", { class: `lamp big ${cls}`, role: "listitem", "aria-label": `Milestone ${i + 1}: ${cls}`, style: { animationDelay: `${i * 90}ms` } }),
+        h("span", { class: `lamp ${cls}`, role: "listitem", "aria-label": `Milestone ${i + 1}: ${cls}`, style: { animationDelay: `${i * 70}ms` } }),
       ),
     );
     feed = data.feed;
     cursor = 0;
     log.replaceChildren();
-    const first = Math.min(feed.length, reduced ? feed.length : 3);
-    for (; cursor < first; cursor++) push(feed[cursor]);
+    const first = Math.min(feed.length, reduced ? LINES_SHOWN : 3);
+    for (; cursor < first; cursor++) push(feed[cursor], false);
     stop?.();
     if (!reduced && feed.length > first) {
       stop = liveInterval(unit, () => {
         push(feed[cursor % feed.length]);
         cursor += 1;
-      }, 1700);
+      }, 2600);
     }
   };
 
   return unit;
-}
-
-/** One period of a slow heartbeat on a quiet baseline, offset by `x`. */
-function tracePath(x) {
-  const y = 34;
-  const pts = [
-    [0, y], [70, y], [80, y - 2], [90, y], [150, y], [158, y + 6], [166, y - 24], [174, y + 14],
-    [182, y], [250, y], [262, y - 5], [276, y], [400, y],
-  ];
-  return pts.map(([px, py], i) => `${i ? "L" : "M"}${px + x} ${py}`).join(" ");
 }
 
 /** A believable demo feed for before KEPT is deployed. Always labelled SAMPLE FEED on screen. */

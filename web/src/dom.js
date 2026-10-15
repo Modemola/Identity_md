@@ -1,10 +1,16 @@
 import { formatUnits } from "viem";
-import { config, carry } from "./config.js";
+import { config } from "./config.js";
 
 // Every on-chain string goes through text nodes; nothing user-supplied is ever parsed as HTML.
 export function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   setAttrs(el, attrs);
+  append(el, kids);
+  return el;
+}
+
+/** Appends children to an existing element and returns it (for nodes made earlier, e.g. observed ones). */
+export function fill(el, ...kids) {
   append(el, kids);
   return el;
 }
@@ -23,7 +29,8 @@ function setAttrs(el, attrs) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === "class") el.setAttribute("class", v);
-    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+    else if (k === "style" && typeof v === "object")
+      for (const [prop, val] of Object.entries(v)) prop.startsWith("--") ? el.style.setProperty(prop, val) : (el.style[prop] = val);
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (k === "html") throw new Error("no raw html");
     else el.setAttribute(k, v === true ? "" : v);
@@ -37,7 +44,9 @@ function append(el, kids) {
   }
 }
 
-export const link = (path) => `${carry}#${path}`;
+// Hash-only: the browser keeps the current query string (any ?vault=… overrides) on its own, and a
+// same-document link never reloads the page.
+export const link = (path) => `#${path}`;
 export const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
 export const addrLink = (a) =>
   h("a", { class: "addr", href: `${config.explorer}/address/${a}`, target: "_blank", rel: "noopener" }, short(a));
