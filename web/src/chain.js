@@ -4,7 +4,7 @@ import { createClient, custom, defineChain, erc20Abi, http, getAddress } from "v
 // helpers into the bundle that KEPT never calls.
 import { readContract, getBlockNumber, getContractEvents, simulateContract, waitForTransactionReceipt, writeContract } from "viem/actions";
 import { config } from "./config.js";
-import { load, put, peek } from "./store.js";
+import { load, put, peek, epoch } from "./store.js";
 import vaultAbi from "./abi/KeptVault.json";
 import hookAbi from "./abi/KeptHook.json";
 
@@ -47,10 +47,13 @@ export async function tokenInfo(address) {
     tokenCache.set(key, Promise.resolve(known));
     return known;
   }
+  // decimals must be real: a guessed 18 would mis-scale every amount. Only successful reads are
+  // cached, so a transient RPC failure is retried next time. The symbol may fall back.
   const p = Promise.all([
     client.readContract({ address, abi: erc20Abi, functionName: "symbol" }).catch(() => "TOKEN"),
-    client.readContract({ address, abi: erc20Abi, functionName: "decimals" }).catch(() => 18),
+    client.readContract({ address, abi: erc20Abi, functionName: "decimals" }),
   ]).then(([symbol, decimals]) => put(`token:${key}`, { address, symbol, decimals: Number(decimals) }));
+  p.catch(() => tokenCache.delete(key));
   tokenCache.set(key, p);
   return p;
 }
@@ -132,8 +135,11 @@ export async function loadAllPledges() {
 /** Every pledge, newest first. Also primes each pledge's own cache entry, so opening one is instant. */
 export function getPledges({ maxAge = 0 } = {}) {
   return load("pledges", async () => {
+    const e0 = epoch();
     const all = await loadAllPledges();
-    for (const p of all) put(`pledge:${p.id}`, p);
+    // if a transaction invalidated anything while this read was in flight, its copies may predate
+    // it: then only the list is returned, and each pledge keeps its own (fresher) entry
+    if (epoch() === e0) for (const p of all) put(`pledge:${p.id}`, p);
     return all;
   }, { maxAge });
 }
@@ -215,15 +221,19 @@ export function uuidFromBytes32(b) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
-export async function oracleRequest(uuid) {
-  const r = await fetch(`${config.imdApi}/oracle/requests/${uuid}?members=0`);
-  if (!r.ok) throw new Error(`oracle ${r.status}`);
-  return r.json();
+/** An oracle request's record. Settled requests do not change, so one read per tab is enough. */
+export function oracleRequest(uuid) {
+  return load(`oracle:${uuid}`, async () => {
+    const r = await fetch(`${config.imdApi}/oracle/requests/${uuid}?members=0`);
+    if (!r.ok) throw new Error(`oracle ${r.status}`);
+    return r.json();
+  }, { maxAge: Infinity });
 }
 
 // ------------------------------------------------------------------ wallet
 
 let wallet = null;
+let listening = false;
 let account = null;
 const listeners = new Set();
 
@@ -240,11 +250,14 @@ export async function connect() {
   const [addr] = await eth.request({ method: "eth_requestAccounts" });
   account = getAddress(addr);
   wallet = createClient({ chain, transport: custom(eth), account });
-  eth.on?.("accountsChanged", (a) => {
-    account = a[0] ? getAddress(a[0]) : null;
-    if (account) wallet = createClient({ chain, transport: custom(eth), account });
-    emit();
-  });
+  if (!listening) {
+    listening = true;
+    eth.on?.("accountsChanged", (a) => {
+      account = a[0] ? getAddress(a[0]) : null;
+      if (account) wallet = createClient({ chain, transport: custom(eth), account });
+      emit();
+    });
+  }
   emit();
   return account;
 }

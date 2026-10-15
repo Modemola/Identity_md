@@ -54,19 +54,24 @@ export function verdictUnit({ live }) {
 
   // ---------------------------------------------------------------- 3D, after first paint
   let swarm = null;
+  let mounting = false;
   const queued = [];
+  // Retried from update() until it succeeds: if the visitor leaves home before the chunk lands,
+  // the next visit mounts it instead of leaving an empty screen for the rest of the session.
   const mount = () => {
-    if (!unit.isConnected) return;
+    if (swarm || mounting || !unit.isConnected) return;
+    mounting = true;
     import("./swarm.js")
       .then(({ mountSwarm }) => {
-        if (!unit.isConnected) return;
+        mounting = false;
+        if (swarm || !unit.isConnected) return;
         swarm = mountSwarm(stage, { reduced, fine: finePointer });
         const showCount = (c) => (agents.textContent = c.count ? c.count.toLocaleString("en-US") : "—");
         showCount(swarm);
         swarm.onReady = showCount;
         queued.splice(0).forEach((k) => swarm.pulse(k));
       })
-      .catch(() => {});
+      .catch(() => (mounting = false));
   };
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 120));
   // wait for the entrance animation to settle, then for an idle moment
@@ -94,6 +99,7 @@ export function verdictUnit({ live }) {
 
   /** `data`: { kept, broken, lamps: ['kept'|'broken'|'open'|'checking'], feed: [{t, who, what, tone}] } */
   unit.update = (data) => {
+    if (!swarm && !mounting) setTimeout(() => idle(mount, { timeout: 1200 }), 450);
     kept.set(data.kept);
     broken.set(data.broken);
     lamps.replaceChildren(

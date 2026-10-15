@@ -147,11 +147,15 @@ export function commandPalette(items) {
   let el = null;
   let sel = 0;
   let list = [];
+  let returnTo = null;
 
   function open() {
     if (el) return;
-    const input = h("input", { class: "cp-input", placeholder: "Jump to a pledge or page…", "aria-label": "Search", autocomplete: "off", spellcheck: "false" });
-    const ul = h("ul", { class: "cp-list", role: "listbox" });
+    returnTo = document.activeElement;
+    // a combobox: focus stays in the input, arrow keys move the active option, and the input
+    // names it through aria-activedescendant so screen readers announce each move
+    const input = h("input", { class: "cp-input", placeholder: "Jump to a pledge or page…", "aria-label": "Search pages and pledges", autocomplete: "off", spellcheck: "false", role: "combobox", "aria-expanded": "true", "aria-controls": "cp-list", "aria-autocomplete": "list" });
+    const ul = h("ul", { class: "cp-list", role: "listbox", id: "cp-list", "aria-label": "Results" });
     el = h(
       "div",
       { class: "cp", role: "dialog", "aria-modal": "true", "aria-label": "Jump to" },
@@ -167,34 +171,39 @@ export function commandPalette(items) {
           ? list.map((it, i) =>
               h(
                 "li",
-                { class: i === sel ? "on" : "", role: "option", "aria-selected": i === sel ? "true" : "false", onpointerenter: () => ((sel = i), render()), onclick: () => go(it) },
+                { class: i === sel ? "on" : "", id: `cp-opt-${i}`, role: "option", "aria-selected": i === sel ? "true" : "false", onpointerenter: () => ((sel = i), render()), onclick: () => go(it) },
                 h("span", { class: `lamp ${it.tone || ""}` }),
                 h("span", { class: "cp-label" }, it.label),
                 it.hint ? h("span", { class: "cp-hint" }, it.hint) : null,
               ),
             )
-          : [h("li", { class: "cp-empty" }, "Nothing matches.")]),
+          : [h("li", { class: "cp-empty", role: "presentation" }, "Nothing matches.")]),
       );
+      if (list.length) input.setAttribute("aria-activedescendant", `cp-opt-${sel}`);
+      else input.removeAttribute("aria-activedescendant");
     };
     input.addEventListener("input", () => ((sel = 0), render()));
-    input.addEventListener("keydown", (e) => {
+    // keys on the whole dialog: Escape works wherever focus is, and Tab cannot leave it
+    el.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") (sel = Math.min(sel + 1, list.length - 1)), render(), e.preventDefault();
       else if (e.key === "ArrowUp") (sel = Math.max(sel - 1, 0)), render(), e.preventDefault();
       else if (e.key === "Enter" && list[sel]) go(list[sel]);
-      else if (e.key === "Escape") close();
+      else if (e.key === "Escape") e.preventDefault(), close();
+      else if (e.key === "Tab") e.preventDefault(), input.focus();
     });
     document.body.append(el);
     render();
     input.focus();
   }
   function go(it) {
-    close();
+    close(false);
     location.hash = `#${it.path}`;
   }
-  function close() {
+  function close(restore = true) {
     if (!el) return;
     const node = el;
     el = null;
+    if (restore && returnTo?.isConnected) returnTo.focus({ preventScroll: true });
     node.classList.add("out");
     setTimeout(() => node.remove(), 220);
   }
@@ -202,7 +211,8 @@ export function commandPalette(items) {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
     if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
       e.preventDefault();
-      el ? close() : open();
+      if (el) close();
+      else open();
     }
   });
   return { open, close };

@@ -286,6 +286,12 @@ export function mountSwarm(host, { reduced = false, fine = true } = {}) {
   const compiled = () => !ext || progs.every((p) => gl.getProgramParameter(p, ext.COMPLETION_STATUS_KHR));
   const wait = () => {
     if (dead) return;
+    if (gl.isContextLost()) {
+      // lost before the scene ever ran: show the still frame instead of polling forever
+      canvas.remove();
+      inner = still(host, document.createElement("canvas"), geo);
+      return;
+    }
     if (!compiled()) return void requestAnimationFrame(wait);
     inner = run();
     queued.splice(0).forEach((k) => inner.pulse(k));

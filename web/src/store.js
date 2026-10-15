@@ -50,22 +50,37 @@ export function put(key, value, persist = true) {
   return value;
 }
 
+// Each key has a generation. invalidate() bumps it, so a read that was already in flight when a
+// transaction confirmed cannot land afterwards and mark pre-transaction data as fresh.
+const gen = new Map();
+
 /** Fetches `key` unless a value younger than `maxAge` ms is cached. Concurrent calls share one read. */
 export function load(key, loader, { maxAge = 0, persist = true } = {}) {
   if (age(key) < maxAge) return Promise.resolve(peek(key));
   if (inflight.has(key)) return inflight.get(key);
+  const g = gen.get(key) ?? 0;
   const p = loader()
-    .then((v) => put(key, v, persist))
-    .finally(() => inflight.delete(key));
+    .then((v) => ((gen.get(key) ?? 0) === g ? put(key, v, persist) : v))
+    .finally(() => inflight.get(key) === p && inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
 
+// Bumps on every invalidate(), for loaders that also fill other keys (see getPledges).
+let epochN = 0;
+export const epoch = () => epochN;
+
 /** Marks keys stale (after a transaction) so the next load reads the chain. Values stay for painting. */
 export function invalidate(...keys) {
+  epochN += 1;
   for (const k of keys) {
+    gen.set(k, (gen.get(k) ?? 0) + 1);
+    inflight.delete(k);
     const e = mem.get(k) ?? fromSession(k);
-    if (e) e.at = 0;
+    if (e) {
+      e.at = 0;
+      toSession(k, e);
+    }
   }
 }
 

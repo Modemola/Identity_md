@@ -246,7 +246,8 @@ const bar = {
 function statusbar() {
   const el = h(
     "div",
-    { class: "statusbar", role: "status" },
+    // not a live region: the block number changes every few seconds and would be read out each time
+    { class: "statusbar", "aria-label": "Network status" },
     h("div", { class: "cell" }, h("span", { class: "lamp ok blink" }), "Robinhood ", bar.block),
     h("div", { class: "cell" }, bar.pledges, " pledges"),
     h("div", { class: "cell" }, bar.kept, " kept · ", bar.broken, " broken"),
@@ -548,7 +549,8 @@ function pledgeContent(p, c) {
   const isTeam = acct && [p.creator, p.beneficiary].some((a) => a.toLowerCase() === acct.toLowerCase());
   const historyEls = new Map(p.milestones.map((m) => [m.index, h("div", { class: "verdicts" })]));
   historyFill = (hist) => {
-    for (const [index, el] of historyEls) if (el.isConnected) renderHistory(el, index, hist);
+    // no isConnected check: inside a view transition the rows are built before they are attached
+    for (const [index, el] of historyEls) renderHistory(el, index, hist);
   };
   const title = h("h1", { class: "page-title" }, p.name);
   title.style.viewTransitionName = "ptitle";
@@ -706,7 +708,8 @@ function milestoneRow(p, m, c, total, isTeam, historyEl) {
       actions.push(h("span", { class: "note" }, `Only the team can ask the swarm to confirm this. Not proven by ${when(m.deadline + c.grace)}: it burns.`));
     }
   }
-  if (!m.settled && (m.outcome === 1 || (m.outcome === 0 && now() > m.deadline + c.grace))) {
+  const checkPending = m.inFlight !== ZERO32 && now() < m.askedAt + TIMEOUT; // the vault refuses to settle then
+  if (!m.settled && (m.outcome === 1 || (m.outcome === 0 && now() > m.deadline + c.grace && !checkPending))) {
     const burning = m.outcome !== 1;
     actions.push(
       h(
@@ -848,8 +851,15 @@ function budgetBox(p) {
 
 const CHAINS = [[4663, "Robinhood Chain"], [1, "Ethereum"], [8453, "Base"], [42161, "Arbitrum One"], [56, "BNB Chain"]];
 
+let fieldSeq = 0;
+/** A labelled control: the label points at the input (or the first control inside a wrapper). */
 function field(label, input, hint) {
-  return h("div", { class: "field" }, h("label", {}, label), input, hint ? h("div", { class: "hint" }, hint) : null);
+  const control = input.matches?.("input, select, textarea") ? input : input.querySelector?.("input, select, textarea");
+  let id = control?.id;
+  if (control && !id) control.id = id = `f${++fieldSeq}`;
+  const hintEl = hint ? h("div", { class: "hint", id: `${id}-hint` }, hint) : null;
+  if (control && hintEl) control.setAttribute("aria-describedby", hintEl.id);
+  return h("div", { class: "field" }, h("label", { for: id }, label), input, hintEl);
 }
 
 function viewNew({ quiet }) {
@@ -872,7 +882,9 @@ function viewNew({ quiet }) {
     tl: h("div", { class: "pc-tl" }),
   };
 
+  let tokenSeq = 0;
   async function loadToken() {
+    const mine = ++tokenSeq; // only the lookup for what the field says now may set the token
     const v = tokenIn.value.trim();
     st.token = null;
     tokenNote.className = "hint";
@@ -882,10 +894,13 @@ function viewNew({ quiet }) {
     }
     tokenNote.textContent = "Reading the token…";
     try {
-      st.token = await tokenInfo(getAddress(v));
+      const info = await tokenInfo(getAddress(v));
+      if (mine !== tokenSeq) return;
+      st.token = info;
       tokenNote.className = "hint good";
       tokenNote.textContent = `${st.token.symbol} · ${st.token.decimals} decimals`;
     } catch {
+      if (mine !== tokenSeq) return;
       tokenNote.className = "hint bad";
       tokenNote.textContent = "Not a readable ERC-20 on this chain.";
     }
@@ -1045,7 +1060,8 @@ function milestoneEditor(st, refresh, onRemove) {
   const target = h("input", { placeholder: "0x… contract address", spellcheck: "false" });
   const threshold = h("input", { type: "number", min: "1", step: "1", placeholder: "Raw uint256, e.g. 1000000000000000000" });
   const params = h("div", { class: "params" });
-  const preview = h("div", { class: "preview" }, "Fill in the milestone to see the swarm's question.");
+  // polite live region: the question (or what is wrong) is read out once typing pauses
+  const preview = h("div", { class: "preview", "aria-live": "polite" }, "Fill in the milestone to see the swarm's question.");
   const previewLamp = h("span", { class: "lamp" });
   const numEl = h("b", {}, "Milestone 01");
   const d = new Date(Date.now() + 14 * 86400e3);
@@ -1155,7 +1171,7 @@ function milestoneEditor(st, refresh, onRemove) {
     field("Promise", title),
     h("div", { class: "row2" }, field("Deadline", deadline), field("Amount", amount)),
     params,
-    h("div", { class: "field" }, h("label", {}, previewLamp, " What the swarm will be asked"), preview),
+    h("div", { class: "field" }, h("div", { class: "field-title" }, previewLamp, " What the swarm will be asked"), preview),
   );
   for (const x of [title, deadline, amount, a, b, chainSel, target, threshold]) {
     x.addEventListener("input", refresh);
