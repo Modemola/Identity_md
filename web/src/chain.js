@@ -1,13 +1,10 @@
-import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  defineChain,
-  erc20Abi,
-  http,
-  getAddress,
-} from "viem";
+import { createClient, custom, defineChain, erc20Abi, http, getAddress } from "viem";
+// Single actions instead of createPublicClient/createWalletClient: those decorate the client with
+// every action viem has (signature verification, ENS, EIP-6492...) and pull ~100 KB of curves and
+// helpers into the bundle that KEPT never calls.
+import { readContract, getBlockNumber, getContractEvents, simulateContract, waitForTransactionReceipt, writeContract } from "viem/actions";
 import { config } from "./config.js";
+import { load, put, peek } from "./store.js";
 import vaultAbi from "./abi/KeptVault.json";
 import hookAbi from "./abi/KeptHook.json";
 
@@ -21,7 +18,16 @@ export const chain = defineChain({
   blockExplorers: { default: { name: "Explorer", url: config.explorer } },
 });
 
-export const client = createPublicClient({ chain, transport: http(config.rpc, { batch: true }) });
+const base = createClient({ chain, transport: http(config.rpc, { batch: { wait: 8 }, retryCount: 2, retryDelay: 250, timeout: 12_000 }) });
+
+/** The few public actions KEPT uses, with the same call shapes as a viem public client. */
+export const client = {
+  readContract: (args) => readContract(base, args),
+  getBlockNumber: () => getBlockNumber(base, { cacheTime: 2_000 }),
+  getContractEvents: (args) => getContractEvents(base, args),
+  simulateContract: (args) => simulateContract(base, args),
+  waitForTransactionReceipt: (args) => waitForTransactionReceipt(base, args),
+};
 
 export const Outcome = ["Open", "Kept", "Broken"];
 export const Kind = ["GithubRelease", "PageContains", "ContractDeployed", "ValueAtLeast"];
@@ -36,10 +42,15 @@ const tokenCache = new Map();
 export async function tokenInfo(address) {
   const key = address.toLowerCase();
   if (tokenCache.has(key)) return tokenCache.get(key);
+  const known = peek(`token:${key}`);
+  if (known) {
+    tokenCache.set(key, Promise.resolve(known));
+    return known;
+  }
   const p = Promise.all([
     client.readContract({ address, abi: erc20Abi, functionName: "symbol" }).catch(() => "TOKEN"),
     client.readContract({ address, abi: erc20Abi, functionName: "decimals" }).catch(() => 18),
-  ]).then(([symbol, decimals]) => ({ address, symbol, decimals: Number(decimals) }));
+  ]).then(([symbol, decimals]) => put(`token:${key}`, { address, symbol, decimals: Number(decimals) }));
   tokenCache.set(key, p);
   return p;
 }
@@ -114,6 +125,42 @@ export async function loadAllPledges() {
   const count = Number(await read("pledgeCount"));
   const ids = Array.from({ length: count }, (_, i) => count - i);
   return Promise.all(ids.map(loadPledge));
+}
+
+// ------------------------------------------------------------------ cached accessors (see store.js)
+
+/** Every pledge, newest first. Also primes each pledge's own cache entry, so opening one is instant. */
+export function getPledges({ maxAge = 0 } = {}) {
+  return load("pledges", async () => {
+    const all = await loadAllPledges();
+    for (const p of all) put(`pledge:${p.id}`, p);
+    return all;
+  }, { maxAge });
+}
+
+export function getPledge(id, { maxAge = 0 } = {}) {
+  return load(`pledge:${id}`, () => loadPledge(id), { maxAge });
+}
+
+export function getConstants({ maxAge = 0 } = {}) {
+  return load("constants", vaultConstants, { maxAge });
+}
+
+export function getHistory(id, { maxAge = 0 } = {}) {
+  return load(`history:${id}`, () => pledgeHistory(id), { maxAge });
+}
+
+/** Cached-or-nothing, for painting the first frame. */
+export const cachedPledges = () => peek("pledges");
+export const cachedPledge = (id) => peek(`pledge:${id}`) ?? peek("pledges")?.find((p) => p.id === Number(id));
+export const cachedConstants = () => peek("constants");
+export const cachedHistory = (id) => peek(`history:${id}`);
+
+/** Warms a pledge page's data before the click lands (hover, focus, touchstart). */
+export function prefetchPledge(id) {
+  getPledge(id, { maxAge: 15_000 }).catch(() => {});
+  getHistory(id, { maxAge: 30_000 }).catch(() => {});
+  getConstants({ maxAge: 60_000 }).catch(() => {});
 }
 
 export async function previewQuestion(input) {
@@ -192,10 +239,10 @@ export async function connect() {
   if (!eth) throw new Error("No wallet found. Install a browser wallet such as MetaMask or Rabby.");
   const [addr] = await eth.request({ method: "eth_requestAccounts" });
   account = getAddress(addr);
-  wallet = createWalletClient({ chain, transport: custom(eth), account });
+  wallet = createClient({ chain, transport: custom(eth), account });
   eth.on?.("accountsChanged", (a) => {
     account = a[0] ? getAddress(a[0]) : null;
-    if (account) wallet = createWalletClient({ chain, transport: custom(eth), account });
+    if (account) wallet = createClient({ chain, transport: custom(eth), account });
     emit();
   });
   emit();
@@ -226,18 +273,32 @@ async function ensureChain() {
   }
 }
 
-/** Simulates first (so reverts surface with their reason), then sends and waits. */
-export async function send({ address, abi, functionName, args = [] }) {
+/**
+ * Simulates first (so reverts surface with their reason), then sends and waits.
+ * `onPhase` hears "sign" (waiting on the wallet), "pending" (with the hash) and "confirmed".
+ */
+export async function send({ address, abi, functionName, args = [] }, onPhase = () => {}) {
   if (!account) await connect();
   await ensureChain();
   const { request } = await client.simulateContract({ address, abi, functionName, args, account });
-  const hash = await wallet.writeContract(request);
-  const receipt = await client.waitForTransactionReceipt({ hash });
+  onPhase("sign");
+  const hash = await writeContract(wallet, request);
+  onPhase("pending", hash);
+  const receipt = await client.waitForTransactionReceipt({ hash, pollingInterval: 1_000 });
+  onPhase("confirmed", hash);
   if (receipt.status !== "success") throw new Error("Transaction reverted");
   return receipt;
 }
 
-export async function ensureAllowance(token, spender, amount) {
+/** Approves `spender` for `amount` unless it already can spend that much. Returns whether it sent a tx. */
+export async function needsAllowance(token, spender, amount) {
+  if (amount === 0n) return false;
+  if (!account) await connect();
+  const have = await client.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [account, spender] });
+  return have < amount;
+}
+
+export async function ensureAllowance(token, spender, amount, onPhase) {
   if (amount === 0n) return;
   const have = await client.readContract({
     address: token,
@@ -246,7 +307,7 @@ export async function ensureAllowance(token, spender, amount) {
     args: [account, spender],
   });
   if (have >= amount) return;
-  await send({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, amount] });
+  await send({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, amount] }, onPhase);
 }
 
 export async function balanceOf(token, who) {

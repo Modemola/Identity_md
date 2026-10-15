@@ -28,13 +28,3 @@ export const config = {
 };
 
 export const deployed = /^0x[0-9a-fA-F]{40}$/.test(config.vault);
-
-/** Query string that carries overrides across in-site links. */
-export const carry = (() => {
-  const keep = new URLSearchParams();
-  for (const k of ["vault", "hook", "token", "rpc", "chain", "from", "explorer"]) {
-    if (params.get(k)) keep.set(k, params.get(k));
-  }
-  const s = keep.toString();
-  return s ? `?${s}` : "";
-})();

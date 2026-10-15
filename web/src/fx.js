@@ -53,11 +53,17 @@ const revealed = new IntersectionObserver(
   { rootMargin: "0px 0px -8% 0px" },
 );
 
+// A quiet re-render (fresh data replacing cached data on the same page) must not replay entrances:
+// while `instant` is on, reveals land in their final state and numbers jump straight to their value.
+let instant = false;
+export const setInstant = (v) => (instant = v);
+export const isInstant = () => instant;
+
 /** Marks an element to rise in when it first scrolls into view. Returns the element. */
 export function reveal(el, delay = 0) {
   el.classList.add("rv");
   if (delay) el.style.setProperty("--d", `${delay}ms`);
-  if (reduced) el.classList.add("in");
+  if (reduced || instant) el.classList.add("in");
   else revealed.observe(el);
   return el;
 }
@@ -100,7 +106,7 @@ export function words(text, { delay = 0, stagger = 70, accent = [] } = {}) {
 export function countUp(el, value, format = (n) => Math.round(n).toLocaleString("en-US"), ms = 900) {
   const from = Number(el.dataset.v ?? 0);
   el.dataset.v = value;
-  if (reduced || from === value) {
+  if (reduced || instant || from === value) {
     el.textContent = format(value);
     return;
   }
@@ -177,7 +183,8 @@ export function sevenSeg(digits = 3, tone = "ok") {
     }
     label.textContent = String(value);
     const target = Math.max(0, Math.round(value));
-    if (reduced) return show(String(target));
+    if (reduced || instant || wrap.dataset.v === String(target)) return (wrap.dataset.v = String(target)), show(String(target));
+    wrap.dataset.v = String(target);
     // A short counter roll: cheap (a few dozen attribute flips) and only when visible.
     onSight(wrap, () => {
       let n = 0;
@@ -203,9 +210,10 @@ export function magnetic(el, strength = 0.22) {
   let raf = 0;
   let tx = 0;
   let ty = 0;
+  // `translate`, not `transform`: CSS keeps `scale` free for the press effect, and both compose.
   const apply = () => {
     raf = 0;
-    el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+    el.style.translate = `${tx}px ${ty}px`;
   };
   el.addEventListener("pointermove", (e) => {
     const r = el.getBoundingClientRect();
@@ -231,6 +239,57 @@ export function spotlight(el) {
     el.style.setProperty("--my", `${e.clientY - r.top}px`);
   });
   return el;
+}
+
+/** A card that tilts toward the cursor in 3D, a few degrees at most. Desktop pointers only. */
+export function tilt(el, max = 5) {
+  if (reduced || !finePointer) return el;
+  let raf = 0;
+  let rx = 0;
+  let ry = 0;
+  const apply = () => {
+    raf = 0;
+    el.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+  };
+  el.addEventListener("pointermove", (e) => {
+    const r = el.getBoundingClientRect();
+    ry = ((e.clientX - r.left) / r.width - 0.5) * 2 * max;
+    rx = -((e.clientY - r.top) / r.height - 0.5) * 2 * max;
+    if (!raf) raf = requestAnimationFrame(apply);
+  });
+  el.addEventListener("pointerleave", () => {
+    rx = ry = 0;
+    if (!raf) raf = requestAnimationFrame(apply);
+  });
+  el.classList.add("tilt");
+  return el;
+}
+
+// ------------------------------------------------------------------ view transitions
+
+export const canTransition = () => !!document.startViewTransition && !reduced;
+
+/**
+ * The theme flips inside a view transition, revealed as a circle growing from the toggle.
+ * Without the API (or with reduced motion) it just flips.
+ */
+export function themeSwitch(e) {
+  const root = document.documentElement;
+  if (!canTransition()) return toggleTheme();
+  const x = e?.clientX || innerWidth - 60;
+  const y = e?.clientY || 36;
+  const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  root.classList.add("vt-theme");
+  const t = document.startViewTransition(toggleTheme);
+  t.ready
+    .then(() =>
+      root.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 720, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" },
+      ),
+    )
+    .catch(() => {});
+  t.finished.finally(() => root.classList.remove("vt-theme"));
 }
 
 // ------------------------------------------------------------------ visibility-aware timers
