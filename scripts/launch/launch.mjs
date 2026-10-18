@@ -204,6 +204,36 @@ async function open(label, input, action = "launch.open") {
   const price = BigInt(launchAction.payment.amount);
   console.log(`  Price: ${Number(price) / 1e18} IMD on Ethereum, paid to ${launchAction.payment.payTo}`);
 
+  // Everything slow (typing the key, confirming, the one-time Permit2 approval) happens BEFORE the
+  // quote: the payment signature is only valid for a few minutes after the challenge, and a quote
+  // that waited on a person or a block expired as payment_permission_expired.
+  let acct, pub, rpc;
+  if (!dryRun) {
+    if (launchAction.payment.network !== "eip155:1") die(`unexpected payment network ${launchAction.payment.network}`);
+    acct = await account();
+    rpc = flag("eth-rpc", "https://ethereum-rpc.publicnode.com");
+    pub = createPublicClient({ chain: mainnet, transport: http(rpc) });
+    const imd = getAddress(launchAction.payment.asset);
+    const [bal, allowance, eth] = await Promise.all([
+      pub.readContract({ address: imd, abi: erc20Abi, functionName: "balanceOf", args: [acct.address] }),
+      pub.readContract({ address: imd, abi: erc20Abi, functionName: "allowance", args: [acct.address, PERMIT2] }),
+      pub.getBalance({ address: acct.address }),
+    ]);
+    console.log(`\n  Wallet ${acct.address}: ${Number(bal) / 1e18} IMD, ${Number(eth) / 1e18} ETH on Ethereum`);
+    if (bal < price) die(`the wallet needs at least ${Number(price) / 1e18} IMD on Ethereum`);
+
+    const go = await ask(`\nOpen the ${label} order and pay ${Number(price) / 1e18} IMD? Type "yes": `);
+    if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
+
+    if (allowance < price) {
+      console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)…");
+      const wallet = createWalletClient({ chain: mainnet, transport: http(rpc), account: acct });
+      const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [PERMIT2, 2n ** 256n - 1n] });
+      await pub.waitForTransactionReceipt({ hash });
+      console.log(`  Approved: ${hash}`);
+    }
+  }
+
   const token = randomBytes(32).toString("hex");
   const requestKey = randomUUID();
   const quote = await api("/requests/quote", { method: "POST", token, body: { requestKey, action, input } });
@@ -229,32 +259,9 @@ async function open(label, input, action = "launch.open") {
     return;
   }
 
-  const acct = await account();
-  const chainId = Number(req.network.split(":")[1]);
-  if (chainId !== 1) die(`unexpected payment network ${req.network}`);
-  const rpc = flag("eth-rpc", "https://ethereum-rpc.publicnode.com");
-  const pub = createPublicClient({ chain: mainnet, transport: http(rpc) });
-  const imd = getAddress(req.asset);
-  const [bal, allowance, eth] = await Promise.all([
-    pub.readContract({ address: imd, abi: erc20Abi, functionName: "balanceOf", args: [acct.address] }),
-    pub.readContract({ address: imd, abi: erc20Abi, functionName: "allowance", args: [acct.address, PERMIT2] }),
-    pub.getBalance({ address: acct.address }),
-  ]);
-  console.log(`\n  Wallet ${acct.address}: ${Number(bal) / 1e18} IMD, ${Number(eth) / 1e18} ETH on Ethereum`);
-  if (bal < price) die(`the wallet needs at least ${Number(price) / 1e18} IMD on Ethereum`);
+  if (Number(req.network.split(":")[1]) !== 1) die(`unexpected payment network ${req.network}`);
 
-  const go = await ask(`\nOpen the ${label} order and pay ${Number(price) / 1e18} IMD? Type "yes": `);
-  if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
-
-  if (allowance < price) {
-    console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)…");
-    const wallet = createWalletClient({ chain: mainnet, transport: http(rpc), account: acct });
-    const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [PERMIT2, 2n ** 256n - 1n] });
-    await pub.waitForTransactionReceipt({ hash });
-    console.log(`  Approved: ${hash}`);
-  }
-
-  // The challenge may have aged while approving; ask for a fresh one against the same order.
+  // Sign straight away against a fresh challenge, so the signature's window starts now.
   const fresh = (await api(url, { method: "POST", token })).json;
   const accepted = fresh.accepts[0];
   // x402 refuses non-default assets unless allowed: allow IMD on Ethereum only, capped at the quoted price.
