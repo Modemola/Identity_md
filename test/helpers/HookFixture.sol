@@ -36,6 +36,8 @@ abstract contract HookFixture is Test {
     uint256 internal constant OPEN = 10_000;
     bytes32 internal constant SWAP_EVENT =
         keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+    /// @dev `openedAt` before the swap under check (storage keeps `_checkedSwap` within stack limits).
+    uint256 private _openedBefore;
 
     function _imdFirst() internal pure virtual returns (bool) {
         return true;
@@ -89,6 +91,19 @@ abstract contract HookFixture is Test {
         kept.approve(address(router), type(uint256).max);
     }
 
+    /// @dev ceil(gross * rate / 10_000): the fee the hook owes on a gross IMD amount.
+    function _ceilFee(uint256 gross, uint256 rate) internal pure returns (uint256) {
+        return (gross * rate + 9_999) / 10_000;
+    }
+
+    /// @dev Opens the window at OPEN with the first fee-bearing swap, as the launch's first trade does.
+    function _open() internal returns (uint256 charged) {
+        vm.warp(OPEN);
+        assertEq(hook.openedAt(), 0, "clock not started");
+        charged = _checkedSwap(true, true, 1e18, false);
+        assertEq(hook.openedAt(), OPEN, "clock starts at the first swap");
+    }
+
     function _params(bool buy, bool exactIn, uint256 amount, bool limited)
         internal
         view
@@ -113,6 +128,7 @@ abstract contract HookFixture is Test {
         uint256 beforePending = hook.pending();
         uint256 beforeIMD = imd.balanceOf(address(this));
         uint256 beforeKept = kept.balanceOf(address(this));
+        _openedBefore = hook.openedAt();
         vm.recordLogs();
         BalanceDelta result = router.swap(key, p);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -126,11 +142,14 @@ abstract contract HookFixture is Test {
         assertEq(netKept, rawKept, "KEPT is never charged");
         assertEq(netIMD, rawIMD - int256(charged), "only the IMD delta changes");
         uint256 gross = buy ? uint256(-netIMD) : uint256(rawIMD);
-        assertEq(charged, gross * hook.feeNow() / 10_000, "exact scheduled fee on actual gross IMD");
+        assertEq(charged, _ceilFee(gross, hook.feeNow()), "exact scheduled fee on actual gross IMD");
+        assertLe(charged, gross, "fee never exceeds the IMD leg");
+        if (gross != 0) assertGt(charged, 0, "any IMD leg pays at least one wei");
         assertEq(hook.pending(), beforePending + charged, "claim conservation");
         assertEq(int256(imd.balanceOf(address(this))) - int256(beforeIMD), netIMD);
         assertEq(int256(kept.balanceOf(address(this))) - int256(beforeKept), netKept);
-        assertLe(charged, gross * hook.OPENING_FEE() / 10_000);
+        assertLe(charged, _ceilFee(gross, hook.OPENING_FEE()));
+        _assertClock(rawIMD);
         if (exactIn) assertLe(uint256(-(buy ? netIMD : netKept)), amount);
         else assertLe(uint256(buy ? netKept : netIMD), amount);
         if (!limited && amount <= 1e22) {
@@ -139,6 +158,15 @@ abstract contract HookFixture is Test {
         }
         (,,, uint24 lp) = manager.getSlot0(key.toId());
         assertEq(lp, 12500, "static LP fee unchanged");
+    }
+
+    /// @dev Only a swap the pool filled (nonzero IMD in the manager's Swap event) starts the clock.
+    function _assertClock(int256 rawIMD) private view {
+        if (rawIMD != 0) {
+            assertGt(hook.openedAt(), 0, "a swap that moves IMD through the pool starts the clock");
+        } else {
+            assertEq(hook.openedAt(), _openedBefore, "a swap the pool fills nothing of never starts it");
+        }
     }
 
     function _rawSwap(Vm.Log[] memory logs) internal view returns (int128 a, int128 b) {
