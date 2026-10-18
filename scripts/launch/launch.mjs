@@ -400,9 +400,11 @@ async function openOnchain(label, input, action = "launch.open") {
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(new URL(`${label}.json`, STATE_DIR), JSON.stringify({ label, onchain: true, chainId: 1, txHash: hash, input, createdAt: new Date().toISOString() }, null, 2));
   console.log(`  Sent: https://etherscan.io/tx/${hash} (saved to .orders/${label}.json)`);
-  const receipt = await pub.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") die(`the request transaction reverted: https://etherscan.io/tx/${hash}`);
-  console.log("  Confirmed. IMD picks it up after a few blocks.");
+  // Ethereum can take minutes to include a transaction; a slow block is not a failure, so wait long
+  // and, if even that runs out, keep following IMD, which sees the request once it lands.
+  const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 900_000 }).catch(() => null);
+  if (receipt && receipt.status !== "success") die(`the request transaction reverted: https://etherscan.io/tx/${hash}`);
+  console.log(receipt ? "  Confirmed. IMD picks it up after a few blocks." : "  Still waiting for a block; following IMD anyway.");
   await followOnchain(label, 1, hash);
 }
 
