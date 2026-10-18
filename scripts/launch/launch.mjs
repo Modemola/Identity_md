@@ -269,7 +269,14 @@ async function open(label, input, action = "launch.open") {
     schemes: [{ network: accepted.network, client: new ExactEvmScheme(acct) }],
     spendControls: { allowedAssets: [{ network: accepted.network, asset: accepted.asset, maxAmountPerPayment: price.toString() }] },
   });
-  const { extensions, ...generated } = await client.createPaymentPayload({ x402Version: 2, resource: fresh.resource, accepts: [accepted] });
+  // IMD accepts a Permit2 deadline only up to maxTimeoutSeconds after the quote was issued, while
+  // the stock client counts from "now". Sign with a window that ends 15s inside IMD's limit, worked
+  // out from the quote itself, so it does not depend on this machine's clock or how long we took.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const window = fresh.quote.issuedAt + accepted.maxTimeoutSeconds - 15 - nowSec;
+  if (window < 60) die("the quote is too old to pay safely; run the command again for a fresh one");
+  const signedReq = { ...accepted, maxTimeoutSeconds: Math.min(accepted.maxTimeoutSeconds, window) };
+  const { extensions, ...generated } = await client.createPaymentPayload({ x402Version: 2, resource: fresh.resource, accepts: [signedReq] });
   const payment = JSON.parse(JSON.stringify({ ...generated, accepted }));
   const q = fresh.quote;
   const quoteSignature = await acct.signTypedData({
