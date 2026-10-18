@@ -13,7 +13,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { createPublicClient, createWalletClient, http, erc20Abi, sha256, stringToBytes, getAddress } from "viem";
+import { createPublicClient, createWalletClient, http, erc20Abi, sha256, stringToBytes, stringToHex, getAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { x402Client } from "@x402/core/client";
@@ -42,14 +42,16 @@ const flag = (name, fallback) => {
   return i >= 0 ? argv[i + 1] : fallback;
 };
 const dryRun = argv.includes("--dry-run");
+// onchain (IMD's Intake contract) unless --pay api asks for the x402 route
+const pay = () => (flag("pay", "onchain") === "api" ? open : openOnchain);
 const addr = (name) => {
   const v = flag(name);
-  if (!v || !/^0x[0-9a-fA-F]{40}$/.test(v)) die(`--${name} 0x… is required`);
+  if (!v || !/^0x[0-9a-fA-F]{40}$/.test(v)) die(`--${name} 0xâ€¦ is required`);
   return getAddress(v).toLowerCase();
 };
 
 function die(msg) {
-  console.error(`\n✗ ${msg}\n`);
+  console.error(`\nâœ— ${msg}\n`);
   process.exit(1);
 }
 
@@ -191,12 +193,12 @@ const canon = (v) =>
 // ------------------------------------------------------------------ flow
 
 async function open(label, input, action = "launch.open") {
-  console.log(`\n▸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}…`);
+  console.log(`\nâ–¸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}â€¦`);
   const check = await api("/requests/check", { method: "POST", body: { action, input } });
   if (check.status !== 200) die(`check failed (${check.status}): ${JSON.stringify(check.json)}`);
   if (check.json.blockers?.length) die(`the check found blockers:\n${JSON.stringify(check.json.blockers, null, 2)}`);
   console.log("  The swarm will:");
-  for (const step of check.json.plan || []) console.log(`   · ${step.title}`);
+  for (const step of check.json.plan || []) console.log(`   Â· ${step.title}`);
   for (const s of check.json.suggestions || []) console.log(`  suggestion: ${JSON.stringify(s)}`);
 
   const caps = (await api("/requests/capabilities")).json;
@@ -226,7 +228,7 @@ async function open(label, input, action = "launch.open") {
     if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
 
     if (allowance < price) {
-      console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)…");
+      console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)â€¦");
       const wallet = createWalletClient({ chain: mainnet, transport: http(rpc), account: acct });
       const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [PERMIT2, 2n ** 256n - 1n] });
       await pub.waitForTransactionReceipt({ hash });
@@ -255,7 +257,7 @@ async function open(label, input, action = "launch.open") {
   }
 
   if (dryRun) {
-    console.log("\n✓ Dry run complete: import, check, quote and challenge all succeeded. Nothing was signed or paid.\n");
+    console.log("\nâœ“ Dry run complete: import, check, quote and challenge all succeeded. Nothing was signed or paid.\n");
     return;
   }
 
@@ -310,7 +312,7 @@ async function open(label, input, action = "launch.open") {
     },
   });
 
-  console.log("  Submitting payment…");
+  console.log("  Submitting paymentâ€¦");
   const submit = await api(url, {
     method: "POST",
     token,
@@ -321,14 +323,117 @@ async function open(label, input, action = "launch.open") {
   await follow(label, order.id, token);
 }
 
+// ------------------------------------------------------------------ onchain payment (the default)
+//
+// IMD's Intake contract sells the same actions for the same 0.5 IMD, pulled in the same call as the
+// request (https://imd.fun/docs, "Onchain intake"). There is no short-lived payment signature, so
+// unlike the x402 path nothing can expire between quoting and settling. One ERC-20 approval of the
+// Intake, then one request() carrying the launch body as UTF-8 JSON.
+
+const INTAKE_ABI = [
+  {
+    type: "function",
+    name: "request",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "action", type: "bytes32" },
+      { name: "body", type: "bytes" },
+      { name: "callback", type: "tuple", components: [{ name: "target", type: "address" }, { name: "selector", type: "bytes4" }] },
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "requestId", type: "bytes32" }],
+  },
+];
+
+async function openOnchain(label, input, action = "launch.open") {
+  console.log(`\nâ–¸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}â€¦`);
+  const check = await api("/requests/check", { method: "POST", body: { action, input } });
+  if (check.status !== 200) die(`check failed (${check.status}): ${JSON.stringify(check.json)}`);
+  // a refused body is a spent payment onchain, so never send one the free check flags
+  if (check.json.blockers?.length) die(`the check found blockers:\n${JSON.stringify(check.json.blockers, null, 2)}`);
+  console.log("  The swarm will:");
+  for (const step of check.json.plan || []) console.log(`   Â· ${step.title}`);
+
+  const caps = (await api("/requests/capabilities")).json;
+  const chain = caps.onchain?.chains?.find((c) => c.chainId === 1);
+  const sold = chain?.actions?.find((a) => a.action === action);
+  if (!chain || !sold) die(`the Ethereum intake does not sell ${action} right now`);
+  const price = BigInt(sold.amount);
+  const intake = getAddress(chain.intake);
+  const imd = getAddress(chain.asset);
+  const body = stringToHex(JSON.stringify(input));
+  console.log(`  Price: ${Number(price) / 1e18} IMD, paid onchain to IMD's Intake ${intake} on Ethereum`);
+  console.log(`  Action ${sold.action}@${sold.version}, body ${(body.length - 2) / 2} bytes`);
+  if (dryRun) {
+    console.log("\nâœ“ Dry run complete: import, check and the intake's price all look right. Nothing was signed or paid.\n");
+    return;
+  }
+
+  const acct = await account();
+  const rpc = flag("eth-rpc", "https://ethereum-rpc.publicnode.com");
+  const pub = createPublicClient({ chain: mainnet, transport: http(rpc) });
+  const wallet = createWalletClient({ chain: mainnet, transport: http(rpc), account: acct });
+  const [bal, allowance, eth] = await Promise.all([
+    pub.readContract({ address: imd, abi: erc20Abi, functionName: "balanceOf", args: [acct.address] }),
+    pub.readContract({ address: imd, abi: erc20Abi, functionName: "allowance", args: [acct.address, intake] }),
+    pub.getBalance({ address: acct.address }),
+  ]);
+  console.log(`\n  Wallet ${acct.address}: ${Number(bal) / 1e18} IMD, ${Number(eth) / 1e18} ETH on Ethereum`);
+  if (bal < price) die(`the wallet needs at least ${Number(price) / 1e18} IMD on Ethereum`);
+
+  const go = await ask(`\nPay ${Number(price) / 1e18} IMD onchain and open the ${label} ${action === "job.open" ? "job" : "launch"}? Type "yes": `);
+  if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
+
+  if (allowance < price) {
+    console.log(`  Approving the Intake to take ${Number(price) / 1e18} IMDâ€¦`);
+    const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [intake, price] });
+    await pub.waitForTransactionReceipt({ hash });
+    console.log(`  Approved: https://etherscan.io/tx/${hash}`);
+  }
+
+  const args = [sold.actionId, body, { target: "0x0000000000000000000000000000000000000000", selector: "0x00000000" }, imd, price];
+  // simulate first: a revert (price, action, allowance) shows its reason and costs nothing
+  const { request } = await pub.simulateContract({ address: intake, abi: INTAKE_ABI, functionName: "request", args, account: acct });
+  console.log("  Sending the requestâ€¦");
+  const hash = await wallet.writeContract(request);
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(new URL(`${label}.json`, STATE_DIR), JSON.stringify({ label, onchain: true, chainId: 1, txHash: hash, input, createdAt: new Date().toISOString() }, null, 2));
+  console.log(`  Sent: https://etherscan.io/tx/${hash} (saved to .orders/${label}.json)`);
+  const receipt = await pub.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") die(`the request transaction reverted: https://etherscan.io/tx/${hash}`);
+  console.log("  Confirmed. IMD picks it up after a few blocks.");
+  await followOnchain(label, 1, hash);
+}
+
+async function followOnchain(label, chainId, hash) {
+  console.log(`  Following ${hash}â€¦`);
+  for (let i = 0; i < 240; i++) {
+    const { status, json } = await api(`/intake/${chainId}/${hash}`);
+    const e = status === 200 ? json.entries?.[0] : null;
+    process.stdout.write(`\r  state: ${e ? e.state : "waiting for IMD to see the transaction"}            `);
+    if (e?.admission?.result) {
+      const r = e.admission.result;
+      console.log(`\n\nâœ“ ${label} admitted.`);
+      if (r.jobId) console.log(`  Job: https://explorer.imd.fun/jobs/${r.jobId}`);
+      if (r.statusUrl) console.log(`  Status: ${API}${r.statusUrl}`);
+      console.log(`  Paste this whole output to continue.`);
+      return;
+    }
+    if (e && ["refused", "failed"].includes(e.state)) die(`IMD ${e.state} the request: ${JSON.stringify(e)}`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  console.log(`\n  Still pending; run \`node launch.mjs status ${label}\` later.`);
+}
+
 async function follow(label, orderId, token) {
-  console.log(`  Following order ${orderId}…`);
+  console.log(`  Following order ${orderId}â€¦`);
   for (let i = 0; i < 120; i++) {
     const { json } = await api(`/requests/${orderId}`, { token });
     process.stdout.write(`\r  status: ${json.status}            `);
     if (json.status === "admitted") {
       const r = json.admission?.result || {};
-      console.log(`\n\n✓ ${label} admitted.`);
+      console.log(`\n\nâœ“ ${label} admitted.`);
       console.log(`  Job: https://explorer.imd.fun/jobs/${r.jobId}`);
       console.log(`  Status: ${API}${r.statusUrl}`);
       return;
@@ -344,25 +449,26 @@ async function follow(label, orderId, token) {
 if (cmd === "vault") {
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
-  await open("vault", vaultInput(source, addr("owner")));
+  await pay()("vault", vaultInput(source, addr("owner")));
 } else if (cmd === "token") {
   const poolBps = Number(flag("pool-bps", "6000"));
-  if (!Number.isInteger(poolBps) || poolBps < 1000 || poolBps > 9000) die("--pool-bps must be 1000–9000");
+  if (!Number.isInteger(poolBps) || poolBps < 1000 || poolBps > 9000) die("--pool-bps must be 1000â€“9000");
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
-  await open("token", tokenInput(source, addr("vault"), addr("remainder"), poolBps));
+  await pay()("token", tokenInput(source, addr("vault"), addr("remainder"), poolBps));
 } else if (cmd === "site") {
   const name = flag("name", "kept");
   if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(name)) die("--name must be a lowercase site label");
   const source = await importRepo("site");
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit} (static export in ${source.site.exportDir}/)`);
-  await open("site", siteInput(source, name), "job.open");
+  await pay()("site", siteInput(source, name), "job.open");
 } else if (cmd === "status") {
   const label = argv[1];
   const path = new URL(`${label}.json`, STATE_DIR);
-  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|token>");
+  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|token|site>");
   const s = JSON.parse(readFileSync(path, "utf8"));
-  await follow(label, s.orderId, s.token);
+  if (s.onchain) await followOnchain(label, s.chainId, s.txHash);
+  else await follow(label, s.orderId, s.token);
 } else {
   console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1, 11).join("\n").replace(/^\/\/ ?/gm, ""));
 }
