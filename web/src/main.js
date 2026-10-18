@@ -48,7 +48,7 @@ function state(m, grace) {
   if (m.outcome === 2) return { cls: "broken", chip: "Broken · burned" };
   if (m.inFlight !== ZERO32 && t < m.askedAt + TIMEOUT) return { cls: "checking", chip: "Swarm checking" };
   if (t < m.deadline) return { cls: "open", chip: `Due in ${span(m.deadline - t)}` };
-  if (t <= m.deadline + grace) return { cls: "open", chip: `Proof window · ${span(m.deadline + grace - t)} left` };
+  if (t <= m.deadline + grace) return { cls: "open", chip: `${m.kind === 0 ? "Proof" : "Delivery"} window · ${span(m.deadline + grace - t)} left` };
   return { cls: "broken", chip: "Unproven · burn pending" };
 }
 
@@ -546,7 +546,7 @@ function pledgeContent(p, c) {
   const keptAmt = p.milestones.filter((m) => m.outcome === 1).reduce((x, m) => x + m.amount, 0n);
   const brokenAmt = p.milestones.filter((m) => m.outcome === 2).reduce((x, m) => x + m.amount, 0n);
   const acct = currentAccount();
-  const isTeam = acct && [p.creator, p.beneficiary].some((a) => a.toLowerCase() === acct.toLowerCase());
+  const isBeneficiary = acct && p.beneficiary.toLowerCase() === acct.toLowerCase();
   const historyEls = new Map(p.milestones.map((m) => [m.index, h("div", { class: "verdicts" })]));
   historyFill = (hist) => {
     // no isConnected check: inside a view transition the rows are built before they are attached
@@ -582,9 +582,9 @@ function pledgeContent(p, c) {
       ),
       80,
     ),
-    h("div", { class: "muted fine" }, `Panel of ${p.panelSize}, ${p.quorum} must agree · ${c.maxAttempts} checks per milestone · ${span(c.grace)} proof window after each deadline`),
+    h("div", { class: "muted fine" }, `Panel of ${p.panelSize}, ${p.quorum} must agree · ${c.maxAttempts} checks per milestone · ${span(c.grace)} delivery grace; page and chain verdicts must be signed by the deadline`),
     sec("01", "Milestones", `${p.count - p.open}/${p.count} settled`),
-    h("div", { class: "rows" }, p.milestones.map((m) => milestoneRow(p, m, c, total, isTeam, historyEls.get(m.index)))),
+    h("div", { class: "rows" }, p.milestones.map((m) => milestoneRow(p, m, c, total, isBeneficiary, historyEls.get(m.index)))),
     budgetBox(p),
   );
 }
@@ -676,7 +676,7 @@ function specLine(m) {
   }
 }
 
-function milestoneRow(p, m, c, total, isTeam, historyEl) {
+function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
   const st = state(m, c.grace);
   const dec = p.tokenInfo.decimals;
   const pct = total ? Number((m.amount * 10000n) / total) / 100 : 0;
@@ -685,7 +685,7 @@ function milestoneRow(p, m, c, total, isTeam, historyEl) {
   const keys = [`pledge:${p.id}`, `history:${p.id}`];
   const actions = [];
   if (m.outcome === 0 && st.cls !== "checking" && m.gate.open) {
-    if (isTeam && m.gate.funded) {
+    if (isBeneficiary && m.gate.funded) {
       actions.push(
         magnetic(
           h(
@@ -693,19 +693,19 @@ function milestoneRow(p, m, c, total, isTeam, historyEl) {
             {
               class: "btn primary small",
               onclick: async (e) => {
-                if (await onchain(e.currentTarget, "Ask the swarm", [{ label: `Send milestone ${m.index + 1} to the IMD oracle · 0.5 IMD`, run: (ph) => send(call("check"), ph) }], keys))
+                if (await onchain(e.currentTarget, "Ask the swarm", [{ label: `Send milestone ${m.index + 1} to the IMD oracle · at most 0.5 IMD`, run: (ph) => send(call("check"), ph) }], keys))
                   toast("The swarm is on it. The verdict lands here on its own, usually within minutes.", "ok");
               },
             },
             icon("pulse", 15),
-            "Ask the swarm · 0.5 IMD",
+            "Ask the swarm · up to 0.5 IMD",
           ),
         ),
       );
-    } else if (isTeam) {
-      actions.push(h("span", { class: "note" }, "Top up the check budget below to ask the swarm."));
+    } else if (isBeneficiary) {
+      actions.push(h("span", { class: "note" }, "A check needs enough budget and an Intake price at or below 0.5 IMD."));
     } else {
-      actions.push(h("span", { class: "note" }, `Only the team can ask the swarm to confirm this. Not proven by ${when(m.deadline + c.grace)}: it burns.`));
+      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this. Not proven by ${when(m.deadline + c.grace)}: it burns.`));
     }
   }
   const checkPending = m.inFlight !== ZERO32 && now() < m.askedAt + TIMEOUT; // the vault refuses to settle then
@@ -865,7 +865,7 @@ function field(label, input, hint) {
 function viewNew({ quiet }) {
   const st = { token: null, milestones: [] };
   const tokenIn = h("input", { placeholder: "0x… the token you are locking", value: config.token || "", spellcheck: "false" });
-  const tokenNote = h("div", { class: "hint" }, "The ERC-20 the team is putting on the line. Taxed tokens are refused.");
+  const tokenNote = h("div", { class: "hint" }, "Use a plain ERC-20: no transfer tax, rebasing, balance decay or confiscation. Unsupported tokens can strand tranches and IMD budgets.");
   const beneficiaryIn = h("input", { placeholder: "0x… receives kept tranches (defaults to you)", spellcheck: "false" });
   const nameIn = h("input", { placeholder: "e.g. KEPT roadmap Q4", maxlength: "64" });
   const budgetIn = h("input", { type: "number", min: "0", step: "0.5", value: "1" });
@@ -889,7 +889,7 @@ function viewNew({ quiet }) {
     st.token = null;
     tokenNote.className = "hint";
     if (!isAddress(v)) {
-      tokenNote.textContent = v ? "Not an address yet." : "The ERC-20 the team is putting on the line. Taxed tokens are refused.";
+      tokenNote.textContent = v ? "Not an address yet." : "Use a plain ERC-20: no transfer tax, rebasing, balance decay or confiscation. Unsupported tokens can strand tranches and IMD budgets.";
       return refresh();
     }
     tokenNote.textContent = "Reading the token…";
@@ -1020,7 +1020,7 @@ function viewNew({ quiet }) {
             "div",
             { class: "compose-main" },
             sec("01", "Token"),
-            h("div", { class: "form" }, field("Token to lock", tokenIn), tokenNote, h("div", { class: "row2" }, field("Pledge name", nameIn, "Shown on the pledge page. Up to 64 characters."), field("Beneficiary", beneficiaryIn, "Receives each kept tranche."))),
+            h("div", { class: "form" }, field("Token to lock", tokenIn, "Plain ERC-20 only: no rebasing, balance decay, confiscation or transfer restrictions. These can strand tokens and IMD budgets; metadata does not verify compatibility."), tokenNote, h("div", { class: "row2" }, field("Pledge name", nameIn, "Shown on the pledge page. Up to 64 characters."), field("Beneficiary", beneficiaryIn, "Receives each kept tranche and controls the three check attempts."))),
             sec("02", "Milestones", "up to 8"),
             list,
             h("div", { style: { marginTop: "14px" } }, h("button", { class: "btn small add-ms", onclick: addMilestone }, "+ Add milestone")),
@@ -1335,9 +1335,9 @@ function viewHow({ quiet }) {
             "div",
             { class: "facts" },
             fact("release", "GitHub release", "A public repository has a published release with an exact tag, by the deadline."),
-            fact("page", "Page contains", "A web page responds and shows an exact piece of text."),
-            fact("cube", "Contract deployed", "An address has code on Ethereum, Robinhood Chain, Base, Arbitrum or BNB Chain."),
-            fact("gauge", "Value at least", "A contract's view function returns at least a number: supply burned, liquidity, holders."),
+            fact("page", "Page contains", "A web page responds and shows exact text in a snapshot signed by the deadline. Later changes do not undo a kept verdict."),
+            fact("cube", "Contract deployed", "An address has code at the checked block, with the verdict signed by the deadline."),
+            fact("gauge", "Value at least", "A view function reaches a threshold at the checked block, signed by the deadline. This does not prove the value persists."),
           ),
         ),
         sec("04", "Why you can trust it"),
@@ -1347,7 +1347,7 @@ function viewHow({ quiet }) {
             { class: "facts" },
             fact("lock", "Nobody can take the tokens", "No withdrawal, pause or upgrade. Locked tokens move only on a verdict or a missed deadline."),
             fact("seal", "Verdicts are signed", "The vault checks the oracle's EIP-712 signature, the panel size and the quorum before it accepts an answer."),
-            fact("pulse", "Changes wait seven days", "The only admin setting is the oracle address, and every change sits in public for seven days first."),
+            fact("pulse", "Changes wait seven days", "Intake, action and signer changes wait seven days. The owner can change future panels and ownership; existing pledges cannot exit during the notice."),
             fact("fund", "Paid in IMD, to the swarm", "Each check is 0.5 IMD to the agents who answer it. Pool fees refund the checks of teams that keep their word."),
           ),
         ),

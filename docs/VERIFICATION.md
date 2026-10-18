@@ -1,56 +1,132 @@
 # Verification record
 
-## Offline suite
+## Current adaptation — 2026-10-18
+
+Launch scope: only `src/KeptVault.sol:KeptVault`, chain 4663, with the seven constructor
+arguments in [README.md](../README.md). All commands below simulate or read; nothing was signed
+or broadcast. The local factory probe and fork fixtures are tests, not deployment instructions.
+
+### Build and offline suite
 
 ```sh
-forge test
+forge build --offline
+FOUNDRY_FUZZ_SEED=0xbff2f5cdfbaaad68fc59cf2f26a34756028433dee47aad2e0b9e9d93b549cf38 forge test --offline
 ```
 
-83 tests pass offline (the Robinhood fork suite skips unless run on a fork): vault lifecycle and every callback guard, the
-protocol's EIP-712 conformance vector, a production oracle signature, hook fee accounting on a
-local v4 PoolManager in both currency orders, and stateful invariants (128 runs × 128 calls each).
+Using the unchanged project configuration (Solidity 0.8.26, Cancun, via IR, optimizer 200,
+`bytecode_hash = "none"`): **build passes; 98 tests pass, zero fail**. The opt-in Robinhood
+fork suite reports one setup skip offline. No environment variable, network call, scratch file
+or file under `.imd/reads` is needed by the committed offline suite. The seed above is supplied
+for reproducibility, not required for the tests to run.
 
-## Production signature
+Coverage includes the vault lifecycle, the original callback/signature guards and conformance
+vector, the production oracle signature, hook accounting on a local PoolManager in both currency
+orders, 256 cases per fuzz test, and the configured 128 invariant runs × 128 calls. The handler's
+smoke test still reaches both a payout and a burn after the beneficiary permission change.
 
-`test/RealAttestation.t.sol` recovers the live oracle signer
+New tests cover the reproduced audit cases, deadline and signature-time boundaries for all three
+snapshot templates, retained GitHub grace, beneficiary-only attempts, default/explicit price caps,
+repricing through the timelock, atomic rollback and rebates. They retain a characterization of
+the expressly unsupported shrinking-token case; its passing test is **not** a claim of solvency
+support for such tokens. See [ADAPTATION.md](../ADAPTATION.md) for every disposition.
+
+`KeptVaultLaunchTest` deploys the exact constructor inputs via a local CREATE2 probe on an empty
+chain, without initialization. It verifies that the specified owner, not the factory or origin,
+controls the vault, rejects constructor ETH, and scans the runtime while skipping PUSH data.
+No DELEGATECALL, CALLCODE, SELFDESTRUCT, CREATE or CREATE2 occurs as a runtime opcode.
+
+| Built vault measurement | Bytes |
+| --- | ---: |
+| Creation bytecode | 23,325 |
+| Init code including seven constructor words | 23,549 |
+| Runtime | 21,509 |
+| EIP-170 runtime limit | 24,576 |
+
+No external library links remain. The constructor ABI is nonpayable and unchanged.
+Build lint emits advisory warnings; compilation and tests succeed. Slither and Mythril were
+not run. The protected floor itself needs deployment-step inputs; the committed local tests
+rehearse its relevant constructor/ownership/size/opcode checks without inventing those inputs.
+
+### Robinhood fork rehearsal
+
+```sh
+forge test --match-contract RobinhoodForkTest --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 91883318 -vv
+```
+
+Also run with the fuzz seed above: **2 passed, 0 failed, 0 skipped** on 2026-10-18.
+RPC chain ID was `4663`. The pinned block is `91,883,318`, hash
+`0x7db98f2508908b8cd3bf073ff0eeea6f1a2e383b2c28577809937c5b11b28c50`,
+timestamp `2026-10-18T15:41:17Z`.
+
+Dependencies read at that block:
+
+| Dependency | Address | Runtime bytes | Read/behaviour checked |
+| --- | --- | ---: | --- |
+| Intake v1 | `0x1397434cd35e8a9c8ac312a61d3a285eb31dea56` | 6,568 | `priceOf(action, IMD) = 500000000000000000`; real request and event |
+| IMD | `0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127` | 15,448 | `symbol() = "IMD"`, `decimals() = 18`; transfers and allowances |
+| PoolManager | `0x8366a39cc670b4001a1121b8f6a443a643e40951` | 24,009 | `protocolFeeController() = 0x6d0009504D129CF5002Dba61D9Ae8575AA79314c`; existing swap/sweep rehearsal |
+
+Observed runtime Keccak-256 hashes:
+
+- Intake: `0xf82308e5e8a54560a70885f3eb16b6692c4b2f6442ed4c51c4b9a9df3d1114cc`
+- IMD: `0xa9a0e893f7d8327fe96f823291ad9199af5456c2f9fd80bbdeff29d1e91a93e2`
+- PoolManager: `0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626`
+
+`test_checkBuysARealOracleRequest` deploys a local vault with the launch owner and protocol inputs,
+creates a synthetic pledge, and pays exactly 0.5 IMD through the live Intake bytecode. It checks
+zero leftover allowance and the emitted request ID, requester, action, complete body, callback
+target/selector, asset and amount. Gas reported by Forge: 1,185,678.
+
+`test_hookTradesAndFundsTheRefereeOnTheLivePoolManager` preserves the project's existing
+integration rehearsal: in the local fork only, a test token/hook/pool is created, buy/sell swaps
+run on the live PoolManager bytecode, and sweeping fees funds the vault by exactly that amount.
+Gas reported: 2,139,438. This test does not put a token, hook, pool or initialization call in the
+contracts-only launch.
+
+Funding is synthetic (`deal`); no oracle request was submitted to the live network. A fork proves
+contract-call compatibility, not control-plane delivery or future RPC availability. The public
+RPC may prune this block; future reruns may need an archive endpoint or a newly recorded block.
+
+### Oracle question preflight
+
+On 2026-10-18, extracted the four representative bodies directly from the compiled vault's
+`previewQuestion`, using the existing fixture's release/page inputs, the pinned live Intake as
+the deployed-contract target, and live IMD `totalSupply()` with threshold 1 for the value sample.
+All four free screenings returned **HTTP 200, `judged: true`, `blockers: []`**. ContractDeployed
+also received a nonblocking wording suggestion; no question template was changed for it.
+The exact bodies, projected requests and full responses are in
+[ORACLE_PREFLIGHT.json](ORACLE_PREFLIGHT.json).
+
+The free endpoint accepts a shorter input: `question`, `panelSize`, `evidence`, `chainId` and
+`answerType`. Posting an entire onchain body first returned HTTP 400 for the extra
+`v/window/quorum/validForSeconds` keys. Retrying with that documented projection succeeded.
+The service's drafted response uses a 24-hour default window; the actual vault still sends its
+unchanged one-hour window. This checks the question wording, not exact-byte acceptance of every
+onchain field, nor the truth of the requested milestone. No paid quote, panel or transaction was
+opened. See the [protocol's oracle-body documentation](https://imd.fun/docs/#oracle-body).
+
+### Interface checks
+
+`node --check web/src/main.js` passes. A scratch Node check executes the actual milestone-state
+function and beneficiary gate with distinct creator/beneficiary accounts, tests proof versus
+delivery labels, and compares the regenerated ABI with the compiled vault (including both
+overloads and `PriceAboveLimit`). All pass. No website dependencies were installed or changed;
+the old `dist/` bundle is outside this contracts-only launch and was not rebuilt or published.
+
+## Existing production-signature evidence
+
+`test/RealAttestation.t.sol` recovers the pinned oracle signer
 `0x5598aa9146215bc13eb26f2c692ad1461fd32982` from Robinhood request
 `2cbdce1f-1eb9-4a87-ba4c-2ec8ce244392` (attested 2026-10-08T21:41Z) using KEPT's own
-`OracleAttestation.hashStruct`. That request was signed with `agreed` 139 below `quorum` 140,
-settled by the deployer's chain rerun, which is why chain-evidence templates accept
-`agreed < quorum` and panel templates do not.
+`OracleAttestation.hashStruct`. That request has `agreed` 139 below `quorum` 140, settled by a
+chain rerun. This existing behaviour is retained for chain evidence; panel evidence still needs
+quorum agreement. The canonical digest/signature conformance tests also remain unchanged except
+that a full pledge round trip requests from its beneficiary.
 
-## Robinhood fork rehearsal
+## Historical record
 
-```sh
-forge test --match-contract RobinhoodForkTest \
-  --fork-url https://rpc.mainnet.chain.robinhood.com --fork-block-number 84292071
-```
-
-Passed on 2026-10-09 at block 83,978,104 again after the factory-initializer change at block 84,048,406, and after the review fixes at block 84,292,071 (2 passed, 0 failed each time) against the real Intake
-`0x1397…ea56`, IMD `0x5f7b…7127` and Uniswap v4 PoolManager `0x8366…0951`:
-
-- `test_checkBuysARealOracleRequest`: a KEPT check pays exactly the live price (0.5 IMD) to the
-  real Intake, leaves no allowance, and the Intake's `Requested` event carries KEPT's exact body,
-  callback target and selector.
-- `test_hookTradesAndFundsTheRefereeOnTheLivePoolManager`: the hook, at a `0x20cc` address,
-  initializes a KEPT/IMD pool on the live PoolManager, charges its fee on a buy and a sell, and
-  `sweep()` deposits exactly the collected IMD into the Referee Fund.
-
-Balances are synthetic (`deal`); nothing is broadcast. Public RPCs prune state, so repeat with a
-fresh block number or an archive RPC.
-
-## Oracle body validation
-
-On 2026-10-09 the exact bodies `KeptVault` generates for all four templates passed
-`POST /requests/check` with no blockers and were accepted by an unpaid `POST /requests/quote`.
-
-## Independent review (2026-10-09)
-
-A full review of `src/` raised ten candidates. Fixed: team-only checks (a third party could
-exhaust a pledge's attempts after the deadline), checks verify against the signer recorded at ask
-time (a rotation stranded in-flight checks), budget refunds moved to `withdrawBudget` (a failed
-refund could block the last payout), `checkOpen` reports whether the budget covers a check, zero
-value thresholds refused, unused milestone fields removed, `forceApprove` in the hook sweep.
-Documented, not changed: verdict-to-question binding relies on the Intake (the oracle question hash
-cannot be recomputed onchain), trivially true milestones are visible on the pledge page for buyers
-to judge, and the Intake is asynchronous so same-transaction callbacks do not arise.
+The imported project recorded fork passes on 2026-10-09 at blocks 83,978,104, 84,048,406 and
+84,292,071, and earlier free question checks/unpaid quotes. Those are historical claims, not the
+current rehearsal above. Its earlier review fixes (team-restricted checks, in-flight signer
+snapshots, separate refunds, budget reporting, input validation and hook approvals) remain,
+with checks now further restricted to the beneficiary as the reproduced audit requires.

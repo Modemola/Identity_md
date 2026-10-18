@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -21,6 +22,7 @@ import {TestRouter} from "../helpers/TestRouter.sol";
 /// `forge test --match-contract RobinhoodForkTest --fork-url https://rpc.mainnet.chain.robinhood.com`
 /// Nothing is broadcast; balances are synthetic (`deal`), contracts are the real deployments.
 contract RobinhoodForkTest is Test {
+    address constant OWNER = 0xD3336A7c8a7D8814C437196aBb16c4FE7aA7B016;
     address constant INTAKE = 0x1397434cd35e8a9C8aC312A61D3A285EB31dea56;
     address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
     address constant MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
@@ -38,7 +40,13 @@ contract RobinhoodForkTest is Test {
             vm.skip(true);
             return;
         }
-        vault = new KeptVault(address(this), INTAKE, IMD, ACTION, SIGNER, 9, 7);
+        assertGt(INTAKE.code.length, 0, "live Intake code");
+        assertGt(IMD.code.length, 0, "live IMD code");
+        assertGt(MANAGER.code.length, 0, "live PoolManager code");
+        assertEq(IERC20Metadata(IMD).symbol(), "IMD");
+        assertEq(IERC20Metadata(IMD).decimals(), 18);
+        vault = new KeptVault(OWNER, INTAKE, IMD, ACTION, SIGNER, 9, 7);
+        assertEq(vault.owner(), OWNER);
         kept = new KeptToken();
     }
 
@@ -74,11 +82,14 @@ contract RobinhoodForkTest is Test {
             if (logs[i].emitter != INTAKE || logs[i].topics[0] != REQUESTED) continue;
             assertEq(logs[i].topics[1], rid);
             assertEq(address(uint160(uint256(logs[i].topics[2]))), address(vault));
-            (bytes memory body, address target, bytes4 selector,,) =
+            assertEq(logs[i].topics[3], ACTION);
+            (bytes memory body, address target, bytes4 selector, address asset, uint256 amount) =
                 abi.decode(logs[i].data, (bytes, address, bytes4, address, uint256));
             assertEq(string(body), vault.questionOf(id, 0));
             assertEq(target, address(vault));
             assertEq(selector, vault.onOracleResult.selector);
+            assertEq(asset, IMD);
+            assertEq(amount, 0.5 ether);
             seen = true;
         }
         assertTrue(seen, "Intake emitted Requested for the KEPT check");

@@ -82,6 +82,8 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     uint256 public constant ANSWER_TIMEOUT = 1 days;
     uint256 public constant PROTOCOL_DELAY = 7 days;
     uint32 public constant VALID_FOR = 1 days;
+    /// @notice Ceiling for the two-argument check: 0.5 IMD (18 decimals). Use an explicit cap for repricing.
+    uint256 public constant DEFAULT_MAX_PRICE = 0.5 ether;
     address public constant BURN = 0x000000000000000000000000000000000000dEaD;
 
     /// @notice The IMD token on this chain: pays for checks. Immutable so budgets keep their meaning.
@@ -128,6 +130,7 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     error NotAllowed();
     error AttemptsExhausted();
     error InsufficientBudget(uint256 budget, uint256 price);
+    error PriceAboveLimit(uint256 price, uint256 maxPrice);
     error TransferMismatch();
     error OnlyIntake();
     error UnknownRequest();
@@ -273,11 +276,24 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
 
     // ------------------------------------------------------------------ checks
 
-    /// @notice Buys one oracle check for a milestone, paid from the pledge budget.
-    /// @dev Only the creator or beneficiary may ask: unproven means broken, so a check can only ever
-    /// help the team, and nobody else can spend the pledge's attempts or budget. Open from creation
-    /// (to prove early delivery) until `deadline + GRACE`.
+    /// @notice Buys one oracle check for at most DEFAULT_MAX_PRICE, paid from the pledge budget.
     function check(uint256 pledgeId, uint8 index) external nonReentrant returns (bytes32 requestId) {
+        return _check(pledgeId, index, DEFAULT_MAX_PRICE);
+    }
+
+    /// @notice Buys one oracle check for at most `maxPrice` IMD atomic units.
+    /// @dev Only the beneficiary may spend attempts. Checks open at creation to prove early delivery.
+    /// Snapshot templates close at the deadline; GitHub releases explicitly pin publication time,
+    /// so their checks may still be bought during GRACE.
+    function check(uint256 pledgeId, uint8 index, uint256 maxPrice)
+        external
+        nonReentrant
+        returns (bytes32 requestId)
+    {
+        return _check(pledgeId, index, maxPrice);
+    }
+
+    function _check(uint256 pledgeId, uint8 index, uint256 maxPrice) private returns (bytes32 requestId) {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
         if (m.outcome != Outcome.Open || m.settled) revert NotOpen();
@@ -285,13 +301,14 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
             if (block.timestamp < uint256(m.askedAt) + ANSWER_TIMEOUT) revert CheckInFlight();
             _clear(pledgeId, index, m);
         }
-        if (block.timestamp > uint256(m.deadline) + GRACE) revert CheckWindowClosed();
-        if (msg.sender != p.creator && msg.sender != p.beneficiary) revert NotAllowed();
+        if (block.timestamp > _checkDeadline(m)) revert CheckWindowClosed();
+        if (msg.sender != p.beneficiary) revert NotAllowed();
         if (m.attempts >= MAX_ATTEMPTS) revert AttemptsExhausted();
 
         IIntake target = intake;
         uint256 price = target.priceOf(action, address(imd));
         if (price == 0) revert InvalidConfiguration();
+        if (price > maxPrice) revert PriceAboveLimit(price, maxPrice);
         if (p.budget < price) revert InsufficientBudget(p.budget, price);
         p.budget -= price;
         totalBudgets -= price;
@@ -342,6 +359,11 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
                 || a.quorum > a.panelSize || (!chainEvidence && a.agreed < a.quorum) || a.agreed > a.panelSize
                 || a.issuedAt < m.askedAt || a.expiresAt < a.issuedAt || a.answer.length != 32
         ) revert InvalidAttestation();
+        // These questions describe a current snapshot, not historical completion. A request made
+        // before the deadline must not be rescued by a snapshot signed after it. Delivery may lag.
+        if (m.spec.kind != Questions.Kind.GithubRelease && a.issuedAt > m.deadline) {
+            revert InvalidAttestation();
+        }
         bool kept = decodeBool(a);
         _consume(a.requestId);
 
@@ -499,18 +521,35 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
         return string(Questions.body(spec, m.deadline, panelSize, quorum, VALID_FOR));
     }
 
-    /// @notice Whether the team can call `check` right now, and if the budget covers it.
+    /// @notice Whether the beneficiary can check now, and the quote fits the budget and default cap.
     function checkOpen(uint256 pledgeId, uint8 index) external view returns (bool open, bool funded) {
+        return _checkOpen(pledgeId, index, DEFAULT_MAX_PRICE);
+    }
+
+    /// @notice Check availability with the caller's explicit price ceiling.
+    function checkOpen(uint256 pledgeId, uint8 index, uint256 maxPrice)
+        external
+        view
+        returns (bool open, bool funded)
+    {
+        return _checkOpen(pledgeId, index, maxPrice);
+    }
+
+    function _checkOpen(uint256 pledgeId, uint8 index, uint256 maxPrice)
+        private
+        view
+        returns (bool open, bool funded)
+    {
         Pledge storage p = _pledge(pledgeId);
         Milestone storage m = _milestone(p, pledgeId, index);
         if (m.outcome != Outcome.Open || m.settled || m.attempts >= MAX_ATTEMPTS) return (false, false);
         if (m.inFlight != bytes32(0) && block.timestamp < uint256(m.askedAt) + ANSWER_TIMEOUT) {
             return (false, false);
         }
-        if (block.timestamp > uint256(m.deadline) + GRACE) return (false, false);
+        if (block.timestamp > _checkDeadline(m)) return (false, false);
         open = true;
         uint256 price = intake.priceOf(action, address(imd));
-        funded = price != 0 && p.budget >= price;
+        funded = price != 0 && price <= maxPrice && p.budget >= price;
     }
 
     // ------------------------------------------------------------------ admin
@@ -552,6 +591,10 @@ contract KeptVault is OracleAttestationConsumer, ReentrancyGuard {
     }
 
     // ------------------------------------------------------------------ internals
+
+    function _checkDeadline(Milestone storage m) private view returns (uint256) {
+        return uint256(m.deadline) + (m.spec.kind == Questions.Kind.GithubRelease ? GRACE : 0);
+    }
 
     function _fund(uint256 pledgeId, uint256 amount) private {
         _pullExact(imd, amount);

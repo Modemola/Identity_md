@@ -162,7 +162,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_checkPaysIntakeFromBudget() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         assertTrue(rid != bytes32(0));
         assertEq(imd.balanceOf(treasury), PRICE);
         assertEq(_budget(id), 10 ether - PRICE);
@@ -171,7 +171,7 @@ contract KeptVaultTest is VaultFixture {
         assertEq(string(intake.lastBody()), vault.questionOf(id, 0));
     }
 
-    function test_onlyTeamChecksBeforeDeadline() public {
+    function test_onlyBeneficiaryChecksBeforeDeadline() public {
         uint256 id = _standard();
         vm.prank(stranger);
         vm.expectRevert(KeptVault.NotAllowed.selector);
@@ -179,7 +179,7 @@ contract KeptVaultTest is VaultFixture {
         _check(id, 0, beneficiary);
     }
 
-    function test_onlyTeamChecksEvenAfterDeadline() public {
+    function test_onlyBeneficiaryChecksEvenAfterDeadline() public {
         uint256 id = _standard();
         vm.warp(T0 + 7 days);
         vm.prank(stranger);
@@ -189,48 +189,48 @@ contract KeptVaultTest is VaultFixture {
         vm.warp(T0 + 8 days);
         vault.clearStale(id, 0);
         vm.warp(T0 + 10 days + 1);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         vm.expectRevert(KeptVault.CheckWindowClosed.selector);
         vault.check(id, 0);
     }
 
     function test_oneCheckInFlight() public {
         uint256 id = _standard();
-        _check(id, 0, creator);
-        vm.prank(creator);
+        _check(id, 0, beneficiary);
+        vm.prank(beneficiary);
         vm.expectRevert(KeptVault.CheckInFlight.selector);
         vault.check(id, 0);
     }
 
     function test_staleCheckRetriesAndAttemptsCap() public {
         uint256 id = _standard();
-        _check(id, 0, creator);
+        _check(id, 0, beneficiary);
         vm.expectRevert(KeptVault.TooEarly.selector);
         vault.clearStale(id, 0);
         vm.warp(T0 + 1 days);
-        _check(id, 0, creator); // clears the stale one itself
+        _check(id, 0, beneficiary); // clears the stale one itself
         vm.warp(T0 + 2 days);
-        _check(id, 0, creator);
+        _check(id, 0, beneficiary);
         vm.warp(T0 + 3 days);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         vm.expectRevert(KeptVault.AttemptsExhausted.selector);
         vault.check(id, 0);
     }
 
     function test_checkNeedsBudget() public {
         uint256 id = _create(_one(_release(T0 + 7 days, 1 ether)), 0.4 ether);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         vm.expectRevert(abi.encodeWithSelector(KeptVault.InsufficientBudget.selector, 0.4 ether, PRICE));
         vault.check(id, 0);
         vm.prank(stranger);
         vault.fund(id, 0.1 ether);
-        _check(id, 0, creator);
+        _check(id, 0, beneficiary);
     }
 
     function test_checkRejectsIntakeThatDoesNotPull() public {
         uint256 id = _standard();
         intake.setSkipPull(true);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         vm.expectRevert(KeptVault.TransferMismatch.selector);
         vault.check(id, 0);
     }
@@ -238,9 +238,9 @@ contract KeptVaultTest is VaultFixture {
     function test_checkRejectsRepeatedRequestId() public {
         uint256 id = _create(_one(_release(T0 + 7 days, 1 ether)), 10 ether);
         uint256 id2 = _create(_one(_release(T0 + 7 days, 1 ether)), 10 ether);
-        _check(id, 0, creator);
+        _check(id, 0, beneficiary);
         intake.setRepeatId(true);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         vm.expectRevert(KeptVault.UnknownRequest.selector);
         vault.check(id2, 0);
     }
@@ -249,7 +249,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_keptPaysBeneficiaryAndReturnsBudget() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         uint256 gas = _deliver(id, 0, rid, true);
         assertLt(gas, 120_000, "callback must fit the Intake's 200k gas");
         (KeptVault.Outcome o, bool settled) = _outcome(id, 0);
@@ -270,7 +270,7 @@ contract KeptVaultTest is VaultFixture {
         vm.prank(stranger);
         vault.fundReferee(2 ether);
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         uint256 gas = _deliver(id, 0, rid, true);
         assertLt(gas, 150_000, "heaviest callback path (kept + rebate) must fit the Intake's 200k gas");
         assertEq(vault.refereeFund(), 2 ether - PRICE);
@@ -284,7 +284,7 @@ contract KeptVaultTest is VaultFixture {
         vm.prank(stranger);
         vault.fundReferee(0.1 ether);
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         _deliver(id, 0, rid, true);
         assertEq(vault.refereeFund(), 0.1 ether);
         assertEq(_budget(id), 10 ether - PRICE);
@@ -292,11 +292,11 @@ contract KeptVaultTest is VaultFixture {
 
     function test_falseVerdictKeepsMilestoneOpen() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         _deliver(id, 0, rid, false);
         (KeptVault.Outcome o,) = _outcome(id, 0);
         assertEq(uint8(o), uint8(KeptVault.Outcome.Open));
-        bytes32 again = _check(id, 0, creator);
+        bytes32 again = _check(id, 0, beneficiary);
         _deliver(id, 0, again, true);
         (o,) = _outcome(id, 0);
         assertEq(uint8(o), uint8(KeptVault.Outcome.Kept));
@@ -359,12 +359,12 @@ contract KeptVaultTest is VaultFixture {
         ms[2] = _value(T0 + 6 days, 30 ether, address(team), 1);
         uint256 id = _create(ms, 5 ether);
 
-        bytes32 r0 = _check(id, 0, creator);
+        bytes32 r0 = _check(id, 0, beneficiary);
         _deliver(id, 0, r0, true);
         vault.settle(id, 0);
 
         vm.warp(T0 + 4 days);
-        bytes32 r1 = _check(id, 1, creator);
+        bytes32 r1 = _check(id, 1, beneficiary);
         _deliver(id, 1, r1, false);
 
         vm.warp(T0 + 6 days);
@@ -390,7 +390,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackOnlyFromIntake() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         bytes memory sig = _sign(a, signerKey);
         vm.prank(stranger);
@@ -400,7 +400,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackRejectsUnknownRequest() public {
         uint256 id = _standard();
-        _check(id, 0, creator);
+        _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         bytes memory sig = _sign(a, signerKey);
         vm.prank(address(intake));
@@ -410,7 +410,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackRejectsWrongSigner() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         bytes memory sig = _sign(a, 0xB0B);
         vm.prank(address(intake));
@@ -420,7 +420,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackRejectsWeakOrMismatchedAttestations() public {
         uint256 id = _create(_one(_deployed(T0 + 7 days, 1 ether, 8453, address(0xBEEF))), 10 ether);
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         for (uint256 i; i < 7; ++i) {
             OracleAttestation.Attestation memory a = _attestation(id, 0, true);
             if (i == 0) a.chainId = 4663; // question was about Base
@@ -439,7 +439,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_panelEvidenceNeedsQuorumAgreement() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         a.agreed = 6;
         bytes memory sig = _sign(a, signerKey);
@@ -452,7 +452,7 @@ contract KeptVaultTest is VaultFixture {
     /// settled by the deployer's rerun of a chain recipe. KEPT must accept that for chain templates.
     function test_chainEvidenceAcceptsDeployerSettledVerdict() public {
         uint256 id = _create(_one(_deployed(T0 + 7 days, 1 ether, 8453, address(0xBEEF))), 10 ether);
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         a.agreed = 6;
         bytes memory sig = _sign(a, signerKey);
@@ -464,7 +464,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackRejectsWrongAnswerType() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         a.answerType = OracleAttestation.ANSWER_UINT256;
         bytes memory sig = _sign(a, signerKey);
@@ -481,7 +481,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_callbackRejectsExpiredAttestation() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         bytes memory sig = _sign(a, signerKey);
         vm.warp(a.expiresAt + 1);
@@ -494,11 +494,11 @@ contract KeptVaultTest is VaultFixture {
 
     function test_attestationCannotBeReplayedOnAnotherCheck() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, false);
         bytes memory sig = _sign(a, signerKey);
         intake.deliver(rid, a, sig);
-        bytes32 rid2 = _check(id, 0, creator);
+        bytes32 rid2 = _check(id, 0, beneficiary);
         (bool ok,, bytes memory reason) = intake.deliver(rid2, a, sig);
         assertFalse(ok);
         assertEq(
@@ -528,7 +528,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_signerRotationDoesNotStrandChecksInFlight() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         vm.prank(owner);
         vault.proposeProtocol(address(intake), ACTION, vm.addr(0xB0B));
         vm.warp(T0 + 7 days);
@@ -546,7 +546,7 @@ contract KeptVaultTest is VaultFixture {
         vault.proposeProtocol(address(intake), ACTION, vm.addr(0xB0B));
         vm.warp(T0 + 7 days);
         vault.executeProtocol();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         OracleAttestation.Attestation memory a = _attestation(id, 0, true);
         bytes memory oldSig = _sign(a, signerKey);
         vm.prank(address(intake));
@@ -597,7 +597,7 @@ contract KeptVaultTest is VaultFixture {
 
     function test_inFlightCheckStaysBoundToItsIntake() public {
         uint256 id = _standard();
-        bytes32 rid = _check(id, 0, creator);
+        bytes32 rid = _check(id, 0, beneficiary);
         vm.prank(owner);
         vault.proposeProtocol(makeAddr("intake2"), ACTION, signer);
         vm.warp(T0 + 7 days);
