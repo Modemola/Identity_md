@@ -5,10 +5,10 @@ const DEFAULTS = {
   chainId: 4663,
   rpc: "https://rpc.mainnet.chain.robinhood.com",
   explorer: "https://robin.etherscan.io",
-  vault: "",
+  vault: "0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896", // KeptVault, IMD launch #2172
   hook: "",
   token: "",
-  fromBlock: 0,
+  fromBlock: 91910657, // the vault's deploy block: history scans start here
 };
 
 const params = new URLSearchParams(location.search);

@@ -1,0 +1,18 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "KeptVault",
+      "constructorArgs": [
+        "$owner",
+        "0x1397434cd35e8a9c8ac312a61d3a285eb31dea56",
+        "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+        "0x6f7261636c652e72657175657374406f7261636c652d31000000000000000000",
+        "0x5598aa9146215bc13eb26f2c692ad1461fd32982",
+        "9",
+        "7"
+      ]
+    }
+  ],
+  "notes": "Deploy only src/KeptVault.sol:KeptVault on Robinhood Chain (4663). $owner controls the vault; the constructor configures the specified IMD Intake, IMD token, oracle action and signer with panel size 9 and quorum 7. Projects lock tokens behind oracle-checked milestones; kept milestones release to their beneficiary and unproven milestones burn after the grace period. Deployment requires no ETH or initialization calls and creates no token, pool or hook. docs/VERIFICATION.md records the Robinhood fork rehearsal against Intake, IMD and PoolManager."
+}

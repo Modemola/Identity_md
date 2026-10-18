@@ -54,17 +54,26 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
    amounts and the IMD budget. Fee-on-transfer tokens are refused (exact balance delta).
    Each deadline must be at least one hour and at most three years ahead.
 2. `check(pledgeId, index)` buys a question:
-   - only the creator or beneficiary may call it, from creation (to prove early delivery) until
-     `deadline + GRACE` (3 days). Unproven means broken, so a check can only ever help the team;
-     keeping it team-only means nobody else can burn its attempts or budget;
+   - only the beneficiary may call it, from creation to prove early delivery. A separate
+     creator cannot spend the beneficiary's attempts;
+   - `PageContains`, `ContractDeployed` and `ValueAtLeast` checks close at the deadline
+     (inclusive). Their attestations must also be signed by the deadline; ask sufficiently
+     early for asynchronous processing. A timely, unexpired signature can arrive later;
+   - `GithubRelease` checks remain open through `deadline + GRACE` (3 days), because the
+     question explicitly checks publication by the deadline;
    - at most `MAX_ATTEMPTS` (3) per milestone, one in flight at a time;
-   - the price comes out of the pledge budget; anyone can top it up with `fund`.
+   - the price comes out of the pledge budget; anyone can top it up with `fund`. The
+     two-argument call caps the quote at `DEFAULT_MAX_PRICE = 0.5 IMD`. The overload
+     `check(pledgeId, index, maxPrice)` uses the beneficiary's explicit ceiling in IMD atomic
+     units. A quote above the cap reverts without consuming budget or attempts. Both
+     `checkOpen` overloads report `funded` only when the quote fits the budget and cap.
 3. The Intake calls `onOracleResult(requestId, attestation, signature)`. KEPT accepts it
    only from the Intake that took the request, only for a request it made, only when signed
    by the oracle signer in KEPT's EIP-712 domain, for the right question chain, with at least
    the snapshotted panel size and quorum, `agreed >= quorum` for panel evidence (chain evidence
    may be settled by the deployer's rerun with fewer), issued after the ask, and as a
-   bool. The signature is checked against the oracle signer recorded when the check was asked,
+   bool. For the three snapshot templates, `issuedAt <= deadline` is also required.
+   The signature is checked against the oracle signer recorded when the check was asked,
    so a signer rotation cannot strand a check already in flight. `true` marks the milestone `Kept` and pays the rebate if the fund can. `false` is
    recorded and the milestone stays `Open`. The callback only verifies and stores (it must fit
    200k gas); tokens move in `settle`.
@@ -87,6 +96,8 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
   → `executeProtocol`), and requests already in flight stay bound to the Intake that took them.
   Panel size and quorum changes apply to new pledges only. Ownership can be renounced. The
   website shows a warning on every page while a change is pending.
+  Locked pledges have no exit during the notice. A replacement signer can approve future
+  checks on existing pledges, so the delay gives notice, not protection from a dishonest owner.
 - IMD (the payment asset) is immutable.
 - Known limits: a creator controls the strings in their own question, so the panel is the last
   line of defence against wording games (the character set blocks quoting tricks; quorum 7 of 9
@@ -100,8 +111,17 @@ for all four templates passed `POST /requests/check` with no blockers, and were 
   another. A callback that never lands times out after 24 hours and the milestone can be asked
   again. KEPT therefore trusts IMD's Intake to hand each request its own verdict, as every other
   oracle consumer does; each verdict can be used once. The heaviest callback path (kept + rebate) is tested to stay under 150k of the 200k gas.
-- Rebasing tokens, whose balances shrink without a transfer, are not supported; fee-on-transfer
-  tokens are refused at creation.
+- Page and chain milestones remain point-in-time snapshots selected by the beneficiary before
+  the deadline. A temporary condition can satisfy them; they do not promise continuous validity
+  or a measurement at the exact deadline. This preserves early proof without allowing late
+  delivery to qualify. Missing, refused or late-signed evidence can still cause a burn.
+- Only plain ERC-20s with exact transfers and stable custody balances are supported. Do not
+  deposit rebasing, balance-decaying, confiscatable or transfer-restricted tokens, or tokens
+  that can be upgraded to those behaviours. Fee-on-transfer deposits are refused by their
+  balance delta; future incompatibility cannot be inferred from an ERC-20 interface.
+  Custody is shared per token, with nominal amounts: after a balance shrink, earlier settlements
+  can leave the last tranche unpayable and its IMD budget permanently blocked by `open != 0`.
+  There is no pro-rata accounting or rescue. See the explicit compatibility tests.
 
 ## KEPT token and hook
 

@@ -104,6 +104,7 @@ contract OracleConformanceTest is Test {
         ms[0].target = address(0xBEEF);
         ms[0].title = "Deployed";
         uint256 id = consumer.createPledge(IERC20(address(team)), address(0xB0B), "vector", ms, 1 ether);
+        vm.prank(address(0xB0B));
         bytes32 rid = consumer.check(id, 0);
 
         OracleAttestation.Attestation memory a = vector();

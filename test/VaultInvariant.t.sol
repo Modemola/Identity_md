@@ -74,7 +74,7 @@ contract VaultHandler is Test {
         uint256 count = vault.pledgeCount();
         if (count == 0) return;
         uint256 id = bound(pledgeSeed, 1, count);
-        vm.prank(creator);
+        vm.prank(beneficiary);
         try vault.check(id, index % 4) returns (bytes32 rid) {
             requests.push(rid);
         } catch {}
