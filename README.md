@@ -1,132 +1,169 @@
 # KEPT
 
-**Promises the swarm enforces.** A team locks its tokens behind public milestones. At each
-deadline the IMD swarm checks the milestone and signs a verdict onchain. Kept: the tokens
-unlock to the team. Broken: they are burned.
+![KEPT: promises the swarm enforces. The IMD swarm as a sphere of agents around a pledge, in the KEPT swarm scope.](docs/brand/kept-cover.png)
 
-Built on the IMD protocol for Robinhood Chain (4663). Every check is paid in IMD to the swarm.
+**A token launch where the roadmap is a contract, and the IMD swarm decides if it was kept.**
 
-`KeptVault` is live on Robinhood Chain at `0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`
-(its launch record is under [docs/launches](docs/launches)). This assignment launches
-**`src/KeptToken.sol:KeptToken` and `src/KeptHook.sol:KeptHook`** through IMD's Uniswap v4 hook
-factory on chain 4663, paired with IMD. The factory deploys both in one transaction, mines the
-hook's CREATE2 address so it carries permission bits `0x20cc`, initializes the KEPT/IMD pool at
-LP fee 12500 and tick spacing 60, and holds the pool's liquidity. Nothing here is deployed,
-signed or broadcast by this repository.
+Built for the IMD hackathon. Live on Robinhood Chain:
+**<https://keptmd.vercel.app>** · five minute walkthrough in [docs/JUDGES.md](docs/JUDGES.md).
 
-| Contract | Constructor arguments, in order |
-| --- | --- |
-| `KeptToken` | none; mints 1,000,000,000 KEPT (10^27 minor units) to its deployer, the factory |
-| `KeptHook` | `$poolManager` (`IPoolManager`); IMD `0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127`; `$token`; KeptVault `0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`; `$factory` |
+---
 
-The hook has no owner, proxy or upgrade path, so no `$owner` argument exists. `$factory` is used
-for one thing: only that account may initialize the pool. The manifest belongs to the following
-launch step. See [ADAPTATION.md](ADAPTATION.md) for every change and audit disposition and
-[docs/VERIFICATION.md](docs/VERIFICATION.md) for checks and the fork rehearsal.
+## The problem
 
-### The hook's fee
+A launchpad can put a token on chain in one transaction. From that block on, the team holds a
+large share of the supply, and the roadmap that justified the launch is a post on X. Buyers have
+no way to hold a team to it. If the release never ships or the site never goes up, the team still
+has its tokens and nothing happens.
 
-- **What**: a fee on the gross IMD leg of every swap in the KEPT/IMD pool, never on KEPT:
-  20% at opening, decaying linearly to 1% over 30 minutes, then 1% forever. The fee is
-  rounded up, so any swap that moves IMD pays at least one wei.
-- **When the clock starts**: at the first swap that moves IMD through the pool, not at pool
-  initialization, so liquidity seeded after initialization still opens at 20%. Until then
-  `feeNow()` is 20%. A swap the pool fills nothing of does not start it: on the empty pool, or
-  1 wei of IMD whose whole amount is the rounded-up fee, the fee is still charged but the window
-  stays closed, so nobody can burn the window down before liquidity exists.
-- **Where it goes**: the fee is kept in IMD as PoolManager ERC-6909 claims owned by the hook.
-  Anyone can call `sweep()`, which redeems them and deposits the IMD into the vault's Referee
-  Fund (`fundReferee`), which rebates the oracle check of every milestone the oracle answers
-  kept. The brief keeps the fee in IMD; it is not converted to ETH and no ETH is ever held.
-- **What the Referee Fund is**: a public subsidy for oracle checks of kept milestones, held by
-  the live `KeptVault`. The rebate is not tied to the pledge's value or the question's
-  difficulty: anyone can create a pledge on 1 wei of any ERC-20 with a milestone that is already
-  true, buy its check, and have the price rebated, so over time the fund pays the oracle for
-  checks of whatever pledges are created, not only genuine KEPT teams'. The fund's only outflow
-  is that rebate, paid at whatever price the vault's Intake quotes. The hook has no owner, but
-  the vault's owner (`0xd3336a7c8a7d8814c437196abb16c4fe7aa7b016`, an externally owned account
-  today) may replace the Intake, action and signer after a public seven-day notice, with no cap
-  on a rebate, so the fees the hook collects are custodied under that key with that notice. See
-  [ADAPTATION.md](ADAPTATION.md) for why this is documented rather than changed.
-- **Callbacks**: `beforeInitialize` (factory-only, single pool, pins the pair, fee and
-  spacing), `beforeSwap` + `beforeSwapReturnDelta` (fee on the IMD-specified legs: exact-in buys
-  and exact-out sells) and `afterSwap` + `afterSwapReturnDelta` (fee on the IMD-unspecified
-  legs: exact-out buys and exact-in sells). All five were in the brief; none were added.
-- **The LP fee** stays the static 12500 (1.25%); the hook never overrides it.
+The usual fix is a vesting contract, but vesting only measures time. Tokens unlock whether or not
+anything was built. What is missing is a lock that opens on **delivery**, judged by someone the
+team does not control.
 
-- Full design: [docs/SPEC.md](docs/SPEC.md)
-- Protocol research and addresses: [docs/research.md](docs/research.md)
+IMD already has that judge. Its oracle sends a precise question to a panel of agents, and the
+network signs their verdict with EIP-712. KEPT connects that verdict to the team's tokens.
 
-## Contracts
+## What KEPT is
 
-| Contract | What it does |
-| --- | --- |
-| `KeptVault` | Holds locked tokens per pledge, buys oracle checks from the IMD Intake, verifies signed verdicts, pays kept tranches and burns broken ones. Open to any project. |
-| `KeptToken` | KEPT, fixed 1,000,000,000 supply, plain ERC-20. |
-| `KeptHook` | Uniswap v4 hook on the KEPT/IMD pool. Takes 1% of the IMD leg (20% at the first filled trade, decaying over 30 minutes), rounded up, and sweeps it into the vault's Referee Fund, which refunds the check of every milestone the oracle answers kept. |
+1. **A vault.** A team locks its tokens behind up to eight public milestones, each with a
+   deadline and a share of the tokens. Nothing can withdraw them: no admin, no pause, no upgrade.
+2. **Milestones the swarm can check.** Four templates turn a promise into one exact yes or no
+   question: a GitHub release with a given tag, a web page that shows given text, a contract that
+   exists at an address, or an onchain value that reaches a threshold.
+3. **Signed verdicts.** When the team asks, the vault buys a check from the IMD oracle for
+   0.5 IMD. A panel of 9 agents answers and 7 must agree. The vault verifies the signature, the
+   panel and the quorum onchain. Kept: that tranche goes to the team. Not proven within three days
+   of the deadline: it burns.
+4. **A Referee Fund.** The KEPT/IMD pool runs a Uniswap v4 hook that takes 1% of the IMD side of
+   every trade. While the fund holds IMD, it refunds the check of every milestone the swarm
+   answers kept, so keeping a promise costs nothing and breaking one means paying for your own
+   verdict.
 
-Milestones use four templates so every question the swarm gets is precise:
-`GithubRelease`, `PageContains`, `ContractDeployed`, `ValueAtLeast`.
+Any IMD launch can use the vault. KEPT locks its own team tokens in it first.
 
-Only a pledge's **beneficiary** can buy its three check attempts. Anyone can fund it, clear a
-stale check, settle, or return the completed pledge's unused budget to its creator.
-`check(id, index)` caps payment at `DEFAULT_MAX_PRICE = 500000000000000000` (0.5 IMD).
-`check(id, index, maxPrice)` explicitly accepts another ceiling in IMD atomic units; it still
-pays only the live quote. A higher quote reverts without spending budget or an attempt.
-`checkOpen` has matching two- and three-argument forms; `funded` includes the price ceiling.
+## KEPT's own pledge
 
-Page and chain templates are snapshots: ask early enough for the oracle to **sign by the
-deadline**. A timely, unexpired signature may be delivered later. Their grace period does not
-permit a new check or a signature issued after the deadline. GitHub release checks can still
-be requested during the three-day grace period because their question explicitly requires
-publication by the deadline. Early success remains final: these templates do not prove that
-a page, deployment or value persists through the deadline. Missing or delayed oracle evidence
-can still cause a burn; a paid check does not guarantee delivery or a refund.
+Pledge #1 in the live vault is KEPT's team allocation: **300,000,000 KEPT**, locked behind three
+milestones that get larger and later.
 
-## Supported tokens and trust
+| # | Milestone | Deadline (UTC) | Tranche | What the swarm checks |
+| --- | --- | --- | --- | --- |
+| 1 | KEPT website is live | Oct 21, 2026, 21:00 | 50,000,000 KEPT | keptmd.vercel.app shows "Promises the swarm enforces" |
+| 2 | Publish KEPT v1.0.0 | Oct 31, 2026, 22:00 | 100,000,000 KEPT | a published GitHub release tagged v1.0.0 on this repository |
+| 3 | KEPT pool earns 5 IMD for the Referee Fund | Nov 30, 2026, 22:00 | 150,000,000 KEPT | `KeptHook.collected()` is at least 5 IMD |
 
-Use plain ERC-20s whose vault balance changes only through exact transfers. **Do not deposit
-rebasing, balance-decaying, confiscatable or transfer-restricted tokens**, including tokens
-whose administrator can later introduce these behaviours. Deposit taxes are rejected by an
-exact balance-delta check, but that check cannot detect future balance shrinkage or freezes.
-Metadata or a successful deposit is not evidence of compatibility.
-
-KEPT accounts in nominal units and pools custody by token. If an unsupported token shrinks
-the vault's balance, early settlements can consume the remaining backing and the last tranche
-can become unpayable. Its IMD budget then remains locked because budget refunds require all
-milestones to settle. There is no pro-rata loss allocation or rescue withdrawal. This is a
-documented restriction, not an onchain detector of every incompatible ERC-20.
-
-The owner may replace the Intake, action and signer after a public seven-day delay. Existing
-pledges cannot exit during that notice, and an owner-selected signer can approve later checks.
-In-flight requests retain their original Intake and signer. Panel changes affect future pledges;
-ownership can be transferred or renounced. The owner and IMD's request-to-verdict pairing remain
-trust assumptions. The pinned v1 Intake supports `request`; failed requests use the existing
-one-day timeout, without a v2 failure callback.
-
-## Build and test
-
-Solidity 0.8.26, Cancun, via IR, optimizer 200, `bytecode_hash = "none"`. Dependencies are
-vendored under `lib/` (no submodules, network, FFI or filesystem permissions needed).
+Every number above is read from chain, not from this file:
 
 ```sh
+cast call 0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896 "pledge(uint256)" 1 --rpc-url https://rpc.mainnet.chain.robinhood.com
+```
+
+## Product tour
+
+Captured from the live site, reading the live vault.
+
+**Home.** The swarm scope: the IMD swarm drawn as a sphere of agents in real time. Each line in the
+verdict feed plays out on it. A check links a panel of nine agents to the core, a kept verdict
+sends a green wave across the sphere, and a broken one throws off red embers.
+
+![The KEPT home page: the headline, the swarm scope with live counters and the verdict feed](docs/screens/home.jpg)
+
+**A pledge.** What is locked, released and burned, the check budget, and every milestone on a
+timeline with its proof window. Each milestone shows the exact question the swarm is asked and,
+once checked, the signed verdict and how many of the panel agreed.
+
+![KEPT's own pledge: amounts, the milestone timeline and the first milestone](docs/screens/pledge.jpg)
+
+**Make a pledge.** Pick a template, fill in the promise, and the vault itself writes the question
+the swarm will be asked before you sign anything. The card on the right keeps the totals and the
+timeline in view.
+
+![Creating a pledge: a GitHub release milestone, the question preview and the pledge card](docs/screens/make-a-pledge.jpg)
+
+**How it works.** The life of one milestone: locked, checked, then kept or burned.
+
+![How it works: the milestone lifecycle and the four templates](docs/screens/how-it-works.jpg)
+
+## Trying it
+
+[**docs/JUDGES.md**](docs/JUDGES.md) is the five minute walkthrough: what to look at, how to point a
+wallet at Robinhood Chain, and how to check each claim against the chain or the test suite. The
+site reads the vault before you connect anything.
+
+## Documentation
+
+| | |
+|---|---|
+| [`docs/JUDGES.md`](docs/JUDGES.md) | Five minute walkthrough for judges |
+| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The three contracts: addresses, the hook's fee, check rules, supported tokens |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | What KEPT trusts, every audit finding and how it was handled |
+| [`docs/SPEC.md`](docs/SPEC.md) | Full design |
+| [`docs/VERIFICATION.md`](docs/VERIFICATION.md) | Build, test, live reads and the fork rehearsal for each launch |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | How KEPT launched through IMD, and hosting the site |
+| [`docs/launches/`](docs/launches) | IMD launch records and the audit adaptation notes for each launch |
+| [`docs/research.md`](docs/research.md) | IMD protocol notes and addresses |
+| [`docs/brand/`](docs/brand) | Logo, avatar, X banner and the script that draws them |
+
+## Repository layout
+
+```
+src/            Solidity: KeptVault, KeptToken, KeptHook, the oracle consumer
+  libraries/    Question templates, hook flags, specified amount math
+test/           Foundry tests, invariants, launch rehearsals and the Robinhood fork suite
+script/         Local demo chain with pledges in every state
+scripts/launch/ Opens the IMD launches from your own wallet
+web/            The site: Vite, viem and WebGL, no framework
+dist/           The built site, served as is by Vercel and pinned to IPFS
+docs/           Judges, contracts, security, spec, verification, launches, brand
+```
+
+## Running the front end
+
+```bash
+cd web
+npm install
+npm run dev        # local development
+npm run build      # writes ../dist
+```
+
+The site needs no backend. It reads the vault straight from Robinhood Chain and talks to your
+wallet. Contract addresses live in `web/src/config.js`, and any of them can be overridden from the
+URL for local testing (`?vault=0x…&rpc=http://127.0.0.1:8545&chain=31337`). `script/LocalDemo.s.sol`
+seeds a local anvil chain with pledges in every state for exactly that.
+
+## Status
+
+| Component | State |
+|---|---|
+| `KeptVault`: pledges, checks, verdicts, settlement | Live on Robinhood Chain, 107 tests passing |
+| `KeptHook`: the fee, the opening window, the sweep | Live on Robinhood Chain, 101 tests passing |
+| `KeptToken`: KEPT, fixed supply | Live on Robinhood Chain, 8 tests passing |
+| Oracle conformance: KEPT verifies the IMD oracle's real signature | 5 tests passing |
+| Fork rehearsal against Robinhood's live Intake and PoolManager | Passing, opt in |
+| Website | Live at keptmd.vercel.app, reading the live vault |
+| KEPT's own pledge | 300,000,000 KEPT locked behind three milestones |
+
+221 tests passing, 0 failing. IMD's audit agents reviewed both launches; every finding is in
+[docs/SECURITY.md](docs/SECURITY.md) with the test that pins it.
+
+## Local development
+
+Solidity 0.8.26, Cancun, via IR. Dependencies are vendored under `lib/`, so it builds and tests
+offline.
+
+```bash
 forge build
 forge test
 ```
 
-The suite covers the full pledge lifecycle, every callback guard, the IMD oracle
-conformance vector (KEPT verifies the protocol's real signature), the hook's exact rounded-up fee
-in all four swap modes on a real local PoolManager in both currency orders, the opening window
-and dust cases, the launch token's supply and transfers, a local rehearsal of the launch shape
-(empty chain, CREATE2 at a mined `0x20cc` address, opcode scan), and stateful invariants proving
-locked tokens and IMD are always accounted for. The Robinhood fork suite is opt-in:
+The Robinhood fork suite is opt in:
 
-```sh
+```bash
 forge test --match-contract RobinhoodForkTest --fork-url https://rpc.mainnet.chain.robinhood.com
 ```
 
 ## Provenance
 
-`src/OracleAttestation.sol` is the protocol's canonical consumer, copied unchanged from
-AskOracle (launch 976). `KeptHook` fee math and `src/libraries/SpecifiedAmount.sol` come
-from the accepted imdDRONE hook (launch 909). Both are MIT.
+`src/OracleAttestation.sol` is the IMD protocol's canonical oracle consumer, copied unchanged from
+AskOracle (launch 976). The hook's fee math and `src/libraries/SpecifiedAmount.sol` come from the
+imdDRONE hook (launch 909). Both are MIT.

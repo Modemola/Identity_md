@@ -46,12 +46,12 @@ const dryRun = argv.includes("--dry-run");
 const pay = () => (flag("pay", "onchain") === "api" ? open : openOnchain);
 const addr = (name) => {
   const v = flag(name);
-  if (!v || !/^0x[0-9a-fA-F]{40}$/.test(v)) die(`--${name} 0xâ€¦ is required`);
+  if (!v || !/^0x[0-9a-fA-F]{40}$/.test(v)) die(`--${name} 0x... is required`);
   return getAddress(v).toLowerCase();
 };
 
 function die(msg) {
-  console.error(`\nâœ— ${msg}\n`);
+  console.error(`\nERROR: ${msg}\n`);
   process.exit(1);
 }
 
@@ -193,12 +193,12 @@ const canon = (v) =>
 // ------------------------------------------------------------------ flow
 
 async function open(label, input, action = "launch.open") {
-  console.log(`\nâ–¸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}â€¦`);
+  console.log(`\n> Free check of the ${label} ${action === "job.open" ? "job" : "launch"}...`);
   const check = await api("/requests/check", { method: "POST", body: { action, input } });
   if (check.status !== 200) die(`check failed (${check.status}): ${JSON.stringify(check.json)}`);
   if (check.json.blockers?.length) die(`the check found blockers:\n${JSON.stringify(check.json.blockers, null, 2)}`);
   console.log("  The swarm will:");
-  for (const step of check.json.plan || []) console.log(`   Â· ${step.title}`);
+  for (const step of check.json.plan || []) console.log(`   * ${step.title}`);
   for (const s of check.json.suggestions || []) console.log(`  suggestion: ${JSON.stringify(s)}`);
 
   const caps = (await api("/requests/capabilities")).json;
@@ -228,7 +228,7 @@ async function open(label, input, action = "launch.open") {
     if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
 
     if (allowance < price) {
-      console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)â€¦");
+      console.log("  Approving Permit2 for IMD (one-time, needs a little ETH)...");
       const wallet = createWalletClient({ chain: mainnet, transport: http(rpc), account: acct });
       const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [PERMIT2, 2n ** 256n - 1n] });
       await pub.waitForTransactionReceipt({ hash });
@@ -257,7 +257,7 @@ async function open(label, input, action = "launch.open") {
   }
 
   if (dryRun) {
-    console.log("\nâœ“ Dry run complete: import, check, quote and challenge all succeeded. Nothing was signed or paid.\n");
+    console.log("\nOK: Dry run complete: import, check, quote and challenge all succeeded. Nothing was signed or paid.\n");
     return;
   }
 
@@ -312,7 +312,7 @@ async function open(label, input, action = "launch.open") {
     },
   });
 
-  console.log("  Submitting paymentâ€¦");
+  console.log("  Submitting payment...");
   const submit = await api(url, {
     method: "POST",
     token,
@@ -347,13 +347,13 @@ const INTAKE_ABI = [
 ];
 
 async function openOnchain(label, input, action = "launch.open") {
-  console.log(`\nâ–¸ Free check of the ${label} ${action === "job.open" ? "job" : "launch"}â€¦`);
+  console.log(`\n> Free check of the ${label} ${action === "job.open" ? "job" : "launch"}...`);
   const check = await api("/requests/check", { method: "POST", body: { action, input } });
   if (check.status !== 200) die(`check failed (${check.status}): ${JSON.stringify(check.json)}`);
   // a refused body is a spent payment onchain, so never send one the free check flags
   if (check.json.blockers?.length) die(`the check found blockers:\n${JSON.stringify(check.json.blockers, null, 2)}`);
   console.log("  The swarm will:");
-  for (const step of check.json.plan || []) console.log(`   Â· ${step.title}`);
+  for (const step of check.json.plan || []) console.log(`   * ${step.title}`);
 
   const caps = (await api("/requests/capabilities")).json;
   const chain = caps.onchain?.chains?.find((c) => c.chainId === 1);
@@ -366,7 +366,7 @@ async function openOnchain(label, input, action = "launch.open") {
   console.log(`  Price: ${Number(price) / 1e18} IMD, paid onchain to IMD's Intake ${intake} on Ethereum`);
   console.log(`  Action ${sold.action}@${sold.version}, body ${(body.length - 2) / 2} bytes`);
   if (dryRun) {
-    console.log("\nâœ“ Dry run complete: import, check and the intake's price all look right. Nothing was signed or paid.\n");
+    console.log("\nOK: Dry run complete: import, check and the intake's price all look right. Nothing was signed or paid.\n");
     return;
   }
 
@@ -386,7 +386,7 @@ async function openOnchain(label, input, action = "launch.open") {
   if (go.trim().toLowerCase() !== "yes") die("cancelled; nothing was paid");
 
   if (allowance < price) {
-    console.log(`  Approving the Intake to take ${Number(price) / 1e18} IMDâ€¦`);
+    console.log(`  Approving the Intake to take ${Number(price) / 1e18} IMD...`);
     const hash = await wallet.writeContract({ address: imd, abi: erc20Abi, functionName: "approve", args: [intake, price] });
     await pub.waitForTransactionReceipt({ hash });
     console.log(`  Approved: https://etherscan.io/tx/${hash}`);
@@ -395,7 +395,7 @@ async function openOnchain(label, input, action = "launch.open") {
   const args = [sold.actionId, body, { target: "0x0000000000000000000000000000000000000000", selector: "0x00000000" }, imd, price];
   // simulate first: a revert (price, action, allowance) shows its reason and costs nothing
   const { request } = await pub.simulateContract({ address: intake, abi: INTAKE_ABI, functionName: "request", args, account: acct });
-  console.log("  Sending the requestâ€¦");
+  console.log("  Sending the request...");
   const hash = await wallet.writeContract(request);
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(new URL(`${label}.json`, STATE_DIR), JSON.stringify({ label, onchain: true, chainId: 1, txHash: hash, input, createdAt: new Date().toISOString() }, null, 2));
@@ -409,14 +409,14 @@ async function openOnchain(label, input, action = "launch.open") {
 }
 
 async function followOnchain(label, chainId, hash) {
-  console.log(`  Following ${hash}â€¦`);
+  console.log(`  Following ${hash}...`);
   for (let i = 0; i < 240; i++) {
     const { status, json } = await api(`/intake/${chainId}/${hash}`);
     const e = status === 200 ? json.entries?.[0] : null;
     process.stdout.write(`\r  state: ${e ? e.state : "waiting for IMD to see the transaction"}            `);
     if (e?.admission?.result) {
       const r = e.admission.result;
-      console.log(`\n\nâœ“ ${label} admitted.`);
+      console.log(`\n\nOK: ${label} admitted.`);
       if (r.jobId) console.log(`  Job: https://explorer.imd.fun/jobs/${r.jobId}`);
       if (r.statusUrl) console.log(`  Status: ${API}${r.statusUrl}`);
       console.log(`  Paste this whole output to continue.`);
@@ -429,13 +429,13 @@ async function followOnchain(label, chainId, hash) {
 }
 
 async function follow(label, orderId, token) {
-  console.log(`  Following order ${orderId}â€¦`);
+  console.log(`  Following order ${orderId}...`);
   for (let i = 0; i < 120; i++) {
     const { json } = await api(`/requests/${orderId}`, { token });
     process.stdout.write(`\r  status: ${json.status}            `);
     if (json.status === "admitted") {
       const r = json.admission?.result || {};
-      console.log(`\n\nâœ“ ${label} admitted.`);
+      console.log(`\n\nOK: ${label} admitted.`);
       console.log(`  Job: https://explorer.imd.fun/jobs/${r.jobId}`);
       console.log(`  Status: ${API}${r.statusUrl}`);
       return;
@@ -454,7 +454,7 @@ if (cmd === "vault") {
   await pay()("vault", vaultInput(source, addr("owner")));
 } else if (cmd === "token") {
   const poolBps = Number(flag("pool-bps", "6000"));
-  if (!Number.isInteger(poolBps) || poolBps < 1000 || poolBps > 9000) die("--pool-bps must be 1000â€“9000");
+  if (!Number.isInteger(poolBps) || poolBps < 1000 || poolBps > 9000) die("--pool-bps must be 1000 to 9000");
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
   await pay()("token", tokenInput(source, addr("vault"), addr("remainder"), poolBps));

@@ -235,11 +235,11 @@ const one = (call) => [{ label: "Send the transaction", run: (ph) => send(call, 
 // ------------------------------------------------------------------ status bar (IMD's bottom strip)
 
 const bar = {
-  block: h("b", { class: "tnum" }, "—"),
-  pledges: h("b", { class: "tnum" }, "—"),
-  kept: h("b", { class: "tnum" }, "—"),
-  broken: h("b", { class: "tnum" }, "—"),
-  oracle: h("b", { class: "tnum" }, "—"),
+  block: h("b", { class: "tnum" }, "…"),
+  pledges: h("b", { class: "tnum" }, "…"),
+  kept: h("b", { class: "tnum" }, "…"),
+  broken: h("b", { class: "tnum" }, "…"),
+  oracle: h("b", { class: "tnum" }, "…"),
   end: h("div", { class: "cell end" }, h("span", { class: "lamp caution" }), deployed ? "Reading the vault" : "Launching"),
 };
 
@@ -270,8 +270,13 @@ function statusbar() {
       .catch(() => {});
     if (deployed)
       getPledges({ maxAge: 10_000 })
-        .then(setStats)
-        .catch(() => bar.end.replaceChildren(h("span", { class: "lamp alarm" }), "Vault unreachable"));
+        .then((pledges) => ((misses = 0), setStats(pledges)))
+        .catch(() => {
+          // one slow or dropped RPC reply is normal on a public endpoint: only call the vault
+          // unreachable when it has never answered, or has failed three refreshes in a row
+          misses += 1;
+          if (!everLive || misses >= 3) bar.end.className = "cell end", bar.end.replaceChildren(h("span", { class: "lamp alarm" }), "Vault unreachable");
+        });
   };
   const cached = cachedPledges();
   if (cached) setStats(cached);
@@ -279,7 +284,11 @@ function statusbar() {
   liveInterval(el, refresh, 12_000);
 }
 
+let everLive = false;
+let misses = 0;
+
 function setStats(pledges) {
+  everLive = true;
   const { kept, broken } = tally(pledges);
   bar.pledges.textContent = pledges.length;
   bar.kept.textContent = kept;
@@ -297,10 +306,10 @@ function viewHome({ quiet }) {
   const token = navToken;
   homeUnit ||= verdictUnit({ live: deployed });
   const figs = {
-    pledges: h("div", { class: "v tnum" }, "—"),
-    kept: h("div", { class: "v kept tnum" }, "—"),
-    broken: h("div", { class: "v broken tnum" }, "—"),
-    fund: h("div", { class: "v tnum" }, "—"),
+    pledges: h("div", { class: "v tnum" }, "…"),
+    kept: h("div", { class: "v kept tnum" }, "…"),
+    broken: h("div", { class: "v broken tnum" }, "…"),
+    fund: h("div", { class: "v tnum" }, "…"),
   };
   const listEl = h("div", { class: "rows" });
   const banners = h("div", {});
@@ -874,7 +883,7 @@ function viewNew({ quiet }) {
   // the live pledge card in the aside
   const card = {
     name: h("div", { class: "pc-name" }, "Untitled pledge"),
-    token: h("span", {}, "—"),
+    token: h("span", {}, "…"),
     total: h("b", { class: "tnum" }, "0"),
     count: h("b", { class: "tnum" }, "0"),
     budget: h("b", { class: "tnum" }, "1 IMD"),
@@ -937,7 +946,7 @@ function viewNew({ quiet }) {
       } catch {}
     }
     card.name.textContent = nameIn.value.trim() || "Untitled pledge";
-    card.token.textContent = st.token ? st.token.symbol : "—";
+    card.token.textContent = st.token ? st.token.symbol : "…";
     card.total.textContent = `${fmt(total, dec)} ${st.token?.symbol ?? ""}`.trim();
     card.count.textContent = String(st.milestones.length);
     const b = Number(budgetIn.value || 0);
@@ -1192,7 +1201,7 @@ function milestoneEditor(st, refresh, onRemove) {
 
 const FIELD_NAMES = [
   ["the repository (owner/repo)", "the release tag (letters, digits, . - _ +)"],
-  ["the page URL (must start with https://)", "the text (1–80 characters, no quotes or backslashes)"],
+  ["the page URL (must start with https://)", "the text (1 to 80 characters, no quotes or backslashes)"],
   ["", "", "the contract address"],
   ["the view function, e.g. totalSupply()", "", "the contract address", "the threshold (above zero)"],
 ];
@@ -1215,9 +1224,9 @@ function explain(e, kind, input) {
 function viewReferee({ quiet }) {
   const token = navToken;
   const v = {
-    fund: h("div", { class: "v kept tnum" }, "—"),
-    collected: h("div", { class: "v tnum" }, "—"),
-    pending: h("div", { class: "v tnum" }, "—"),
+    fund: h("div", { class: "v kept tnum" }, "…"),
+    collected: h("div", { class: "v tnum" }, "…"),
+    pending: h("div", { class: "v tnum" }, "…"),
     fee: h("div", { class: "v tnum" }, "1%"),
   };
   const donate = h("input", { type: "number", min: "0", step: "0.5", value: "1", "aria-label": "IMD to donate" });

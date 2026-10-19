@@ -3,7 +3,7 @@
 ## 1. Funding the launch (1.5 IMD + a little ETH on Ethereum)
 
 **Option A: fund it yourself.** About 1.6 IMD (a little extra for price movement) plus roughly
-$5–10 of ETH for gas on Ethereum mainnet. At the last known price (~$9.70 per IMD, Bankless
+$5 to $10 of ETH for gas on Ethereum mainnet. At the last known price (~$9.70 per IMD, Bankless
 snapshot on 25 Sep) that is about $15 of IMD; check the live price first. Buy IMD on Uniswap
 using the token address `0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7` (verify it on
 https://imd.fun before swapping; copycat tokens exist). Use a fresh wallet that holds only this.

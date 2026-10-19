@@ -126,7 +126,7 @@ export function countUp(el, value, format = (n) => Math.round(n).toLocaleString(
 
 // ------------------------------------------------------------------ seven-segment readout
 
-// Segments a–g as polygons in a 20×34 cell, the way a lab instrument draws them.
+// Segments a to g as polygons in a 20×34 cell, the way a lab instrument draws them.
 const SEG = {
   a: "3,1 17,1 14,4 6,4",
   b: "18,2 18,16 15,14 15,5",

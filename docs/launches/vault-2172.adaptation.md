@@ -28,7 +28,7 @@ All four behavioural reports reproduced before changing the production source. B
 reports describe real properties of the original project; neither requires removing a capability
 or replacing a supplied address. No imported behavioural finding was dismissed as irreproducible.
 
-### 402848657cada9ef2d4adad191e08553d9859d1913ff1cc1a9a7274c6b11c421 — deadline
+### 402848657cada9ef2d4adad191e08553d9859d1913ff1cc1a9a7274c6b11c421: deadline
 
 The supplied `Proof_402848657cad.t.sol` failed on the original code because the beneficiary
 received 100 tokens for a contract snapshot signed two days after its deadline.
@@ -50,7 +50,7 @@ Tests in `test/KeptVaultAudit.t.sol` cover every affected template, both check e
 deadline boundaries, a queued request answered late, burning after refusal, an on-time signature
 delivered later under 200,000 gas, and GitHub's retained grace period.
 
-### fb69143f635a904755e24aa1e2a071bb212a3e375ec06713b78954a8839c60e6 — attempts
+### fb69143f635a904755e24aa1e2a071bb212a3e375ec06713b78954a8839c60e6: attempts
 
 The supplied `Proof_fb69143f635a.t.sol` failed on the original code with `AttemptsExhausted`
 when a separate beneficiary tried to prove its release after the creator used all three checks.
@@ -65,7 +65,7 @@ Updated `test/KeptVault.t.sol`, `test/OracleConformance.t.sol` and `test/VaultIn
 to request from the actual beneficiary. Their lifecycle, conformance and accounting assertions
 are retained, including the invariant handler's payout/burn smoke test.
 
-### dab3a05f3869676d227db3dac94d857b6d7fa0273a108c8da940cf8eb66185f8 — price
+### dab3a05f3869676d227db3dac94d857b6d7fa0273a108c8da940cf8eb66185f8: price
 
 A scratch reproduction replaced the Intake after seven days, quoted 100 IMD and confirmed that
 the original two-argument check spent the entire 100 IMD budget.
@@ -81,7 +81,7 @@ The audit regression tests reprice the existing Intake and replace it through th
 fuzz prices above/below/equal to an explicit ceiling, test zero quotes, verify rollback of stale
 clearing on refusal, check zero remaining allowance, and rebate exactly the price paid.
 
-### 74f963a8ddc3dacf95910a87adaa19b217ebe31547abe556df5a59e7f77c53f3 — shrinking tokens
+### 74f963a8ddc3dacf95910a87adaa19b217ebe31547abe556df5a59e7f77c53f3: shrinking tokens
 
 Reproduced two exact deposits of 100, a vault balance reduced to 180, one settlement of 100,
 then the final transfer reverting with only 80 available. The last pledge still had `open = 1`
@@ -99,7 +99,7 @@ loss-allocation economics is claimed.
 `test/KeptVaultTokenCompatibility.t.sol` retains the unsupported-case reproduction and a
 supported-token case with two pledges, a release, a burn and independent budget refunds.
 
-### ca8117ff21af06ccc70fb3e24664638a12957257238bc9ec2c4050da6954c9b3 — protocol control
+### ca8117ff21af06ccc70fb3e24664638a12957257238bc9ec2c4050da6954c9b3: protocol control
 
 Confirmed the owner can change Intake/action/signer after seven days, change future panels,
 and transfer or renounce ownership. Existing tests exercise the delay, old in-flight bindings
@@ -111,7 +111,7 @@ KeptVault continues to use `request()` with the exact v1 Intake the brief names.
 does not justify silently changing a pinned deployment input. V1 failure/no-answer recovery
 remains the existing one-day timeout; the fee and attempt are spent.
 
-### 718ac5652b66357cb9fd8b866f9144a06db6cb8bd7295435fac2dd8dd761c4db — scope/evidence
+### 718ac5652b66357cb9fd8b866f9144a06db6cb8bd7295435fac2dd8dd761c4db: scope/evidence
 
 Read the vault, oracle consumer, questions, Intake interface and their tests against the supplied
 protocol reference. The canonical 15-field attestation, type hash, domain and callback signature
