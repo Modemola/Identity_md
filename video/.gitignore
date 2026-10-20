@@ -3,3 +3,4 @@ out/
 audio-src/*.wav
 public/audio/
 explainer/audio-src/*.wav
+__pycache__/
