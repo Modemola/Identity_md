@@ -1,4 +1,4 @@
-# KEPT — hackathon submission kit
+# KEPT hackathon submission kit
 
 Everything to paste, in order. Fill the `0x…` placeholders after the launches deploy.
 

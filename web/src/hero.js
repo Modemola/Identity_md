@@ -18,7 +18,7 @@ export function verdictUnit({ live }) {
   const lamps = h("div", { class: "vu-lamps", role: "list", "aria-label": "Milestones" });
   const log = h("div", { class: "vu-log", "aria-live": "off" });
   const mode = h("span", { class: "vu-mode" }, live ? "LIVE" : "SAMPLE FEED");
-  const agents = h("span", { class: "tnum" }, "—");
+  const agents = h("span", { class: "tnum" }, "…");
   const stage = h(
     "div",
     { class: "vu-stage" },
@@ -66,7 +66,7 @@ export function verdictUnit({ live }) {
         mounting = false;
         if (swarm || !unit.isConnected) return;
         swarm = mountSwarm(stage, { reduced, fine: finePointer });
-        const showCount = (c) => (agents.textContent = c.count ? c.count.toLocaleString("en-US") : "—");
+        const showCount = (c) => (agents.textContent = c.count ? c.count.toLocaleString("en-US") : "…");
         showCount(swarm);
         swarm.onReady = showCount;
         queued.splice(0).forEach((k) => swarm.pulse(k));

@@ -1,6 +1,6 @@
 # Verification record
 
-## Token and hook launch — 2026-10-18
+## Token and hook launch, 2026-10-18
 
 Launch scope: `src/KeptToken.sol:KeptToken` and `src/KeptHook.sol:KeptHook`, chain 4663, paired
 with IMD, with the constructor arguments in [README.md](../README.md). All commands below simulate
@@ -93,7 +93,7 @@ Funding is synthetic (`deal`); nothing was broadcast. A fork proves contract-cal
 with the live bytecode, not the factory's own deployment path. The public RPC may prune this
 block; reruns may need an archive endpoint or a newly recorded block.
 
-## Vault launch — 2026-10-18 (archived)
+## Vault launch, 2026-10-18 (archived)
 
 Launch scope: only `src/KeptVault.sol:KeptVault`, chain 4663, with the seven constructor
 arguments in [launches/vault-2172.adaptation.md](launches/vault-2172.adaptation.md). The vault is

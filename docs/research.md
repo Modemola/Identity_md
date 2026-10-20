@@ -1,14 +1,14 @@
 # IMD Hackathon research notes
 
-Collected 8–9 Oct 2026 from imd.fun/docs, api.imd.fun, imdradar.site, the
+Collected 8 and 9 Oct 2026 from imd.fun/docs, api.imd.fun, imdradar.site, the
 identity-md/worker bundle and public repos under github.com/identity-md-launches.
 
 ## Hackathon (imdradar.site/hackathon)
 
 - $10,000 pool in ETH, USDT, USDC and IMD; only the IMD team wallet pays out.
-- Judging: IMD agents check every entry and pick places 6–15; a human jury picks the top 5.
+- Judging: IMD agents check every entry and pick places 6 to 15; a human jury picks the top 5.
 - Requirement wording on Radar: "a Uniswap v4 hook or a custom contract that really uses IMD".
-- One entry per project. Fields: project X handle (required), contract (optional), about (20–1,000 chars).
+- One entry per project. Fields: project X handle (required), contract (optional), about (20 to 1,000 chars).
 - If a contract is entered, prizes go to that contract's deployer address. IMD launches are
   deployed by the IMD factories, so the deployer is not the requester: confirm payout with @imdradar.
 - Entries on 9 Oct (6): Reputation Ticker (ETH), imdplace pixel war hook (RH), Illuminatico (Base),
@@ -21,9 +21,9 @@ identity-md/worker bundle and public repos under github.com/identity-md-launches
   from an EOA (no Safe). Server pays deploy gas. Quotes last 600 s. `POST /requests/check` is free.
 - Kinds: `univ4_hook` (token + hook on the launch pool), `evm_project` (token + up to 8 contracts;
   the launch pool uses the factory's PoolInitializationGuard, not our hook), `custom_token`,
-  `evm_contracts` (1–8 contracts, no token, constructors take static args, `$owner`, `$contract:Name`).
+  `evm_contracts` (1 to 8 contracts, no token, constructors take static args, `$owner`, `$contract:Name`).
 - Robinhood Chain 4663 is live in the API for all four kinds (explorer UI still says "soon").
-  Pairings on 4663: ETH, or IMD (opening cap 250–250,000 IMD).
+  Pairings on 4663: ETH, or IMD (opening cap 250 to 250,000 IMD).
 - Token launches: fixed 1e9 supply, 10% swarm, `poolBps` (≥1,000) of the rest seeds the pool
   single-sided, remainder to `remainderTo` (default the paying wallet). Pool fee 1.25%:
   1% to the paying wallet, 0.25% to the network.
@@ -44,7 +44,7 @@ identity-md/worker bundle and public repos under github.com/identity-md-launches
   0x5598aa9146215bc13eb26f2c692ad1461fd32982. Keep intake/action/price/signer as owner settings.
 - Answer types: bool, address, bytes32, uint256, address[], bytes32[]. Evidence `chain` (deployer
   reruns a recipe: log-sum, log-count, log-rank, call-compare) or `panel` (agents, with sources).
-  Panel 5–100, quorum ≤ panel. Window up to 720 h.
+  Panel 5 to 100, quorum ≤ panel. Window up to 720 h.
 - Reliability (api.imd.fun/oracle/counts, 9 Oct): 7,524 total, 7,314 attested (97.2%), 187 disagreed,
   20 blocked. Disagreements cluster on vague or subjective questions; precise, sourced questions attest.
 

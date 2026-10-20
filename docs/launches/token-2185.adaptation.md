@@ -5,7 +5,7 @@ hook factory on Robinhood Chain (4663), paired with IMD `0x5f7bb59365ce557c26dbc
 LP fee 12500, tick spacing 60, hook permissions `0x20cc` at a CREATE2-mined address. The earlier
 contracts-only launch of `KeptVault` (now live at `0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`) and
 its adaptation notes are archived in
-[docs/launches/vault-2172.adaptation.md](docs/launches/vault-2172.adaptation.md).
+[vault-2172.adaptation.md](vault-2172.adaptation.md).
 
 No transaction was signed or broadcast. No launch manifest is written by this step. Build
 configuration, remappings, dependencies and lockfiles are unchanged, and nothing was installed.
@@ -36,7 +36,7 @@ configuration, remappings, dependencies and lockfiles are unchanged, and nothing
 
 ## Imported findings and reproductions
 
-### d96e756ad7e93225588421a8383f7cf9de819057348bdd74c496a0c1fde5052b — fee rounds down (low)
+### d96e756ad7e93225588421a8383f7cf9de819057348bdd74c496a0c1fde5052b: fee rounds down (low)
 
 Reproduced by reading the four fee expressions in `beforeSwap` and `afterSwap`: every one floored,
 so an IMD leg below `10_000 / rate` wei paid nothing (4 wei at 20%, 99 wei exact-in and ~93 wei
@@ -59,7 +59,7 @@ one wei. `test_dustSwapsRoundTheFeeUp` reproduces the audit's 4-wei, 99-wei and 
 and `testFuzz_dustSwapsAlwaysPay` fuzzes sub-10_000-wei swaps across the schedule. The fork
 rehearsal also charges a 4-wei buy one wei on the live PoolManager.
 
-### 79f4aafb3d6bbb5ce20684ef002544475764996f5fbd038a42536d96788993ff — window timed from initialize (low)
+### 79f4aafb3d6bbb5ce20684ef002544475764996f5fbd038a42536d96788993ff: window timed from initialize (low)
 
 Reproduced: `beforeInitialize` wrote `openedAt`, so a pool whose liquidity arrived later than its
 initialization could reach the steady 1% before anyone could trade. Whether the factory initializes
@@ -79,7 +79,7 @@ initialization and the first trade half an hour later pays the opening fee. Exis
 call the fixture's `_open()` so they measure the schedule from a first trade at the fixture's
 opening time, as they did from initialization before.
 
-### db1b11d05e5c9617e6891dee2278f0d7baa9ae7ff87ca5a5412d512f7990ec6d — coverage (info)
+### db1b11d05e5c9617e6891dee2278f0d7baa9ae7ff87ca5a5412d512f7990ec6d: coverage (info)
 
 Not a defect; nothing to change. Its observations (constructor order, permissions, single-use
 factory-only initialization, claim accounting, sweep guards, no admin surface) are now also
@@ -87,7 +87,7 @@ asserted by `test/KeptHookLaunch.t.sol` and `test_constructorArgumentsInLaunchOr
 
 ## Revision: reviewer findings after acceptance
 
-### 277d240eb0ff344c490742d86f3da093d8663a6af1b94d195bfcac4955532918 — 1-wei empty-pool swap opens the window (medium)
+### 277d240eb0ff344c490742d86f3da093d8663a6af1b94d195bfcac4955532918: 1-wei empty-pool swap opens the window (medium)
 
 Reproduced with the reviewer's proof: on a pool the factory had initialized but not seeded, an
 exact-input swap of 1 wei of IMD left `openedAt` at the swap's timestamp. The cause is the
@@ -112,7 +112,7 @@ checked swap, in both currency orders and all fuzz runs, that `openedAt` moves e
 manager's `Swap` event carries a nonzero IMD amount. The fork rehearsal sends the 1-wei swap on
 the live PoolManager before seeding. The reviewer's proof passes.
 
-### fc2c2fe5c06d633dc0f5af8af61592afbef1b134397e1dc903fb7f6409b534ff — Referee Fund rebate to junk pledges (medium)
+### fc2c2fe5c06d633dc0f5af8af61592afbef1b134397e1dc903fb7f6409b534ff: Referee Fund rebate to junk pledges (medium)
 
 Reproduced with the reviewer's proof against a fresh `KeptVault`: a pledge on 1 wei of a
 self-minted token with an already-true `ContractDeployed` milestone is answered kept, and the
@@ -125,7 +125,7 @@ rebate rule for `KeptVault`, and this launch deploys only `KeptToken` and `KeptH
 live at `0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`, has no upgrade path, and is the brief's fixed
 fourth constructor argument and the fixed destination of `sweep()`. On 2026-10-18 its runtime on
 Robinhood Chain hashed to `0xf9d85b0c…` at 21,509 bytes, the same build this repository recorded
-for `src/KeptVault.sol` when that contract launched (see [docs/VERIFICATION.md](docs/VERIFICATION.md)).
+for `src/KeptVault.sol` when that contract launched (see [docs/VERIFICATION.md](../VERIFICATION.md)).
 Editing `src/KeptVault.sol` so the proof passes would make the repository's source diverge from
 the verified bytecode the hook pays into while changing nothing on chain, and pointing `sweep()`
 anywhere else would contradict the brief. The reviewer offered documentation as the other
@@ -134,7 +134,7 @@ for oracle checks of any milestone the oracle answers kept, including trivially 
 worthless tokens, paid at whatever price the vault's Intake quotes. A rebate cap or a value
 threshold belongs to a future vault version, which is the requester's decision, not this launch's.
 
-### aea5e300f4b03cc0fce1e8bf3086b98a9dec6341be898d8264063b806dcae24e — fees custodied under the vault owner's key (low, advisory)
+### aea5e300f4b03cc0fce1e8bf3086b98a9dec6341be898d8264063b806dcae24e: fees custodied under the vault owner's key (low, advisory)
 
 Confirmed by reading `proposeProtocol`/`executeProtocol` and the uncapped rebate in
 `onOracleResult`, and by reading the live vault: `owner()` is `0xd3336a7c8a7d8814c437196abb16c4fe7aa7b016`,
@@ -159,4 +159,4 @@ signer after the seven-day `PROTOCOL_DELAY` and could then rebate the whole fund
 `forge build --offline` and `forge test --offline` with
 `FOUNDRY_FUZZ_SEED=0x1cacf04b210f5bc3adc0aa32053cf59f520528175c4bad608c637a003db5baa6`: 157 passed,
 0 failed, 1 skipped (the fork suite, offline); `forge fmt --check` passes on the changed files. The
-fork suite passed at Robinhood block 92,064,204; see [docs/VERIFICATION.md](docs/VERIFICATION.md).
+fork suite passed at Robinhood block 92,064,204; see [docs/VERIFICATION.md](../VERIFICATION.md).

@@ -98,7 +98,7 @@ code { font-family: var(--mono); }
 
 /* ---------------------------------------------------------------- header */
 header.top {
-  position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--paper) 88%, transparent);
+  position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--paper) 96%, transparent);
   backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px);
   border-bottom: 1px solid transparent; view-transition-name: header;
 }

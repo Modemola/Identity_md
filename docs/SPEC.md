@@ -1,4 +1,4 @@
-# KEPT — promises the swarm enforces
+# KEPT: promises the swarm enforces
 
 > The team only gets paid when it ships, and the IMD swarm is the referee.
 
@@ -22,7 +22,7 @@ Launch 1 goes first; its address is a constructor argument of `KeptHook`.
 - **Pledge**: one project's promise set. It names the locked `token`, the `beneficiary`
   that receives kept tranches, a `name`, the panel settings snapshotted at creation, and an
   IMD `budget` that pays for checks.
-- **Milestone** (1–8 per pledge): a template, its parameters, a `deadline`, a token
+- **Milestone** (1 to 8 per pledge): a template, its parameters, a `deadline`, a token
   `amount`, and a display `title`. Its outcome is `Open`, `Kept` or `Broken`.
 - **Check**: one oracle question bought from the IMD Intake for one milestone
   (0.5 IMD today, read live from `Intake.priceOf`).
