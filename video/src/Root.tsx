@@ -17,7 +17,7 @@ import { Subtitles } from "./ui/Subtitles";
 const SCENES: Record<string, React.FC> = { open: Open, problem: Problem, lock: Lock, swarm: SwarmScene, verdict: Verdict, live: Live, fund: Fund, proof: Proof, end: End };
 
 /// Scenes overlap by a beat so every cut is a dissolve, never a jump.
-const Film: React.FC = () => {
+const Film: React.FC<{ clean?: boolean }> = ({ clean }) => {
   const t = useSeconds();
   return (
     <AbsoluteFill style={{ background: "#000", color: C.ink }}>
@@ -33,10 +33,10 @@ const Film: React.FC = () => {
           </AbsoluteFill>
         );
       })}
-      <Subtitles />
+      {clean ? null : <Subtitles />}
       <Finish />
     </AbsoluteFill>
   );
 };
 
-export const Root: React.FC = () => <Composition id="Film" component={Film} durationInFrames={TL.frames} fps={TL.fps} width={1920} height={1080} />;
+export const Root: React.FC = () => <Composition id="Film" component={Film} defaultProps={{ clean: false }} durationInFrames={TL.frames} fps={TL.fps} width={1920} height={1080} />;
