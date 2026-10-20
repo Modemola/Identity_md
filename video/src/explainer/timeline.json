@@ -1,0 +1,192 @@
+{
+  "fps": 30,
+  "duration": 116.616,
+  "frames": 3498,
+  "scenes": [
+    {
+      "id": "hype",
+      "start": 0.0,
+      "end": 10.715
+    },
+    {
+      "id": "dayone",
+      "start": 10.715,
+      "end": 23.149
+    },
+    {
+      "id": "soon",
+      "start": 23.149,
+      "end": 35.723
+    },
+    {
+      "id": "trust",
+      "start": 35.723,
+      "end": 48.355
+    },
+    {
+      "id": "meet",
+      "start": 48.355,
+      "end": 57.477
+    },
+    {
+      "id": "vault",
+      "start": 57.477,
+      "end": 70.741
+    },
+    {
+      "id": "swarm",
+      "start": 70.741,
+      "end": 85.555
+    },
+    {
+      "id": "verdict",
+      "start": 85.555,
+      "end": 95.755
+    },
+    {
+      "id": "real",
+      "start": 95.755,
+      "end": 107.027
+    },
+    {
+      "id": "end",
+      "start": 107.027,
+      "end": 116.616
+    }
+  ],
+  "lines": [
+    {
+      "id": "E1",
+      "scene": "hype",
+      "start": 1.2,
+      "end": 4.037,
+      "caption": "A new token launches. The team posts a roadmap."
+    },
+    {
+      "id": "E2",
+      "scene": "hype",
+      "start": 4.837,
+      "end": 8.315,
+      "caption": "A mobile app. Mainnet. Big partnerships. Everyone's excited."
+    },
+    {
+      "id": "E3",
+      "scene": "dayone",
+      "start": 11.515,
+      "end": 16.443,
+      "caption": "Here's the catch. On day one, the team already holds a giant pile of those tokens."
+    },
+    {
+      "id": "E4",
+      "scene": "dayone",
+      "start": 17.643,
+      "end": 20.949,
+      "caption": "They're locked in vesting, which unlocks a little more every month."
+    },
+    {
+      "id": "E5",
+      "scene": "soon",
+      "start": 23.949,
+      "end": 27.448,
+      "caption": "But vesting only watches the calendar. It never checks the work."
+    },
+    {
+      "id": "E6",
+      "scene": "soon",
+      "start": 29.048,
+      "end": 33.123,
+      "caption": "A year later, every token is unlocked. And the app? Still coming soon."
+    },
+    {
+      "id": "E7",
+      "scene": "trust",
+      "start": 36.523,
+      "end": 42.24,
+      "caption": "From the outside, you can't tell the builders from the talkers. On day one, they look exactly the same."
+    },
+    {
+      "id": "E8",
+      "scene": "trust",
+      "start": 43.24,
+      "end": 46.355,
+      "caption": "So holders trust less, and honest teams pay the price."
+    },
+    {
+      "id": "E9",
+      "scene": "meet",
+      "start": 49.155,
+      "end": 52.803,
+      "caption": "What if tokens only unlocked when the promise was actually kept?"
+    },
+    {
+      "id": "E10",
+      "scene": "meet",
+      "start": 53.803,
+      "end": 54.677,
+      "caption": "Meet KEPT."
+    },
+    {
+      "id": "E11",
+      "scene": "vault",
+      "start": 58.277,
+      "end": 62.565,
+      "caption": "The team locks its tokens in a vault, split into milestones anyone can check."
+    },
+    {
+      "id": "E12",
+      "scene": "vault",
+      "start": 63.565,
+      "end": 68.941,
+      "caption": "Ship a release on GitHub. Put the website live. Deploy the contract. Hit a number onchain."
+    },
+    {
+      "id": "E13",
+      "scene": "swarm",
+      "start": 71.341,
+      "end": 74.499,
+      "caption": "When the deadline hits, nobody takes the team's word for it."
+    },
+    {
+      "id": "E14",
+      "scene": "swarm",
+      "start": 75.299,
+      "end": 81.955,
+      "caption": "The IMD swarm checks. 9 independent AI agents look for themselves, and 7 have to agree."
+    },
+    {
+      "id": "E15",
+      "scene": "verdict",
+      "start": 86.155,
+      "end": 88.565,
+      "caption": "Promise kept? Those tokens go to the team."
+    },
+    {
+      "id": "E16",
+      "scene": "verdict",
+      "start": 90.965,
+      "end": 93.355,
+      "caption": "Promise broken? They burn. Gone for good."
+    },
+    {
+      "id": "E17",
+      "scene": "real",
+      "start": 96.555,
+      "end": 104.427,
+      "caption": "And it's real. KEPT locked 300 million of its own tokens on Robinhood Chain, and the swarm has already confirmed two promises."
+    },
+    {
+      "id": "E18",
+      "scene": "end",
+      "start": 107.827,
+      "end": 109.704,
+      "caption": "Don't trust the roadmap. Check it."
+    },
+    {
+      "id": "E19",
+      "scene": "end",
+      "start": 110.904,
+      "end": 113.016,
+      "caption": "KEPT. Promises the swarm enforces."
+    }
+  ]
+}

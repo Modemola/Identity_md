@@ -1,0 +1,75 @@
+{
+  "voice": "af_heart",
+  "speed": 1.06,
+  "scenes": [
+    {
+      "id": "hype",
+      "lines": [
+        { "id": "E1", "text": "A new token launches. The team posts a roadmap.", "caption": "A new token launches. The team posts a roadmap." },
+        { "id": "E2", "text": "A mobile app. Mainnet. Big partnerships. Everyone's excited.", "caption": "A mobile app. Mainnet. Big partnerships. Everyone's excited." }
+      ]
+    },
+    {
+      "id": "dayone",
+      "lines": [
+        { "id": "E3", "text": "Here's the catch. On day one, the team already holds a giant pile of those tokens.", "caption": "Here's the catch. On day one, the team already holds a giant pile of those tokens." },
+        { "id": "E4", "text": "They're locked in vesting, which unlocks a little more every month.", "caption": "They're locked in vesting, which unlocks a little more every month." }
+      ]
+    },
+    {
+      "id": "soon",
+      "lines": [
+        { "id": "E5", "text": "But vesting only watches the calendar. It never checks the work.", "caption": "But vesting only watches the calendar. It never checks the work." },
+        { "id": "E6", "text": "A year later, every token is unlocked. And the app? Still coming soon.", "caption": "A year later, every token is unlocked. And the app? Still coming soon." }
+      ]
+    },
+    {
+      "id": "trust",
+      "lines": [
+        { "id": "E7", "text": "From the outside, you can't tell the builders from the talkers. On day one, they look exactly the same.", "caption": "From the outside, you can't tell the builders from the talkers. On day one, they look exactly the same." },
+        { "id": "E8", "text": "So holders trust less, and honest teams pay the price.", "caption": "So holders trust less, and honest teams pay the price." }
+      ]
+    },
+    {
+      "id": "meet",
+      "lines": [
+        { "id": "E9", "text": "What if tokens only unlocked when the promise was actually kept?", "caption": "What if tokens only unlocked when the promise was actually kept?" },
+        { "id": "E10", "text": "Meet KEPT.", "caption": "Meet KEPT." }
+      ]
+    },
+    {
+      "id": "vault",
+      "lines": [
+        { "id": "E11", "text": "The team locks its tokens in a vault, split into milestones anyone can check.", "caption": "The team locks its tokens in a vault, split into milestones anyone can check." },
+        { "id": "E12", "text": "Ship a release on GitHub. Put the website live. Deploy the contract. Hit a number on chain.", "caption": "Ship a release on GitHub. Put the website live. Deploy the contract. Hit a number onchain." }
+      ]
+    },
+    {
+      "id": "swarm",
+      "lines": [
+        { "id": "E13", "text": "When the deadline hits, nobody takes the team's word for it.", "caption": "When the deadline hits, nobody takes the team's word for it." },
+        { "id": "E14", "text": "The I M D swarm checks. Nine independent AI agents look for themselves, and seven have to agree.", "caption": "The IMD swarm checks. 9 independent AI agents look for themselves, and 7 have to agree." }
+      ]
+    },
+    {
+      "id": "verdict",
+      "lines": [
+        { "id": "E15", "text": "Promise kept? Those tokens go to the team.", "caption": "Promise kept? Those tokens go to the team." },
+        { "id": "E16", "text": "Promise broken? They burn. Gone for good.", "caption": "Promise broken? They burn. Gone for good." }
+      ]
+    },
+    {
+      "id": "real",
+      "lines": [
+        { "id": "E17", "text": "And it's real. KEPT locked three hundred million of its own tokens on Robinhood Chain, and the swarm has already confirmed two promises.", "caption": "And it's real. KEPT locked 300 million of its own tokens on Robinhood Chain, and the swarm has already confirmed two promises." }
+      ]
+    },
+    {
+      "id": "end",
+      "lines": [
+        { "id": "E18", "text": "Don't trust the roadmap. Check it.", "caption": "Don't trust the roadmap. Check it." },
+        { "id": "E19", "text": "KEPT. Promises the swarm enforces.", "caption": "KEPT. Promises the swarm enforces." }
+      ]
+    }
+  ]
+}

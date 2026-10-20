@@ -1,6 +1,6 @@
 """Narration: Kokoro-82M, voice af_heart.
 
-    python audio/tts.py <kokoro-v1.0.onnx> <voices-v1.0.bin>
+    python audio/tts.py <kokoro-v1.0.onnx> <voices-v1.0.bin> [narration.json] [out dir]
 
 Model files: https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0
 Writes one wav per line to audio-src/, which build_timeline.py and mix.py read.
@@ -13,8 +13,8 @@ import soundfile as sf
 from kokoro_onnx import Kokoro
 
 root = Path(__file__).resolve().parent.parent
-spec = json.loads((root / "narration.json").read_text())
-out = root / "audio-src"
+spec = json.loads(Path(sys.argv[3] if len(sys.argv) > 3 else root / "narration.json").read_text())
+out = Path(sys.argv[4]) if len(sys.argv) > 4 else root / "audio-src"
 out.mkdir(exist_ok=True)
 tts = Kokoro(sys.argv[1], sys.argv[2])
 for scene in spec["scenes"]:
