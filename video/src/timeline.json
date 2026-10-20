@@ -1,0 +1,159 @@
+{
+  "fps": 30,
+  "duration": 108.671,
+  "frames": 3260,
+  "scenes": [
+    {
+      "id": "open",
+      "start": 0.0,
+      "end": 11.969
+    },
+    {
+      "id": "problem",
+      "start": 11.969,
+      "end": 21.88
+    },
+    {
+      "id": "lock",
+      "start": 21.88,
+      "end": 38.717
+    },
+    {
+      "id": "swarm",
+      "start": 38.717,
+      "end": 53.019
+    },
+    {
+      "id": "verdict",
+      "start": 53.019,
+      "end": 62.069
+    },
+    {
+      "id": "live",
+      "start": 62.069,
+      "end": 82.103
+    },
+    {
+      "id": "fund",
+      "start": 82.103,
+      "end": 91.876
+    },
+    {
+      "id": "proof",
+      "start": 91.876,
+      "end": 100.473
+    },
+    {
+      "id": "end",
+      "start": 100.473,
+      "end": 108.671
+    }
+  ],
+  "lines": [
+    {
+      "id": "L1",
+      "scene": "open",
+      "start": 1.6,
+      "end": 5.056,
+      "caption": "Every token launch hands the team its tokens on day one."
+    },
+    {
+      "id": "L2",
+      "scene": "open",
+      "start": 5.556,
+      "end": 7.369,
+      "caption": "The roadmap is just a promise."
+    },
+    {
+      "id": "L3",
+      "scene": "problem",
+      "start": 12.769,
+      "end": 17.697,
+      "caption": "Vesting only measures time. The tokens unlock whether anything was built or not."
+    },
+    {
+      "id": "L4",
+      "scene": "problem",
+      "start": 18.397,
+      "end": 20.68,
+      "caption": "Nobody checks if the promise was kept."
+    },
+    {
+      "id": "L5",
+      "scene": "lock",
+      "start": 22.68,
+      "end": 32.259,
+      "caption": "With KEPT, a team locks its tokens behind public milestones. A release on GitHub. A live website. A deployed contract. A number onchain."
+    },
+    {
+      "id": "L6",
+      "scene": "lock",
+      "start": 32.859,
+      "end": 37.317,
+      "caption": "Each one becomes a single yes or no question, written by the vault itself."
+    },
+    {
+      "id": "L7",
+      "scene": "swarm",
+      "start": 39.517,
+      "end": 47.176,
+      "caption": "At the deadline, the team asks the IMD oracle. A panel of 9 agents checks the milestone, and 7 must agree."
+    },
+    {
+      "id": "L8",
+      "scene": "swarm",
+      "start": 48.376,
+      "end": 51.619,
+      "caption": "The verdict is signed, and the vault verifies it onchain."
+    },
+    {
+      "id": "L9",
+      "scene": "verdict",
+      "start": 53.619,
+      "end": 56.328,
+      "caption": "Kept, and that share of the tokens goes to the team."
+    },
+    {
+      "id": "L10",
+      "scene": "verdict",
+      "start": 57.928,
+      "end": 59.869,
+      "caption": "Not proven in time, and it burns."
+    },
+    {
+      "id": "L11",
+      "scene": "live",
+      "start": 62.869,
+      "end": 69.184,
+      "caption": "This is live on Robinhood Chain. KEPT locked 300 million of its own tokens behind its roadmap."
+    },
+    {
+      "id": "L12",
+      "scene": "live",
+      "start": 70.084,
+      "end": 80.303,
+      "caption": "The swarm has confirmed two promises so far. 8 of 9 agents agreed on the first, 7 of 9 on the second. 150 million KEPT, released."
+    },
+    {
+      "id": "L13",
+      "scene": "fund",
+      "start": 82.903,
+      "end": 90.476,
+      "caption": "Every trade in the KEPT pool pays 1% of its IMD into a fund that refunds the check for teams who keep their word."
+    },
+    {
+      "id": "L14",
+      "scene": "proof",
+      "start": 92.676,
+      "end": 98.073,
+      "caption": "221 tests. Three contracts, launched and audited through IMD."
+    },
+    {
+      "id": "L15",
+      "scene": "end",
+      "start": 101.873,
+      "end": 104.071,
+      "caption": "KEPT. Promises the swarm enforces."
+    }
+  ]
+}

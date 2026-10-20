@@ -1,0 +1,66 @@
+{
+  "voice": "af_heart",
+  "speed": 1.0,
+  "scenes": [
+    {
+      "id": "open",
+      "lines": [
+        { "id": "L1", "text": "Every token launch hands the team its tokens on day one.", "caption": "Every token launch hands the team its tokens on day one." },
+        { "id": "L2", "text": "The roadmap is just a promise.", "caption": "The roadmap is just a promise." }
+      ]
+    },
+    {
+      "id": "problem",
+      "lines": [
+        { "id": "L3", "text": "Vesting only measures time. The tokens unlock whether anything was built or not.", "caption": "Vesting only measures time. The tokens unlock whether anything was built or not." },
+        { "id": "L4", "text": "Nobody checks if the promise was kept.", "caption": "Nobody checks if the promise was kept." }
+      ]
+    },
+    {
+      "id": "lock",
+      "lines": [
+        { "id": "L5", "text": "With KEPT, a team locks its tokens behind public milestones. A release on GitHub. A live website. A deployed contract. A number on chain.", "caption": "With KEPT, a team locks its tokens behind public milestones. A release on GitHub. A live website. A deployed contract. A number onchain." },
+        { "id": "L6", "text": "Each one becomes a single yes or no question, written by the vault itself.", "caption": "Each one becomes a single yes or no question, written by the vault itself." }
+      ]
+    },
+    {
+      "id": "swarm",
+      "lines": [
+        { "id": "L7", "text": "At the deadline, the team asks the I M D oracle. A panel of nine agents checks the milestone, and seven must agree.", "caption": "At the deadline, the team asks the IMD oracle. A panel of 9 agents checks the milestone, and 7 must agree." },
+        { "id": "L8", "text": "The verdict is signed, and the vault verifies it on chain.", "caption": "The verdict is signed, and the vault verifies it onchain." }
+      ]
+    },
+    {
+      "id": "verdict",
+      "lines": [
+        { "id": "L9", "text": "Kept, and that share of the tokens goes to the team.", "caption": "Kept, and that share of the tokens goes to the team." },
+        { "id": "L10", "text": "Not proven in time, and it burns.", "caption": "Not proven in time, and it burns." }
+      ]
+    },
+    {
+      "id": "live",
+      "lines": [
+        { "id": "L11", "text": "This is live on Robinhood Chain. KEPT locked three hundred million of its own tokens behind its roadmap.", "caption": "This is live on Robinhood Chain. KEPT locked 300 million of its own tokens behind its roadmap." },
+        { "id": "L12", "text": "The swarm has confirmed two promises so far. Eight of nine agents agreed on the first, seven of nine on the second. One hundred and fifty million KEPT, released.", "caption": "The swarm has confirmed two promises so far. 8 of 9 agents agreed on the first, 7 of 9 on the second. 150 million KEPT, released." }
+      ]
+    },
+    {
+      "id": "fund",
+      "lines": [
+        { "id": "L13", "text": "Every trade in the KEPT pool pays one percent of its I M D into a fund that refunds the check for teams who keep their word.", "caption": "Every trade in the KEPT pool pays 1% of its IMD into a fund that refunds the check for teams who keep their word." }
+      ]
+    },
+    {
+      "id": "proof",
+      "lines": [
+        { "id": "L14", "text": "Two hundred and twenty one tests. Three contracts, launched and audited through I M D.", "caption": "221 tests. Three contracts, launched and audited through IMD." }
+      ]
+    },
+    {
+      "id": "end",
+      "lines": [
+        { "id": "L15", "text": "KEPT. Promises the swarm enforces.", "caption": "KEPT. Promises the swarm enforces." }
+      ]
+    }
+  ]
+}
