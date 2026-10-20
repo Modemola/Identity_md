@@ -38,11 +38,12 @@ export const Lock: React.FC = () => {
   const part1 = 1 - tw(t, L6.start - 0.5, L6.start + 0.2);
   const browserIn = tw(t, L6.start - 0.4, L6.start + 0.6, 0, 1, OUT);
   const cam = {
-    x: 640,
-    y: tw(t, L6.start, L6.start + 1.6, 900, 1180, INOUT),
+    x: tw(t, L6.start, L6.start + 1.6, 720, 526, INOUT),
+    y: tw(t, L6.start, L6.start + 1.6, 900, 1170, INOUT),
     zoom: tw(t, L6.start, L6.start + 1.6, 1.0, 1.55, INOUT),
   };
-  const q = pagePoint(250, 1215, cam, NEW_H, 1400);
+  // the question box on the page, x 168..892, y 1206..1380
+  const q = pagePoint(168, 1206, cam, NEW_H, 1400);
   const hl = tw(t, L6.start + 1.7, L6.start + 2.3);
   return (
     <AbsoluteFill style={{ opacity: 1 - out, alignItems: "center" }}>
@@ -81,7 +82,7 @@ export const Lock: React.FC = () => {
       </div>
       <div style={{ position: "absolute", top: 190, opacity: browserIn, transform: `translateY(${(1 - browserIn) * 40}px)` }}>
         <Browser src="shots/new-full.png" width={1400} pageH={NEW_H} cam={cam} url="keptmd.vercel.app/#/new">
-          <div style={{ position: "absolute", left: q.x - 16, top: q.y - 16, width: 1080 * q.s * 0.62, height: 210 * q.s * 0.62 + 20, border: `2px solid ${C.ok}`, opacity: hl, boxShadow: `0 0 40px rgba(62,207,122,${0.35 * hl})` }} />
+          <div style={{ position: "absolute", left: q.x - 8, top: q.y - 8, width: 724 * q.s + 16, height: 174 * q.s + 16, border: `2px solid ${C.ok}`, opacity: hl, boxShadow: `0 0 40px rgba(62,207,122,${0.35 * hl})` }} />
         </Browser>
       </div>
     </AbsoluteFill>
