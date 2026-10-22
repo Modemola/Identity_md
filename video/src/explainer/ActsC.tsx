@@ -11,7 +11,7 @@ const FLOOR = 880;
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 
 /// A rubber stamp that slams down.
-const StampMark: React.FC<{ x: number; y: number; t: number; at: number; kind: "kept" | "broken"; s?: number }> = ({ x, y, t, at, kind, s = 1 }) => {
+export const StampMark: React.FC<{ x: number; y: number; t: number; at: number; kind: "kept" | "broken"; s?: number }> = ({ x, y, t, at, kind, s = 1 }) => {
   if (t < at) return null;
   const u = tw(t, at, at + 0.16, 0, 1, (k) => k * k);
   const sc = lerp(3, 1, u);

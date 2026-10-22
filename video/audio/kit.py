@@ -317,6 +317,157 @@ def sfx_burn(dur=2.2):
 
 
 # -------------------------------------------------------------------------------------------
+# Word timing and cartoon sounds (the explainer and the shorts)
+
+
+def wt(lid, word, nth=0):
+    """When `word` is spoken in line `lid` (same estimate as the picture)."""
+    l = LINE[lid]
+    words = l["caption"].split(" ")
+    w = [len(x) + 1 + (6 if x[-1] in ".?!" else 3 if x[-1] in ",:" else 0) for x in words]
+    total = sum(w)
+    acc = 0
+    seen = 0
+    for x, k in zip(words, w):
+        if "".join(ch for ch in x if ch.isalnum() or ch in "'_").lower() == word.lower():
+            if seen == nth:
+                return l["start"] + acc / total * (l["end"] - l["start"])
+            seen += 1
+        acc += k
+    raise KeyError(word)
+
+
+def tw(t, t0, t1, a=0.0, b=1.0):
+    u = min(1.0, max(0.0, (t - t0) / (t1 - t0)))
+    u = u * u * (3 - 2 * u)
+    return a + (b - a) * u
+
+
+# -------------------------------------------------------------------------------------------
+# Cartoon sounds
+
+
+def sfx_pop(f=900, dur=0.12):
+    n = int(dur * SR)
+    t = tt(n)
+    fr = f * (1.8 * np.exp(-t * 40) + 0.6)
+    return np.sin(2 * np.pi * np.cumsum(fr) / SR) * np.exp(-t * 30) * np.minimum(1, t / 0.001)
+
+
+def sfx_boing(f=180, dur=0.6):
+    n = int(dur * SR)
+    t = tt(n)
+    fr = f * (1 + 0.5 * np.exp(-t * 4) * np.sin(2 * np.pi * 14 * t)) * (1 + 1.2 * t)
+    sig = np.sin(2 * np.pi * np.cumsum(fr) / SR) + 0.25 * np.sin(4 * np.pi * np.cumsum(fr) / SR)
+    return sig * np.exp(-t * 5) * np.minimum(1, t / 0.004)
+
+
+def sfx_clink(f=2900):
+    n = int(0.35 * SR)
+    t = tt(n)
+    sig = sum(a * np.sin(2 * np.pi * f * r * t) * np.exp(-t * d) for r, a, d in ((1, 1, 18), (2.76, 0.5, 30), (5.4, 0.25, 45)))
+    return sig * np.minimum(1, t / 0.0005)
+
+
+def sfx_clap():
+    n = int(0.22 * SR)
+    t = tt(n)
+    noise = bp(RNG.standard_normal(n), 900, 5000)
+    env = np.zeros(n)
+    for k, d in enumerate((0.0, 0.011, 0.022)):
+        i = int(d * SR)
+        env[i:] += np.exp(-tt(n - i) * (180 if k < 2 else 22)) * (0.7 if k < 2 else 1)
+    return noise * env
+
+
+def sfx_scratch(dur=0.5):
+    n = int(dur * SR)
+    t = tt(n) / dur
+    noise = RNG.standard_normal(n)
+    out = np.zeros(n)
+    blocks = 40
+    for b in range(blocks):
+        i0, i1 = b * n // blocks, (b + 1) * n // blocks
+        x = (b + 0.5) / blocks
+        c = 600 + 2600 * abs(np.sin(x * np.pi * 2.5))
+        seg = bp(noise[max(0, i0 - 1500):i1], c * 0.6, c * 1.6)
+        out[i0:i1] = seg[-(i1 - i0):]
+    return out * np.sin(np.pi * t) ** 0.5
+
+
+def sfx_flip():
+    n = int(0.16 * SR)
+    t = tt(n) / 0.16
+    return hp(RNG.standard_normal(n), 2500) * np.sin(np.pi * t) ** 2 * 0.8
+
+
+def sfx_buzz(dur=0.45):
+    n = int(dur * SR)
+    t = tt(n)
+    sq = np.sign(np.sin(2 * np.pi * 110 * t)) + 0.5 * np.sign(np.sin(2 * np.pi * 116 * t))
+    return lp(sq, 2200) * np.minimum(1, t / 0.005) * np.exp(-t * 2.5) * 0.5
+
+
+def sfx_wahwah():
+    """Four falling notes on a muted horn: the sad trombone."""
+    out = []
+    for k, (m, d) in enumerate(((58, 0.42), (57, 0.42), (56, 0.42), (55, 1.2))):
+        n = int(d * SR)
+        t = tt(n)
+        vib = 1 + (0.012 * np.sin(2 * np.pi * 6 * t) * np.minimum(1, t / 0.3) if k == 3 else 0)
+        fr = hz(m) * vib * (1 - (0.03 * t if k == 3 else 0))
+        ph = 2 * np.pi * np.cumsum(fr) / SR
+        sig = sum(np.sin(h * ph) / h ** 0.8 for h in range(1, 9))
+        sig = lp(sig, 900 + 900 * np.exp(-t * 3)[0])
+        out.append(sig * env_adsr(n, 0.03, 0.1, 0.8, 0.12))
+    return np.concatenate(out) * 0.4
+
+
+def sfx_alarm(dur=1.4):
+    n = int(dur * SR)
+    t = tt(n)
+    gate = (np.sin(2 * np.pi * 18 * t) > 0).astype(float)
+    return (np.sin(2 * np.pi * 2300 * t) + 0.6 * np.sin(2 * np.pi * 3100 * t)) * gate * np.exp(-t * 0.8) * 0.5
+
+
+def sfx_beep(f=1600, dur=0.07):
+    n = int(dur * SR)
+    t = tt(n)
+    return np.sin(2 * np.pi * f * t) * np.minimum(1, t / 0.002) * np.minimum(1, (dur - t) / 0.01)
+
+
+def sfx_crickets(dur=2.5):
+    n = int(dur * SR)
+    t = tt(n)
+    chirp = (np.sin(2 * np.pi * 4.4 * t) > 0.55).astype(float) * (np.sin(2 * np.pi * 34 * t) > 0).astype(float)
+    return np.sin(2 * np.pi * 4700 * t) * lp(chirp, 300) * 0.4
+
+
+def sfx_wind(dur=2.5):
+    n = int(dur * SR)
+    x = tt(n) / dur
+    return bp(RNG.standard_normal(n), 300, 1400) * np.sin(np.pi * x) ** 1.5 * (0.7 + 0.3 * np.sin(2 * np.pi * 1.3 * x * dur))
+
+
+def sfx_party():
+    """A party popper: crack plus a spray of sparkles."""
+    n = int(0.08 * SR)
+    t = tt(n)
+    crack = hp(RNG.standard_normal(n), 1500) * np.exp(-t * 70)
+    sp = sfx_shimmer(91, 1.4) * 0.6
+    out = np.zeros(len(sp))
+    out[:n] += crack * 1.4
+    return out + sp
+
+
+def sfx_zip(up=True, dur=0.22):
+    n = int(dur * SR)
+    t = tt(n) / dur
+    f = (500 + 2500 * t) if up else (3000 - 2500 * t)
+    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * t) * 0.6
+
+
+# -------------------------------------------------------------------------------------------
 # Narration
 
 

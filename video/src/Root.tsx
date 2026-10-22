@@ -11,6 +11,8 @@ import { SwarmScene } from "./scenes/SwarmScene";
 import { Verdict } from "./scenes/Verdict";
 import { Explainer } from "./explainer/Explainer";
 import ET from "./explainer/timeline.json";
+import { Imdelivering } from "./shorts/Imdelivering";
+import S1 from "./shorts/imdelivering.json";
 import { C } from "./theme";
 import { TL, useSeconds } from "./time";
 import { Backdrop, Finish } from "./ui/Backdrop";
@@ -45,5 +47,6 @@ export const Root: React.FC = () => (
   <>
     <Composition id="Film" component={Film} defaultProps={{ clean: false }} durationInFrames={TL.frames} fps={TL.fps} width={1920} height={1080} />
     <Composition id="Explainer" component={Explainer} defaultProps={{ clean: false }} durationInFrames={ET.frames} fps={ET.fps} width={1920} height={1080} />
+    <Composition id="Imdelivering" component={Imdelivering} durationInFrames={S1.frames} fps={S1.fps} width={1080} height={1080} />
   </>
 );
