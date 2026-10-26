@@ -1,0 +1,60 @@
+{
+  "fps": 30,
+  "duration": 30.0,
+  "frames": 900,
+  "scenes": [
+    {
+      "id": "trailer",
+      "start": 0,
+      "end": 30
+    }
+  ],
+  "lines": [],
+  "cues": {
+    "bpm": 120,
+    "promise": 0.3,
+    "cardForm": 1.6,
+    "cardOn": 2.2,
+    "broken": 3.0,
+    "shatter": 3.9,
+    "introducing": 4.5,
+    "sphere": 4.4,
+    "seal": 6.0,
+    "pledge": 7.0,
+    "lockClick": 7.6,
+    "milestones": 8.0,
+    "locks": [
+      8.5,
+      9.0,
+      9.5,
+      10.0
+    ],
+    "deadline": 10.5,
+    "beam": 11.0,
+    "drop": 12.0,
+    "votes": [
+      12.25,
+      12.5,
+      12.75,
+      13.0,
+      13.25,
+      13.5,
+      13.75,
+      14.0,
+      14.25
+    ],
+    "no": 5,
+    "kept": 15.0,
+    "stream": 15.25,
+    "brokenCard": 17.0,
+    "burn": 17.5,
+    "stats": [
+      19.0,
+      20.5,
+      22.0
+    ],
+    "tagline": 23.5,
+    "logo": 26.0,
+    "end": 30.0
+  }
+}

@@ -7,15 +7,22 @@
     "render": "remotion render src/index.ts Film out/picture.mp4"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "5.2.5",
+    "@react-three/fiber": "9.8.2",
+    "@react-three/postprocessing": "3.2.2",
+    "@remotion/bundler": "4.0.534",
     "@remotion/cli": "4.0.534",
     "@remotion/renderer": "4.0.534",
-    "@remotion/bundler": "4.0.534",
-    "remotion": "4.0.534",
+    "@remotion/three": "4.0.534",
+    "postprocessing": "6.39.5",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "remotion": "4.0.534",
+    "three": "0.180.0"
   },
   "devDependencies": {
     "@types/react": "19.0.0",
+    "@types/three": "0.180.0",
     "typescript": "5.6.3"
   }
 }

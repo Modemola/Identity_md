@@ -20,7 +20,7 @@ export const C = {
   hair2: "rgba(255,255,255,0.20)",
 };
 
-export const F = { mono: "'IBM Plex Mono', ui-monospace, monospace" };
+export const F = { mono: "'IBM Plex Mono', ui-monospace, monospace", sans: "'IBM Plex Sans', system-ui, sans-serif" };
 
 /// One easing family for the whole film, the same curves the site uses.
 export const OUT = Easing.bezier(0.22, 1, 0.36, 1);
