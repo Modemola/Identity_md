@@ -181,7 +181,7 @@ export const Hud: React.FC<{ t: number; frame: number; pal: Pal; scenes: [number
       {corner("left", "bottom")}
       {corner("right", "bottom")}
       <div style={{ position: "absolute", left: 100, top: 46, fontSize: 16, letterSpacing: "0.3em", color: a }}>{feed}</div>
-      <div style={{ position: "absolute", left: 100, top: 72, fontSize: 26, letterSpacing: "0.18em", fontWeight: 600, opacity: swap, transform: `translateX(${(1 - swap) * -20}px)`, ...grad(a, b) }}>{label}</div>
+      <div style={{ position: "absolute", left: 100, top: 72, fontSize: 26, letterSpacing: "0.18em", fontWeight: 600, opacity: swap, transform: `translateX(${(1 - swap) * -20}px)`, color: a, textShadow: `0 0 18px ${b}` }}>{label}</div>
       <div style={{ position: "absolute", right: 100, top: 46, fontSize: 16, letterSpacing: "0.2em", display: "flex", gap: 12, alignItems: "center" }}>
         <span style={{ width: 12, height: 12, borderRadius: 6, background: "#ff3d5a", opacity: Math.floor(t * 2) % 2 ? 1 : 0.3, boxShadow: "0 0 12px #ff3d5a" }} />
         REC {tc}
