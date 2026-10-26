@@ -18,6 +18,8 @@ import S2 from "./shorts/roadmap.json";
 import { Trailer } from "./trailer/Trailer";
 import TR from "./trailer/trailer.json";
 import { Trailer2 } from "./trailer2/Trailer2";
+import { VestingVsKept } from "./shorts3d/VestingVsKept";
+import S5 from "./shorts3d/vesting.json";
 import { C } from "./theme";
 import { TL, useSeconds } from "./time";
 import { Backdrop, Finish } from "./ui/Backdrop";
@@ -56,5 +58,6 @@ export const Root: React.FC = () => (
     <Composition id="RoadmapMeetsSwarm" component={RoadmapMeetsSwarm} durationInFrames={S2.frames} fps={S2.fps} width={1080} height={1080} />
     <Composition id="Trailer" component={Trailer} durationInFrames={TR.frames} fps={TR.fps} width={1920} height={1080} />
     <Composition id="Trailer2" component={Trailer2} durationInFrames={TR.frames} fps={TR.fps} width={1920} height={1080} />
+    <Composition id="VestingVsKept" component={VestingVsKept} durationInFrames={S5.frames} fps={S5.fps} width={1920} height={1080} />
   </>
 );

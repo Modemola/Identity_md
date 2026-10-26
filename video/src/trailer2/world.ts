@@ -32,7 +32,7 @@ export const milestonePos = (k: number): { p: V3; ry: number } => ({
 });
 
 // ---------------------------------------------------------------------------- camera
-type CamKey = [number, V3, V3]; // time, position, look-at
+export type CamKey = [number, V3, V3]; // time, position, look-at
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
 const KEYS: CamKey[] = [
@@ -69,7 +69,7 @@ const KEYS: CamKey[] = [
   [30.0, add(SEAL_END, [0, 0, 10.2]), SEAL_END],
 ];
 
-function hermite(t: number, pick: (k: CamKey) => V3): V3 {
+function hermite(KEYS: CamKey[], t: number, pick: (k: CamKey) => V3): V3 {
   let i = 0;
   while (i < KEYS.length - 2 && t > KEYS[i + 1][0]) i++;
   const k0 = KEYS[Math.max(0, i - 1)], k1 = KEYS[i], k2 = KEYS[i + 1], k3 = KEYS[Math.min(KEYS.length - 1, i + 2)];
@@ -90,20 +90,22 @@ function hermite(t: number, pick: (k: CamKey) => V3): V3 {
 const HITS = [Q.shatter, Q.seal, Q.drop, Q.votes[7], Q.kept, Q.brokenCard + 0.25, ...Q.stats, Q.logo];
 export const hitAmount = (t: number) => HITS.reduce((m, h) => Math.max(m, t >= h ? Math.exp(-(t - h) * 9) : 0), 0);
 
-export function camAt(t: number) {
-  const pos = hermite(t, (k) => k[1]);
-  const look = hermite(t, (k) => k[2]);
-  // handheld drift, a little roll, and a kick on every hit
-  const hit = hitAmount(t);
+/// A camera path through `keys`, with handheld drift, a little roll and a kick on every hit.
+export const pathFrom = (keys: CamKey[], hits: (t: number) => number) => (t: number) => {
+  const pos = hermite(keys, t, (k) => k[1]);
+  const look = hermite(keys, t, (k) => k[2]);
+  const hit = hits(t);
   pos[0] += Math.sin(t * 1.3) * 0.06 + Math.sin(t * 61) * 0.05 * hit;
   pos[1] += Math.cos(t * 1.1) * 0.05 + Math.cos(t * 53) * 0.05 * hit;
   const roll = Math.sin(t * 0.45) * 0.035 + Math.sin(t * 0.17 + 1) * 0.02;
   return { pos, look, roll };
-}
+};
+export const camAt = pathFrom(KEYS, hitAmount);
+export const hitsAt = (hits: number[]) => (t: number) => hits.reduce((m, h) => Math.max(m, t >= h ? Math.exp(-(t - h) * 9) : 0), 0);
 
 /// A three.js camera at time t, shared by the WebGL scene and the CSS 3D layer.
-export function cameraAt(t: number, aspect = 16 / 9) {
-  const c = camAt(t);
+export function cameraAt(t: number, aspect = 16 / 9, path = camAt) {
+  const c = path(t);
   const cam = new THREE.PerspectiveCamera(FOV, aspect, 0.1, 400);
   cam.position.set(...c.pos);
   cam.up.set(Math.sin(c.roll), Math.cos(c.roll), 0);
@@ -116,8 +118,8 @@ export function cameraAt(t: number, aspect = 16 / 9) {
 // ---------------------------------------------------------------------------- colour
 export type RGB = [number, number, number];
 const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
-type Pal = { a: RGB; b: RGB; c: RGB; bg: RGB };
-const P = (a: string, b: string, c: string, bg: string): Pal => ({ a: hex(a), b: hex(b), c: hex(c), bg: hex(bg) });
+export type Pal = { a: RGB; b: RGB; c: RGB; bg: RGB };
+export const P = (a: string, b: string, c: string, bg: string): Pal => ({ a: hex(a), b: hex(b), c: hex(c), bg: hex(bg) });
 
 const PALETTES: [number, Pal][] = [
   [0, P("#7b5cff", "#ff4fd8", "#3ee6ff", "#140a30")],
@@ -136,7 +138,7 @@ const PALETTES: [number, Pal][] = [
   [23.4, P("#7b5cff", "#2de0c0", "#3ecf7a", "#0c0a26")],
   [25.9, P("#3ecf7a", "#ffd36b", "#ffffff", "#021a10")],
 ];
-const mix = (x: RGB, y: RGB, u: number): RGB => [x[0] + (y[0] - x[0]) * u, x[1] + (y[1] - x[1]) * u, x[2] + (y[2] - x[2]) * u];
+export const mix = (x: RGB, y: RGB, u: number): RGB => [x[0] + (y[0] - x[0]) * u, x[1] + (y[1] - x[1]) * u, x[2] + (y[2] - x[2]) * u];
 
 export function paletteAt(t: number): Pal {
   let i = 0;

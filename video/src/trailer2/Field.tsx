@@ -3,8 +3,49 @@ import { ThreeCanvas } from "@remotion/three";
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 import * as THREE from "three";
-import { GREY, knotPos, NA, rnd, swarmAt } from "./swarm";
-import { B, camAt, E, ESPHERE, F, FOV, hitAmount, paletteAt, Q, RGB, SEAL_END, V3 } from "./world";
+import { Frame, GREY, knotPos, NA, rnd, swarmAt } from "./swarm";
+import { B, camAt, E, ESPHERE, F, FOV, hitAmount, Pal, paletteAt, Q, RGB, SEAL_END, V3 } from "./world";
+
+/// Everything a film tells the world: its camera, colours, swarm, and which set pieces are lit.
+export type Beam = { a: V3; b: V3; col: RGB; k: number; fade?: number };
+export type FieldSpec = {
+  cam: (t: number) => { pos: V3; look: V3; roll: number };
+  palette: (t: number) => Pal;
+  hit: (t: number) => number;
+  swarm: (t: number) => Frame;
+  beatFrom: number;
+  grid: (t: number) => number;
+  tunnel: (t: number) => number;
+  rays: (t: number) => { on: number; at: V3 };
+  beams: (t: number) => Beam[];
+};
+const win = (t: number, a: number, b: number, f = 0.4) => Math.max(0, Math.min(1, (t - a) / f, (b - t) / f));
+
+/// The launch trailer's world.
+export const TRAILER: FieldSpec = {
+  cam: camAt,
+  palette: paletteAt,
+  hit: hitAmount,
+  swarm: swarmAt,
+  beatFrom: Q.pledge,
+  grid: (t) => 1 - win(t, 3.95, 6.1, 0.3),
+  tunnel: (t) => win(t, 3.85, 6.25, 0.3),
+  rays: (t) => ({ on: Math.max(win(t, Q.seal - 0.05, Q.pledge + 0.1, 0.25), win(t, Q.logo - 0.05, 31, 0.4)), at: t > Q.tagline ? SEAL_END : B }),
+  beams: (t) => {
+    const out: Beam[] = [];
+    const deadline = win(t, Q.beam, Q.drop - 0.05, 0.3);
+    if (deadline > 0)
+      for (let k = 0; k < 6; k++)
+        out.push({ a: [ESPHERE[0] + Math.cos(k) * 0.6, ESPHERE[1] - 1.6, ESPHERE[2] + Math.sin(k) * 0.6], b: [E[0] + 2.6 - k * 0.15, E[1] + 1.0 - k * 0.3, E[2]], col: [0.24, 1, 0.56], k: 0.9 * deadline, fade: 1 });
+    for (let k = 0; k < 9; k++) {
+      const v = Q.votes[k];
+      const on = win(t, v, Q.kept, 0.15);
+      if (on <= 0) continue;
+      out.push({ a: knotPos(k, t), b: F, col: k !== Q.no ? [0.24, 1, 0.56] : [1, 0.3, 0.25], k: on * (1 + 2.5 * Math.exp(-(t - v) * 8)) * 0.6, fade: 0.2 });
+    }
+    return out;
+  },
+};
 
 const ND = 5000; // dust around the camera
 const BOX: V3 = [44, 26, 90];
@@ -54,8 +95,6 @@ const touch = (g: THREE.BufferGeometry) => {
   for (const k of Object.keys(g.attributes)) g.attributes[k].needsUpdate = true;
 };
 const lerp3 = (a: RGB, b: RGB, u: number): RGB => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
-const win = (t: number, a: number, b: number, f = 0.4) => Math.max(0, Math.min(1, (t - a) / f, (b - t) / f));
-
 /// A radial glow texture for the nebula clouds.
 function glowTexture() {
   const c = document.createElement("canvas");
@@ -70,9 +109,9 @@ function glowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-const Rig: React.FC<{ t: number }> = ({ t }) => {
+const Rig: React.FC<{ t: number; spec: FieldSpec }> = ({ t, spec }) => {
   const { camera } = useThree();
-  const c = camAt(t);
+  const c = spec.cam(t);
   camera.position.set(...c.pos);
   camera.up.set(Math.sin(c.roll), Math.cos(c.roll), 0);
   camera.lookAt(...c.look);
@@ -82,7 +121,7 @@ const Rig: React.FC<{ t: number }> = ({ t }) => {
   return null;
 };
 
-const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, height, gain }) => {
+const World: React.FC<{ t: number; height: number; gain: number; spec: FieldSpec }> = ({ t, height, gain, spec }) => {
   const g = React.useMemo(
     () => ({
       swarm: points(NA),
@@ -106,20 +145,20 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
   const rmat = React.useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), []);
   const smats = React.useMemo(() => [0, 1, 2, 3, 4].map(() => new THREE.SpriteMaterial({ map: g.tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), [g.tex]);
 
-  const pal = paletteAt(t);
-  const cam = camAt(t);
-  const prev = camAt(t - 1 / 30);
+  const pal = spec.palette(t);
+  const cam = spec.cam(t);
+  const prev = spec.cam(t - 1 / 30);
   const vel: V3 = [(cam.pos[0] - prev.pos[0]) * 30, (cam.pos[1] - prev.pos[1]) * 30, (cam.pos[2] - prev.pos[2]) * 30];
   const speed = Math.hypot(...vel);
   const fwd = new THREE.Vector3(cam.look[0] - cam.pos[0], cam.look[1] - cam.pos[1], cam.look[2] - cam.pos[2]).normalize();
   const focus = Math.hypot(cam.look[0] - cam.pos[0], cam.look[1] - cam.pos[1], cam.look[2] - cam.pos[2]);
   pmat.uniforms.uFocus.value = focus;
   pmat.uniforms.uPx.value = height / (2 * Math.tan(((FOV / 2) * Math.PI) / 180));
-  const beat = t > Q.pledge ? Math.exp(-((t % 0.5) / 0.5) * 5) : 0;
-  const hit = hitAmount(t);
+  const beat = t > spec.beatFrom ? Math.exp(-((t % 0.5) / 0.5) * 5) : 0;
+  const hit = spec.hit(t);
 
   // the swarm, in the scene's colours
-  const s = swarmAt(t);
+  const s = spec.swarm(t);
   {
     const P = g.swarm.attributes.position.array as Float32Array;
     const Cc = g.swarm.attributes.color.array as Float32Array;
@@ -177,11 +216,11 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
   }
 
   // the grid floor, glued to the world, fading with distance and pulsing on the beat
-  const gridOn = 1 - win(t, 3.95, 6.1, 0.3);
+  const gridOn = spec.grid(t);
   {
     const LP = g.grid.attributes.position.array as Float32Array;
     const LC = g.grid.attributes.color.array as Float32Array;
-    const y = cam.pos[1] - 4.2 - (t > Q.deadline - 0.3 && t < Q.drop ? 0 : 0);
+    const y = cam.pos[1] - 4.2;
     const step = 2.5;
     const x0 = Math.floor(cam.pos[0] / step) * step, z0 = Math.floor(cam.pos[2] / step) * step;
     let n = 0;
@@ -201,7 +240,7 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
   }
 
   // the tunnel to the swarm
-  const tunnelOn = win(t, 3.85, 6.25, 0.3);
+  const tunnelOn = spec.tunnel(t);
   {
     const LP = g.tunnel.attributes.position.array as Float32Array;
     const LC = g.tunnel.attributes.color.array as Float32Array;
@@ -229,40 +268,18 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
     const LC = g.beams.attributes.color.array as Float32Array;
     LP.fill(0);
     LC.fill(0);
-    let n = 0;
-    const deadline = win(t, Q.beam, Q.drop - 0.05, 0.3);
-    if (deadline > 0)
-      for (let k = 0; k < 6; k++) {
-        const o: V3 = [ESPHERE[0] + Math.cos(k) * 0.6, ESPHERE[1] - 1.6, ESPHERE[2] + Math.sin(k) * 0.6];
-        const tgt: V3 = [E[0] + 2.6 - k * 0.15, E[1] + 1.0 - k * 0.3, E[2]];
-        LP.set(o, n * 6);
-        LP.set(tgt, n * 6 + 3);
-        const c = 0.9 * deadline * gain;
-        LC.set([0.24 * c, 1 * c, 0.56 * c], n * 6);
-        LC.set([0.24 * c, 1 * c, 0.56 * c], n * 6 + 3);
-        n++;
-      }
-    for (let k = 0; k < 9; k++) {
-      const v = Q.votes[k];
-      const on = win(t, v, Q.kept, 0.15);
-      if (on <= 0) continue;
-      const yes = k !== Q.no;
-      const o = knotPos(k, t);
-      const flare = 1 + 2.5 * Math.exp(-(t - v) * 8);
-      const c = on * flare * 0.6 * gain;
-      const col: RGB = yes ? [0.24, 1, 0.56] : [1, 0.3, 0.25];
-      LP.set(o, n * 6);
-      LP.set(F, n * 6 + 3);
-      LC.set([col[0] * c, col[1] * c, col[2] * c], n * 6);
-      LC.set([col[0] * c * 0.2, col[1] * c * 0.2, col[2] * c * 0.2], n * 6 + 3);
-      n++;
-    }
+    spec.beams(t).slice(0, 64).forEach((bm, n) => {
+      const c = bm.k * gain, f = bm.fade ?? 1;
+      LP.set(bm.a, n * 6);
+      LP.set(bm.b, n * 6 + 3);
+      LC.set([bm.col[0] * c, bm.col[1] * c, bm.col[2] * c], n * 6);
+      LC.set([bm.col[0] * c * f, bm.col[1] * c * f, bm.col[2] * c * f], n * 6 + 3);
+    });
     touch(g.beams);
   }
 
   // light rays behind the seal and the mark
-  const raysOn = Math.max(win(t, Q.seal - 0.05, Q.pledge + 0.1, 0.25), win(t, Q.logo - 0.05, 31, 0.4));
-  const rayAt: V3 = t > Q.tagline ? SEAL_END : B;
+  const { on: raysOn, at: rayAt } = spec.rays(t);
   {
     const P = g.rays.attributes.position.array as Float32Array;
     const Cc = g.rays.attributes.color.array as Float32Array;
@@ -291,7 +308,7 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
 
   return (
     <>
-      <Rig t={t} />
+      <Rig t={t} spec={spec} />
       {clouds.map((c, k) => (
         <sprite key={k} material={smats[k]} position={c.p} scale={[c.s, c.s, 1]} />
       ))}
@@ -307,7 +324,7 @@ const World: React.FC<{ t: number; height: number; gain: number }> = ({ t, heigh
 };
 
 /// The world, plus a quarter-resolution blurred copy screened on top for bloom.
-export const Field: React.FC = () => {
+export const Field: React.FC<{ spec?: FieldSpec }> = ({ spec = TRAILER }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
@@ -315,11 +332,11 @@ export const Field: React.FC = () => {
   return (
     <>
       <ThreeCanvas width={width} height={height} style={{ position: "absolute", inset: 0 }} camera={cam}>
-        <World t={t} height={height} gain={1} />
+        <World t={t} height={height} gain={1} spec={spec} />
       </ThreeCanvas>
       <div style={{ position: "absolute", left: 0, top: 0, width: width / 4, height: height / 4, transform: "scale(4)", transformOrigin: "0 0", filter: "blur(3px) brightness(1.5)", mixBlendMode: "screen", opacity: 0.65 }}>
         <ThreeCanvas width={width / 4} height={height / 4} camera={cam}>
-          <World t={t} height={height / 4} gain={1.2} />
+          <World t={t} height={height / 4} gain={1.2} spec={spec} />
         </ThreeCanvas>
       </div>
     </>
