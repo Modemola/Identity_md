@@ -80,7 +80,7 @@ async function api(path, { method = "GET", body, token, headers = {} } = {}) {
 // ------------------------------------------------------------------ launch inputs
 
 async function importRepo(kind = "contracts") {
-  const head = await fetch(`https://api.github.com/repos/modemola/identity_md/commits/${flag("ref", "claude/vigilant-hamilton-ggh3sv")}`)
+  const head = await fetch(`https://api.github.com/repos/modemola/identity_md/commits/${flag("ref", "main")}`)
     .then((r) => r.json())
     .catch(() => ({}));
   const ref = flag("commit", head.sha);
