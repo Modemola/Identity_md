@@ -67,6 +67,7 @@ const tally = (pledges) => {
 
 const NAV = [
   ["/", "Pledges"],
+  ["/board", "Board"],
   ["/new", "Make a pledge"],
   ["/referee", "Referee Fund"],
   ["/how", "How it works"],
@@ -595,6 +596,11 @@ function pledgeContent(p, c) {
     sec("01", "Milestones", `${p.count - p.open}/${p.count} settled`),
     h("div", { class: "rows" }, p.milestones.map((m) => milestoneRow(p, m, c, total, isBeneficiary, historyEls.get(m.index)))),
     budgetBox(p),
+    sec("02", "Badge and share", "live from the chain"),
+    badgePanel(`pledge=${p.id}`, {
+      href: `${SITE}/#/pledge/${p.id}`,
+      post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
+    }),
   );
 }
 
@@ -1388,6 +1394,218 @@ function rawValue(v) {
   return full;
 }
 
+
+// ------------------------------------------------------------------ promise board
+
+// badges are served by /api/badge on the deployed site; previews elsewhere (local, IPFS) use it too
+const BADGE_HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
+const SITE = "https://keptmd.vercel.app";
+const badgeUrl = (query, style) => `${BADGE_HOST}/api/badge?${query}${style ? `&style=${style}` : ""}`;
+
+/** Pledges grouped by beneficiary: one team per address, ranked by promises kept. */
+function teams(pledges) {
+  const by = new Map();
+  for (const p of pledges) {
+    const k = p.beneficiary.toLowerCase();
+    if (!by.has(k)) by.set(k, { key: k, beneficiary: p.beneficiary, pledges: [] });
+    by.get(k).pledges.push(p);
+  }
+  return [...by.values()]
+    .map((t) => {
+      const ms = t.pledges.flatMap((p) => p.milestones.map((m) => ({ ...m, pledge: p })));
+      const kept = ms.filter((m) => m.outcome === 1).length;
+      const broken = ms.filter((m) => m.outcome === 2).length;
+      const next = ms.filter((m) => m.outcome === 0).sort((a, b) => Number(a.deadline - b.deadline))[0];
+      const lead = t.pledges[0]; // newest first
+      return { ...t, ms, kept, broken, open: ms.length - kept - broken, rate: kept + broken ? kept / (kept + broken) : null, next, lead };
+    })
+    .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.kept - a.kept || a.broken - b.broken || b.ms.length - a.ms.length);
+}
+
+/** A countdown that ticks every second while it is on screen. */
+function countdown(deadline, grace) {
+  const el = h("span", { class: "tnum" });
+  const tick = () => {
+    const t = now();
+    if (t < deadline) (el.textContent = `due in ${span(deadline - t)}`), (el.className = `tnum ${deadline - t < 259200n ? "urgent" : ""}`);
+    else if (t <= deadline + grace) (el.textContent = `proof window · ${span(deadline + grace - t)} left`), (el.className = "tnum urgent");
+    else (el.textContent = "past due"), (el.className = "tnum broken");
+  };
+  tick();
+  whileHere(liveInterval(el, tick, 1000));
+  return el;
+}
+
+function copyButton(label, text) {
+  return h(
+    "button",
+    {
+      class: "btn small",
+      onclick: () =>
+        navigator.clipboard
+          .writeText(text)
+          .then(() => toast(`${label} copied`, "ok"))
+          .catch(() => toast("Copy failed: select the text instead", "alarm")),
+    },
+    icon("copy", 14),
+    label,
+  );
+}
+
+/** Live badge previews with the snippets to embed them, and a post to X. */
+function badgePanel(query, { href, post }) {
+  const flat = badgeUrl(query);
+  const card = badgeUrl(query, "card");
+  return h(
+    "div",
+    { class: "badge-panel" },
+    h(
+      "div",
+      { class: "badge-previews" },
+      h("a", { href, target: "_blank", rel: "noopener" }, h("img", { src: flat, alt: "KEPT badge", height: 20 })),
+      h("a", { href, target: "_blank", rel: "noopener" }, h("img", { src: card, alt: "KEPT record card", width: 440, height: 120, class: "badge-card" })),
+    ),
+    h(
+      "div",
+      { class: "badge-copy" },
+      h("p", { class: "muted" }, "Live from the chain, refreshed every five minutes. Put it in your README, docs or site: holders see your record without taking your word for it."),
+      h(
+        "div",
+        { class: "chips" },
+        copyButton("Markdown", `[![KEPT](${flat})](${href})`),
+        copyButton("HTML", `<a href="${href}"><img src="${card}" alt="KEPT record" width="440" height="120"></a>`),
+        copyButton("Image URL", card),
+        post ? h("a", { class: "btn small primary", href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(href)}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post to X") : null,
+      ),
+    ),
+  );
+}
+
+function viewBoard({ quiet }) {
+  const token = navToken;
+  const figs = {
+    teams: h("div", { class: "v tnum" }, "…"),
+    kept: h("div", { class: "v kept tnum" }, "…"),
+    broken: h("div", { class: "v broken tnum" }, "…"),
+    rate: h("div", { class: "v tnum" }, "…"),
+  };
+  const boardEl = h("div", { class: "rows board" });
+  const dueEl = h("div", { class: "rows due" });
+  const badgeEl = h("div", {});
+  let lastSig = null;
+
+  const apply = (c, pledges) => {
+    const s = sig([c, pledges]);
+    if (s === lastSig) return;
+    const first = lastSig === null;
+    lastSig = s;
+    const ts = teams(pledges);
+    const { kept, broken } = tally(pledges);
+    countUp(figs.teams, ts.length);
+    countUp(figs.kept, kept);
+    countUp(figs.broken, broken);
+    figs.rate.textContent = kept + broken ? `${Math.round((100 * kept) / (kept + broken))}%` : "–";
+    setInstant(!first || quiet);
+    boardEl.replaceChildren(...(ts.length ? ts.map((t, i) => reveal(teamRow(t, i + 1, c.grace), Math.min(i, 6) * 70)) : [h("div", { class: "empty" }, "No teams yet.")]));
+    const due = pledges
+      .flatMap((p) => p.milestones.filter((m) => m.outcome === 0).map((m) => ({ m, p })))
+      .sort((a, b) => Number(a.m.deadline - b.m.deadline))
+      .slice(0, 8);
+    dueEl.replaceChildren(...(due.length ? due.map(({ m, p }, i) => reveal(dueRow(m, p, c.grace), Math.min(i, 6) * 60)) : [h("div", { class: "empty" }, "Nothing due: every promise on KEPT is settled.")]));
+    const top = ts[0];
+    badgeEl.replaceChildren(
+      top
+        ? badgePanel(`team=${top.beneficiary}`, {
+            href: `${SITE}/#/board`,
+            post: `${top.kept}/${top.kept + top.broken + top.open} promises kept, every one verified onchain by the IMD swarm. The KEPT Promise Board:`,
+          })
+        : h("div", { class: "empty" }, "Badges appear once a team has a pledge."),
+    );
+    setInstant(false);
+  };
+
+  paint(
+    "/board",
+    () =>
+      h(
+        "section",
+        { class: "wrap" },
+        h("div", { class: "label", style: { marginTop: "42px" } }, "Promise Board"),
+        h("h1", { class: "page-title" }, words("Who keeps their word.", { accent: ["word."] })),
+        h("p", { class: "lede" }, "Every team that has locked tokens on KEPT, ranked by promises kept. Each verdict was signed by the IMD swarm and checked onchain by the vault: nobody here can grade themselves."),
+        reveal(
+          h(
+            "div",
+            { class: "figures" },
+            h("div", { class: "figure" }, figs.teams, h("div", { class: "label l" }, "Teams")),
+            h("div", { class: "figure" }, figs.kept, h("div", { class: "label l" }, "Promises kept")),
+            h("div", { class: "figure" }, figs.broken, h("div", { class: "label l" }, "Promises broken")),
+            h("div", { class: "figure" }, figs.rate, h("div", { class: "label l" }, "Kept rate")),
+          ),
+        ),
+        sec("01", "Leaderboard", "kept rate, then promises kept"),
+        boardEl,
+        sec("02", "Due next", "live countdowns"),
+        dueEl,
+        sec("03", "Show your record", "a live badge for any team"),
+        badgeEl,
+      ),
+    { quiet },
+  );
+
+  if (!deployed) return boardEl.replaceChildren(notLive());
+  const c0 = cachedConstants();
+  const p0 = cachedPledges();
+  if (c0 && p0) apply(c0, p0);
+  else boardEl.replaceChildren(...skeletonRows(3));
+  const refresh = (maxAge) =>
+    Promise.all([getConstants({ maxAge }), getPledges({ maxAge })])
+      .then(([c, pledges]) => token === navToken && apply(c, pledges))
+      .catch((e) => token === navToken && !lastSig && boardEl.replaceChildren(h("div", { class: "empty" }, `Could not read the vault: ${reason(e)}`)));
+  refresh(quiet ? 0 : 5_000);
+  whileHere(liveInterval(boardEl, () => token === navToken && refresh(0), 30_000));
+}
+
+function teamRow(t, rank, grace) {
+  const tone = t.broken ? "broken" : t.kept ? "kept" : "open";
+  const rate = t.rate === null ? "–" : `${Math.round(t.rate * 100)}%`;
+  const href = link(`/pledge/${t.lead.id}`);
+  return spotlight(
+    h(
+      "a",
+      { class: "row team", href, onpointerenter: () => prefetchPledge(t.lead.id) },
+      h("span", { class: `rank tnum ${rank === 1 ? "first" : ""}` }, String(rank).padStart(2, "0")),
+      h(
+        "div",
+        { style: { minWidth: 0 } },
+        h("div", { class: "title" }, t.lead.name),
+        h(
+          "div",
+          { class: "meta" },
+          h("span", { class: "chip kept" }, h("span", { class: "lamp kept" }), `${t.kept} kept`),
+          t.broken ? h("span", { class: "chip broken" }, h("span", { class: "lamp broken" }), `${t.broken} broken`) : null,
+          t.open ? h("span", { class: "chip open" }, h("span", { class: "lamp open" }), `${t.open} open`) : null,
+          h("span", {}, `${t.lead.tokenInfo.symbol} · ${t.pledges.length} pledge${t.pledges.length === 1 ? "" : "s"} · `, short(t.beneficiary)),
+        ),
+        h("div", { class: "track" }, t.ms.map((m, i) => h("i", { class: state(m, grace).cls, title: m.title, style: { "--i": i } }))),
+      ),
+      h("div", { class: "right" }, h("span", { class: `rate tnum ${tone}` }, rate), h("span", {}, "kept rate"), t.next ? countdown(t.next.deadline, grace) : h("span", {}, "all settled")),
+    ),
+  );
+}
+
+function dueRow(m, p, grace) {
+  const st = state(m, grace);
+  return h(
+    "a",
+    { class: "row due-row", href: link(`/pledge/${p.id}`), onpointerenter: () => prefetchPledge(p.id) },
+    h("span", { class: `glyph ${st.cls}` }, icon(TEMPLATE_ICON[m.kind] ?? "lock", 18)),
+    h("div", { style: { minWidth: 0 } }, h("div", { class: "title" }, m.title), h("div", { class: "meta" }, h("span", {}, `#${p.id} · ${p.name}`), h("span", {}, `${fmt(m.amount, p.tokenInfo.decimals)} ${p.tokenInfo.symbol} at stake`))),
+    // the countdown already says "due in"; the chip only adds news (checking, kept, burn pending)
+    h("div", { class: "right" }, countdown(m.deadline, grace), st.cls !== "open" ? h("span", { class: `chip ${st.cls}` }, st.chip) : null),
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -1402,6 +1620,7 @@ function route({ quiet = false } = {}) {
   const m = path.match(/^\/pledge\/(\d+)$/);
   if (m) return viewPledge(Number(m[1]), { quiet });
   if (path === "/new") return viewNew({ quiet });
+  if (path === "/board") return viewBoard({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
   return viewHome({ quiet });
