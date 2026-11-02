@@ -967,6 +967,45 @@ function viewNew({ quiet }) {
   nameIn.addEventListener("input", refresh);
   budgetIn.addEventListener("input", refresh);
 
+  // the quick start: an IMD launch number, optionally a repo and a roadmap, becomes a draft pledge
+  const qs = {
+    launch: h("input", { placeholder: "e.g. 2185", inputmode: "numeric" }),
+    repo: h("input", { placeholder: "owner/repo of your product (optional)", spellcheck: "false" }),
+    roadmap: h("textarea", { rows: "4", placeholder: "Your roadmap, one promise per line (optional)\nMobile app\nMainnet\nPartnerships page" }),
+    total: h("input", { type: "number", min: "0", step: "any", placeholder: "e.g. 100000000" }),
+    months: h("input", { type: "number", min: "1", max: "24", step: "1", value: "3" }),
+    note: h("div", { class: "hint qs-note" }, "Your launch number fills in the token. The repo drafts a release milestone, the roadmap one milestone per line. You review every field before anything is signed."),
+  };
+  async function quickStart(button) {
+    const n = Number(qs.launch.value.trim());
+    if (!Number.isInteger(n) || n <= 0) return toast("Enter your IMD launch number.", "alarm");
+    button.disabled = true;
+    qs.note.className = "hint qs-note";
+    qs.note.textContent = `Reading IMD launch #${n}…`;
+    try {
+      const draft = await draftFromLaunch(n, { repo: qs.repo.value.trim(), roadmap: qs.roadmap.value, total: qs.total.value.trim(), months: Number(qs.months.value) || 3 });
+      tokenIn.value = draft.token;
+      nameIn.value = draft.name;
+      await loadToken();
+      for (const m of st.milestones.slice()) m.el.remove();
+      st.milestones = [];
+      for (const m of draft.milestones) {
+        addMilestone();
+        st.milestones[st.milestones.length - 1].set(m);
+      }
+      budgetIn.value = String(Math.max(1, draft.milestones.length) * 0.5);
+      refresh();
+      qs.note.className = "hint qs-note good";
+      qs.note.textContent = `Drafted from launch #${n} (${draft.symbol}): ${draft.milestones.length} milestone${draft.milestones.length === 1 ? "" : "s"}. ${draft.notes.join(" ")}`;
+      toast("Draft ready. Review each milestone, then lock.", "ok");
+    } catch (e) {
+      qs.note.className = "hint qs-note bad";
+      qs.note.textContent = reason(e);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   const submit = magnetic(
     h(
       "button",
@@ -1034,6 +1073,16 @@ function viewNew({ quiet }) {
           h(
             "div",
             { class: "compose-main" },
+            h(
+              "div",
+              { class: "quickstart rise", style: { animationDelay: "300ms" } },
+              h("div", { class: "qs-head" }, h("span", { class: "lamp ok blink" }), h("b", {}, "Launched on IMD? Draft your pledge in one step")),
+              h("div", { class: "row2" }, field("IMD launch number", qs.launch), field("Product repository", qs.repo)),
+              field("Roadmap", qs.roadmap),
+              h("div", { class: "row2" }, field("Tokens to lock in total", qs.total, "Split evenly across the milestones."), field("Over how many months", qs.months, "Deadlines are spread across this period.")),
+              qs.note,
+              h("button", { class: "btn primary", onclick: (e) => quickStart(e.currentTarget) }, "Draft my pledge", icon("arrow", 16)),
+            ),
             sec("01", "Token"),
             h("div", { class: "form" }, field("Token to lock", tokenIn, "Plain ERC-20 only: no rebasing, balance decay, confiscation or transfer restrictions. These can strand tokens and IMD budgets; metadata does not verify compatibility."), tokenNote, h("div", { class: "row2" }, field("Pledge name", nameIn, "Shown on the pledge page. Up to 64 characters."), field("Beneficiary", beneficiaryIn, "Receives each kept tranche and controls the three check attempts."))),
             sec("02", "Milestones", "up to 8"),
@@ -1062,6 +1111,79 @@ function viewNew({ quiet }) {
   );
   addMilestone();
   if (config.token) loadToken();
+}
+
+// ------------------------------------------------------------------ quick start
+
+/** One IMD launch by number: the launch list is newest first, so `before=n+1` puts n on top. */
+async function imdLaunch(n) {
+  const r = await fetch(`${config.imdApi}/launches?before=${n + 1}&limit=1`);
+  if (!r.ok) throw new Error(`IMD answered ${r.status}`);
+  const l = (await r.json()).launches?.[0];
+  if (!l || l.launchNumber !== n) throw new Error(`IMD launch #${n} not found.`);
+  return l;
+}
+
+const nextTag = (tag) => {
+  const m = /^(v?)(\d+)\.(\d+)(?:\.(\d+))?/.exec(tag || "");
+  return m ? `${m[1]}${m[2]}.${Number(m[3]) + 1}.0` : "v1.0.0";
+};
+
+/**
+ * A draft pledge from an IMD launch: its token, a release milestone from the product repo, and a
+ * page milestone per roadmap line, deadlines spread over `months` and tokens split evenly.
+ */
+async function draftFromLaunch(n, { repo, roadmap, total, months }) {
+  const l = await imdLaunch(n);
+  if (l.chainId !== config.chainId) throw new Error(`Launch #${n} is on ${l.chainId === 1 ? "Ethereum" : `chain ${l.chainId}`}; KEPT's vault is on Robinhood Chain for now. Tell @keptonchainn you want KEPT there.`);
+  const tok = l.artifacts.find((a) => a.role === "token");
+  if (!tok) throw new Error(`Launch #${n} has no token to lock.`);
+  const info = await tokenInfo(getAddress(tok.address));
+  const notes = [];
+  const promises = [];
+  let site = "";
+  const slug = repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
+  if (slug) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new Error("The repository should look like owner/repo.");
+    const gh = await fetch(`https://api.github.com/repos/${slug}`).then((r) => (r.ok ? r.json() : null));
+    if (!gh) throw new Error(`GitHub has no public repository ${slug}.`);
+    site = /^https:\/\//.test(gh.homepage || "") ? gh.homepage : "";
+    const rel = await fetch(`https://api.github.com/repos/${slug}/releases/latest`).then((r) => (r.ok ? r.json() : null));
+    const tag = nextTag(rel?.tag_name);
+    promises.push({ kind: 0, title: `Ship ${gh.name} ${tag}`, a: slug, b: tag });
+    notes.push(rel ? `Latest release ${rel.tag_name}, so the next is ${tag}.` : "No releases yet, so the first is v1.0.0.");
+    if (!site) notes.push("Add a homepage to the repo to draft website milestones.");
+  }
+  const lines = (roadmap || "")
+    .split(/\n+/)
+    .map((x) => x.replace(/^\s*(?:[-*•]|\d+[.)]|\[[ x]\])\s*/i, "").replace(/^(?:Q[1-4]|[A-Z][a-z]{2,8} 20\d\d)\s*[:\-–]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 8 - promises.length);
+  for (const line of lines) {
+    const title = line.slice(0, 120);
+    // a phrase the team publishes on its own site the day it delivers: the swarm reads the page
+    const phrase = `${line.replace(/["'\\]/g, "").slice(0, 66)} is live`;
+    promises.push(site ? { kind: 1, title, a: site, b: phrase } : { kind: 1, title, a: "", b: phrase });
+  }
+  if (lines.length && !site) notes.push("Fill in the page URL where each roadmap item will show it is live.");
+  if (!promises.length) {
+    promises.push({ kind: 1, title: `${info.symbol} website is live`, a: site, b: `${info.symbol} is live` });
+    notes.push("No repo or roadmap given: one website milestone to start from.");
+  }
+  const span = Math.max(1, Math.min(24, months)) * 30 * 86400e3;
+  const per = total && Number(total) > 0 ? String(Number(total) / promises.length) : "";
+  const at = (i) => {
+    const d = new Date(Date.now() + (span * (i + 1)) / promises.length);
+    d.setMinutes(0, 0, 0);
+    return d;
+  };
+  return {
+    token: getAddress(tok.address),
+    symbol: info.symbol,
+    name: `${info.symbol} roadmap`.slice(0, 64),
+    notes,
+    milestones: promises.map((m, i) => ({ ...m, deadline: at(i), amount: per })),
+  };
 }
 
 function milestoneEditor(st, refresh, onRemove) {
@@ -1193,9 +1315,25 @@ function milestoneEditor(st, refresh, onRemove) {
     x.addEventListener("change", refresh);
   }
   layout();
+  /** Fills the editor from a draft (the quick start); fields left out keep their value. */
+  function set(m) {
+    if (m.kind !== undefined && m.kind !== kind) tiles[m.kind].click();
+    if (m.title !== undefined) title.value = m.title;
+    if (m.deadline) {
+      const d = new Date(m.deadline);
+      deadline.value = new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+    }
+    if (m.amount !== undefined) amount.value = m.amount;
+    if (m.a !== undefined) a.value = m.a;
+    if (m.b !== undefined) b.value = m.b;
+    if (m.chainId !== undefined) chainSel.value = String(m.chainId);
+    if (m.target !== undefined) target.value = m.target;
+    refresh();
+  }
   return {
     el,
     input,
+    set,
     title: () => title.value.trim(),
     deadlineTs,
     amount: () => amount.value,

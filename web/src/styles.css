@@ -792,3 +792,9 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
   .row.team { grid-template-columns: 40px minmax(0, 1fr); }
   .row.team .right { grid-column: 2; align-items: flex-start; }
 }
+
+/* ------------------------------------------------------------------ quick start */
+.quickstart { border: var(--rule); padding: 22px 24px; margin-top: 36px; display: grid; gap: 14px; background: color-mix(in srgb, var(--ok) 5%, transparent); }
+.quickstart .qs-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.quickstart textarea { width: 100%; resize: vertical; font: inherit; }
+.quickstart .btn { justify-self: start; }
