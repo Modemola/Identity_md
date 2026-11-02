@@ -8,6 +8,9 @@ optimizer = true
 optimizer_runs = 200
 via_ir = true
 bytecode_hash = "none"
+# The suite models the Robinhood deployment, so tests run as chain 4663 unless they say otherwise
+# (test/EthereumVault.t.sol switches to Ethereum before deploying its vault).
+chain_id = 4663
 
 [profile.default.fuzz]
 runs = 256

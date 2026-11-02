@@ -2,6 +2,7 @@
 // Opens a KEPT launch through the IMD paid API (https://imd.fun/docs#paid), from your own wallet.
 //
 //   node launch.mjs vault --owner 0xYOU [--dry-run]
+//   node launch.mjs eth-vault --owner 0xYOU [--dry-run]           (the same vault on Ethereum)
 //   node launch.mjs token --vault 0xVAULT --remainder 0xYOU [--pool-bps 6000] [--dry-run]
 //   node launch.mjs site [--name kept] [--dry-run]     (after web/src/config.js has the addresses)
 //   node launch.mjs status <label>
@@ -29,6 +30,15 @@ const RH = {
   imd: "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
   action: "0x6f7261636c652e72657175657374406f7261636c652d31000000000000000000",
   signer: "0x5598aa9146215bc13eb26f2c692ad1461fd32982",
+};
+// Ethereum: IMD's current Intake (v2 keeps the request()/priceOf() the vault calls; v1 is legacy),
+// Ethereum's IMD, and the same oracle action and signer (api.imd.fun/oracle/requests "attester").
+const ETHEREUM = 1;
+const ETH = {
+  intake: "0xa43e6f75ee006411f79ac1c84120606c2330de82",
+  imd: "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+  action: RH.action,
+  signer: RH.signer,
 };
 const STEPS = [{ skill: "audit-imported-code" }, { skill: "adapt-contract-project" }, { skill: "adversarial-review" }];
 const STATE_DIR = new URL("./.orders/", import.meta.url);
@@ -90,22 +100,28 @@ async function importRepo(kind = "contracts") {
   return json.source;
 }
 
-function vaultInput(source, owner) {
+function vaultInput(source, owner, chain = "robinhood") {
+  const eth = chain === "ethereum";
+  const c = eth ? ETH : RH;
+  const where = eth ? "Ethereum mainnet (chain id 1)" : "Robinhood Chain (chain id 4663)";
+  const on = eth ? "on Ethereum" : "on Robinhood";
   return {
     objective: [
-      "Deploy only src/KeptVault.sol from this repository on Robinhood Chain (chain id 4663), with no changes to the",
+      `Deploy only src/KeptVault.sol from this repository on ${where}, with no changes to the`,
       "production source unless an audit finding requires one. KEPT lets any project lock tokens behind milestones that",
       "the IMD oracle checks; kept milestones release to the team, unproven ones are burned.",
-      `Constructor arguments in order: owner_ = $owner; intake_ = ${RH.intake} (IMD Intake on Robinhood);`,
-      `imd_ = ${RH.imd} (IMD on Robinhood); action_ = ${RH.action} (bytes32 "oracle.request@oracle-1");`,
-      `signer_ = ${RH.signer} (IMD oracle signer); panelSize_ = 9; quorum_ = 7.`,
-      "No token, pool, hook, ETH or initialization calls. Tests: forge test (offline); docs/VERIFICATION.md records a",
-      "Robinhood fork rehearsal against the live Intake, IMD and PoolManager.",
+      `Constructor arguments in order: owner_ = $owner; intake_ = ${c.intake} (IMD Intake ${on});`,
+      `imd_ = ${c.imd} (IMD ${on}); action_ = ${c.action} (bytes32 "oracle.request@oracle-1");`,
+      `signer_ = ${c.signer} (IMD oracle signer); panelSize_ = 9; quorum_ = 7.`,
+      "No token, pool, hook, ETH or initialization calls.",
+      eth
+        ? "The same source already runs on Robinhood Chain as IMD launch #2172. Panel questions are pinned to the chain the vault is deployed on (Questions.homeChain() = block.chainid), so this vault asks and verifies Ethereum questions; test/EthereumVault.t.sol covers it. The Intake is IMD's current one; it exposes the same request() and priceOf() the vault calls. Tests: forge test (offline)."
+        : "Tests: forge test (offline); docs/VERIFICATION.md records a Robinhood fork rehearsal against the live Intake, IMD and PoolManager.",
     ].join(" "),
     repoUrl: source.repoUrl,
     baseCommit: source.baseCommit,
     onchain: "evm_contracts",
-    chainId: ROBINHOOD,
+    chainId: eth ? ETHEREUM : ROBINHOOD,
     owner,
     shape: "chain",
     steps: STEPS,
@@ -452,6 +468,10 @@ if (cmd === "vault") {
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
   await pay()("vault", vaultInput(source, addr("owner")));
+} else if (cmd === "eth-vault") {
+  const source = await importRepo();
+  console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
+  await pay()("eth-vault", vaultInput(source, addr("owner"), "ethereum"));
 } else if (cmd === "token") {
   const poolBps = Number(flag("pool-bps", "6000"));
   if (!Number.isInteger(poolBps) || poolBps < 1000 || poolBps > 9000) die("--pool-bps must be 1000 to 9000");
@@ -467,7 +487,7 @@ if (cmd === "vault") {
 } else if (cmd === "status") {
   const label = argv[1];
   const path = new URL(`${label}.json`, STATE_DIR);
-  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|token|site>");
+  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|eth-vault|token|site>");
   const s = JSON.parse(readFileSync(path, "utf8"));
   if (s.onchain) await followOnchain(label, s.chainId, s.txHash);
   else await follow(label, s.orderId, s.token);
