@@ -3,20 +3,24 @@
 //   /api/badge?pledge=1                  one pledge
 //   /api/badge?team=0x…                  every pledge whose beneficiary is that address
 //   &style=flat (default) | card         a 20 px shield, or a 440x120 card
+//   &chain=1                             a pledge on KEPT's Ethereum vault (default: Robinhood Chain)
 //
 // No dependencies: it reads the vault over JSON-RPC and decodes the few words it needs. Cached at
 // the edge for five minutes, so a README full of badges costs the RPC almost nothing.
 
-const RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
-const VAULT = process.env.KEPT_VAULT || "0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896";
+// One vault per chain. Ethereum's address is filled in (here or as KEPT_VAULT_1) once it is launched.
+const NETS = {
+  4663: { rpc: process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com", vault: process.env.KEPT_VAULT || "0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896" },
+  1: { rpc: process.env.KEPT_RPC_1 || "https://ethereum-rpc.publicnode.com", vault: process.env.KEPT_VAULT_1 || "" },
+};
 const SITE = "keptmd.vercel.app";
 
 const SEL = { pledgeCount: "c6d6c183", pledge: "7326c9c0", milestone: "a5aaba22" };
 const word = (n) => BigInt(n).toString(16).padStart(64, "0");
 
-async function call(batch) {
-  const body = batch.map((data, id) => ({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to: VAULT, data }, "latest"] }));
-  const res = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+async function call(net, batch) {
+  const body = batch.map((data, id) => ({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to: net.vault, data }, "latest"] }));
+  const res = await fetch(net.rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`rpc ${res.status}`);
   const out = await res.json();
   return out.sort((a, b) => a.id - b.id).map((r) => {
@@ -33,16 +37,16 @@ function str(hex, i) {
   return Buffer.from(hex.slice(off + 64, off + 64 + len * 2), "hex").toString("utf8");
 }
 
-async function pledgeCount() {
-  const [c] = await call([`0x${SEL.pledgeCount}`]);
+async function pledgeCount(net) {
+  const [c] = await call(net, [`0x${SEL.pledgeCount}`]);
   return Number(uint(c, 0));
 }
 
-async function pledge(id) {
-  const [p] = await call([`0x${SEL.pledge}${word(id)}`]);
+async function pledge(net, id) {
+  const [p] = await call(net, [`0x${SEL.pledge}${word(id)}`]);
   const count = Number(uint(p, 5));
   if (!count) return null;
-  const ms = await call(Array.from({ length: count }, (_, i) => `0x${SEL.milestone}${word(id)}${word(i)}`));
+  const ms = await call(net, Array.from({ length: count }, (_, i) => `0x${SEL.milestone}${word(id)}${word(i)}`));
   return {
     id,
     beneficiary: addr(p, 1),
@@ -51,9 +55,9 @@ async function pledge(id) {
   };
 }
 
-async function teamPledges(team) {
-  const n = await pledgeCount();
-  const all = await Promise.all(Array.from({ length: n }, (_, i) => pledge(i + 1)));
+async function teamPledges(net, team) {
+  const n = await pledgeCount(net);
+  const all = await Promise.all(Array.from({ length: n }, (_, i) => pledge(net, i + 1)));
   return all.filter((p) => p && p.beneficiary === team.toLowerCase());
 }
 
@@ -129,16 +133,18 @@ export async function GET(request) {
   const style = q.get("style") === "card" ? "card" : "flat";
   const pid = q.get("pledge");
   const team = q.get("team");
+  const net = NETS[q.get("chain") || "4663"];
+  if (!net || !net.vault) return svg(flat({ text: "not live on that chain", tone: "none" }), 404, 300);
   try {
     let milestones = [];
     let title = "";
     if (pid && /^\d{1,9}$/.test(pid)) {
-      const p = Number(pid) >= 1 && Number(pid) <= (await pledgeCount()) ? await pledge(Number(pid)) : null;
+      const p = Number(pid) >= 1 && Number(pid) <= (await pledgeCount(net)) ? await pledge(net, Number(pid)) : null;
       if (!p) return svg(flat({ text: "pledge not found", tone: "none" }), 404, 60);
       milestones = p.milestones;
       title = `#${p.id} · ${p.name}`;
     } else if (team && /^0x[0-9a-fA-F]{40}$/.test(team)) {
-      const ps = await teamPledges(team);
+      const ps = await teamPledges(net, team);
       milestones = ps.flatMap((p) => p.milestones);
       title = ps.length === 1 ? `#${ps[0].id} · ${ps[0].name}` : `${ps.length} pledges · ${team.slice(0, 6)}…${team.slice(-4)}`;
     } else {

@@ -45,5 +45,14 @@ the framework preset as Other.
 **IPFS.** The same `dist/` uses relative paths, so it works from any gateway or ENS name. Step 3
 above pins it through IMD.
 
-**Addresses.** The live contract addresses are in `web/src/config.js`. After a new deployment,
-update them there, rebuild, and commit the new `dist/`.
+**Addresses.** The live contract addresses are in `web/src/config.js`, one entry per network under
+`NETWORKS`. After a new deployment, update them there, rebuild, and commit the new `dist/`.
+
+**Turning on Ethereum.** After `node launch.mjs eth-vault` deploys the vault:
+
+1. In `web/src/config.js`, set `NETWORKS.ethereum.vault` to the vault address and `fromBlock` to its
+   deploy block. The header then shows a Robinhood/Ethereum switch, shared links carry
+   `?net=ethereum`, and the quick start hands Ethereum launches over to the Ethereum vault.
+2. In `api/badge.mjs`, set the Ethereum `vault` (or the `KEPT_VAULT_1` environment variable in
+   Vercel), so `/api/badge?pledge=1&chain=1` serves Ethereum pledges.
+3. Rebuild `web/` and commit `dist/`.
