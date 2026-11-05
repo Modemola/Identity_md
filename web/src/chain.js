@@ -175,11 +175,15 @@ export async function previewQuestion(input) {
 
 // ------------------------------------------------------------------ events
 
-/** getLogs over [from, latest], halving the span whenever the RPC refuses a range. */
+/**
+ * getLogs over [from, latest], halving the span whenever the RPC refuses a range. Every query
+ * here pins one event and one pledge, a single value per topic, which Robinhood Chain's RPC
+ * serves ten million blocks at a time; others refuse and the span shrinks.
+ */
 async function logsInChunks(event, args) {
   const latest = await client.getBlockNumber();
   let from = config.fromBlock;
-  let span = 500_000n;
+  let span = 9_999_999n;
   const out = [];
   while (from <= latest) {
     const to = from + span - 1n > latest ? latest : from + span - 1n;
@@ -204,13 +208,14 @@ async function logsInChunks(event, args) {
 
 export async function pledgeHistory(id) {
   const args = { pledgeId: BigInt(id) };
-  const [verdicts, checks, settles, rebates] = await Promise.all([
+  const [verdicts, checks, settles, rebates, funds] = await Promise.all([
     logsInChunks("Verdict", args),
     logsInChunks("CheckRequested", args),
     logsInChunks("Settled", args),
     logsInChunks("Rebated", args),
+    logsInChunks("BudgetFunded", args),
   ]);
-  return { verdicts, checks, settles, rebates };
+  return { verdicts, checks, settles, rebates, funds };
 }
 
 // ------------------------------------------------------------------ oracle
