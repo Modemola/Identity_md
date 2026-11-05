@@ -12,7 +12,7 @@ export { vaultAbi, hookAbi, erc20Abi };
 
 export const chain = defineChain({
   id: config.chainId,
-  name: config.chainId === 4663 ? "Robinhood Chain" : `Chain ${config.chainId}`,
+  name: config.name,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [config.rpc] } },
   blockExplorers: { default: { name: "Explorer", url: config.explorer } },

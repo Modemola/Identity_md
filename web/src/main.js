@@ -1,6 +1,6 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed } from "./config.js";
+import { config, deployed, LIVE, NETWORKS, networkFor, netQuery, setNetwork } from "./config.js";
 import {
   client,
   vaultAbi,
@@ -117,6 +117,13 @@ function shell() {
       h("a", { class: "logo", href: link("/"), "aria-label": "KEPT home" }, h("span", { class: "mark" }, icon("seal", 20)), h("span", { class: "word" }, "KEPT")),
       navEl,
       h("span", { class: "spacer" }),
+      LIVE.length > 1
+        ? h(
+            "div",
+            { class: "net-switch", role: "group", "aria-label": "Network" },
+            LIVE.map((k) => h("button", { type: "button", "aria-pressed": k === config.net ? "true" : "false", onclick: () => k !== config.net && setNetwork(k) }, NETWORKS[k].short)),
+          )
+        : null,
       h("button", { class: "kbd-btn", "aria-label": "Jump to a pledge or page", onclick: () => palette.open() }, icon("search", 15), h("kbd", {}, "⌘K")),
       h("button", { class: "iconbtn theme-btn", "aria-label": "Toggle light and dark", onclick: (e) => themeSwitch(e) }, icon("moon", 18), icon("sun", 18)),
       acctBtn,
@@ -201,7 +208,7 @@ const notLive = () =>
     "div",
     { class: "banner" },
     h("span", { class: "lamp caution blink" }),
-    h("div", {}, h("b", {}, "Launching on Robinhood Chain. "), h("span", { class: "muted" }, "The contracts are being audited and deployed by the IMD swarm. This page goes live with real pledges the moment they land.")),
+    h("div", {}, h("b", {}, `Launching on ${config.name}. `), h("span", { class: "muted" }, "The contracts are being audited and deployed by the IMD swarm. This page goes live with real pledges the moment they land.")),
   );
 
 /** Shown whenever the owner has proposed a new Intake or oracle signer: it is public for 7 days first. */
@@ -249,7 +256,7 @@ function statusbar() {
     "div",
     // not a live region: the block number changes every few seconds and would be read out each time
     { class: "statusbar", "aria-label": "Network status" },
-    h("div", { class: "cell" }, h("span", { class: "lamp ok blink" }), "Robinhood ", bar.block),
+    h("div", { class: "cell" }, h("span", { class: "lamp ok blink" }), `${config.short} `, bar.block),
     h("div", { class: "cell" }, bar.pledges, " pledges"),
     h("div", { class: "cell" }, bar.kept, " kept · ", bar.broken, " broken"),
     h("div", { class: "cell" }, bar.oracle, " IMD oracle answers"),
@@ -349,7 +356,7 @@ function viewHome({ quiet }) {
           h(
             "div",
             { class: "hero-copy" },
-            h("span", { class: "eyebrow rise", style: { animationDelay: "60ms" } }, h("span", { class: "lamp ok blink" }), "IMD oracle · Robinhood Chain"),
+            h("span", { class: "eyebrow rise", style: { animationDelay: "60ms" } }, h("span", { class: "lamp ok blink" }), `IMD oracle · ${config.name}`),
             h("h1", {}, words("Promises the swarm enforces.", { delay: 140, accent: ["swarm"] })),
             h(
               "p",
@@ -598,7 +605,7 @@ function pledgeContent(p, c) {
     budgetBox(p),
     sec("02", "Badge and share", "live from the chain"),
     badgePanel(`pledge=${p.id}`, {
-      href: `${SITE}/#/pledge/${p.id}`,
+      href: siteLink(`/pledge/${p.id}`),
       post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
     }),
   );
@@ -976,6 +983,7 @@ function viewNew({ quiet }) {
     months: h("input", { type: "number", min: "1", max: "24", step: "1", value: "3" }),
     note: h("div", { class: "hint qs-note" }, "Your launch number fills in the token. The repo drafts a release milestone, the roadmap one milestone per line. You review every field before anything is signed."),
   };
+  const draftBtn = h("button", { class: "btn primary", onclick: (e) => quickStart(e.currentTarget) }, "Draft my pledge", icon("arrow", 16));
   async function quickStart(button) {
     const n = Number(qs.launch.value.trim());
     if (!Number.isInteger(n) || n <= 0) return toast("Enter your IMD launch number.", "alarm");
@@ -1000,7 +1008,12 @@ function viewNew({ quiet }) {
       toast("Draft ready. Review each milestone, then lock.", "ok");
     } catch (e) {
       qs.note.className = "hint qs-note bad";
-      qs.note.textContent = reason(e);
+      qs.note.replaceChildren(
+        reason(e),
+        e.switchTo
+          ? h("button", { class: "btn small", type: "button", style: { marginLeft: "12px" }, onclick: () => setNetwork(e.switchTo, { hash: "#/new", extra: { launch: String(n) } }) }, `Switch to ${NETWORKS[e.switchTo].short}`, icon("arrow", 14))
+          : null,
+      );
     } finally {
       button.disabled = false;
     }
@@ -1081,7 +1094,7 @@ function viewNew({ quiet }) {
               field("Roadmap", qs.roadmap),
               h("div", { class: "row2" }, field("Tokens to lock in total", qs.total, "Split evenly across the milestones."), field("Over how many months", qs.months, "Deadlines are spread across this period.")),
               qs.note,
-              h("button", { class: "btn primary", onclick: (e) => quickStart(e.currentTarget) }, "Draft my pledge", icon("arrow", 16)),
+              draftBtn,
             ),
             sec("01", "Token"),
             h("div", { class: "form" }, field("Token to lock", tokenIn, "Plain ERC-20 only: no rebasing, balance decay, confiscation or transfer restrictions. These can strand tokens and IMD budgets; metadata does not verify compatibility."), tokenNote, h("div", { class: "row2" }, field("Pledge name", nameIn, "Shown on the pledge page. Up to 64 characters."), field("Beneficiary", beneficiaryIn, "Receives each kept tranche and controls the three check attempts."))),
@@ -1110,7 +1123,11 @@ function viewNew({ quiet }) {
     { quiet },
   );
   addMilestone();
-  if (config.token) loadToken();
+  const handoff = new URLSearchParams(location.search).get("launch");
+  if (handoff && /^\d+$/.test(handoff)) {
+    qs.launch.value = handoff;
+    quickStart(draftBtn);
+  } else if (config.token) loadToken();
 }
 
 // ------------------------------------------------------------------ quick start
@@ -1135,7 +1152,13 @@ const nextTag = (tag) => {
  */
 async function draftFromLaunch(n, { repo, roadmap, total, months }) {
   const l = await imdLaunch(n);
-  if (l.chainId !== config.chainId) throw new Error(`Launch #${n} is on ${l.chainId === 1 ? "Ethereum" : `chain ${l.chainId}`}; KEPT's vault is on Robinhood Chain for now. Tell @keptonchainn you want KEPT there.`);
+  if (l.chainId !== config.chainId) {
+    const other = networkFor(l.chainId);
+    const where = l.chainId === 1 ? "Ethereum" : l.chainId === 4663 ? "Robinhood Chain" : `chain ${l.chainId}`;
+    const e = new Error(other ? `Launch #${n} is on ${where}. Switch to KEPT on ${where} to draft it.` : `Launch #${n} is on ${where}; KEPT is not live there yet. Tell @keptonchainn you want it.`);
+    e.switchTo = other;
+    throw e;
+  }
   const tok = l.artifacts.find((a) => a.role === "token");
   if (!tok) throw new Error(`Launch #${n} has no token to lock.`);
   const info = await tokenInfo(getAddress(tok.address));
@@ -1538,7 +1561,8 @@ function rawValue(v) {
 // badges are served by /api/badge on the deployed site; previews elsewhere (local, IPFS) use it too
 const BADGE_HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const SITE = "https://keptmd.vercel.app";
-const badgeUrl = (query, style) => `${BADGE_HOST}/api/badge?${query}${style ? `&style=${style}` : ""}`;
+const siteLink = (path) => `${SITE}/${netQuery()}#${path}`;
+const badgeUrl = (query, style) => `${BADGE_HOST}/api/badge?${query}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}${style ? `&style=${style}` : ""}`;
 
 /** Pledges grouped by beneficiary: one team per address, ranked by promises kept. */
 function teams(pledges) {
@@ -1654,7 +1678,7 @@ function viewBoard({ quiet }) {
     badgeEl.replaceChildren(
       top
         ? badgePanel(`team=${top.beneficiary}`, {
-            href: `${SITE}/#/board`,
+            href: siteLink("/board"),
             post: `${top.kept}/${top.kept + top.broken + top.open} promises kept, every one verified onchain by the IMD swarm. The KEPT Promise Board:`,
           })
         : h("div", { class: "empty" }, "Badges appear once a team has a pledge."),

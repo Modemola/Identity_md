@@ -798,3 +798,9 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
 .quickstart .qs-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .quickstart textarea { width: 100%; resize: vertical; font: inherit; }
 .quickstart .btn { justify-self: start; }
+
+/* ------------------------------------------------------------------ network switch */
+.net-switch { display: inline-flex; border: var(--hair); margin-right: 10px; }
+.net-switch button { border: 0; background: none; padding: 6px 12px; font-size: 11.5px; letter-spacing: var(--track); text-transform: uppercase; color: var(--dim); cursor: pointer; }
+.net-switch button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.net-switch button:focus-visible { outline: 2px solid var(--ok); outline-offset: -2px; }
