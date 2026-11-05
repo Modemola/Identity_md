@@ -770,3 +770,31 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; transition-delay: 0s !important; }
 }
+
+/* ------------------------------------------------------------------ promise board */
+.lede { max-width: 62ch; color: var(--dim); font-size: 15px; line-height: 1.6; }
+.row.team { grid-template-columns: 54px minmax(0, 1fr) auto; }
+.row.team .rank { font-size: 22px; font-weight: 500; color: var(--faint); letter-spacing: -0.02em; }
+.row.team .rank.first { color: var(--ok); }
+.row .rate { font-size: 26px; font-weight: 500; letter-spacing: -0.03em; color: var(--ink); }
+.row .rate.kept { color: var(--ok); }
+.row .rate.broken { color: var(--alarm); }
+.row .rate.open { color: var(--caution); }
+.row .urgent { color: var(--caution); }
+.row .broken { color: var(--alarm); }
+.row.due-row .glyph { width: 40px; height: 40px; }
+.badge-panel { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; align-items: start; border: var(--hair); padding: 24px; }
+.badge-previews { display: flex; flex-direction: column; gap: 16px; }
+.badge-previews img { display: block; max-width: 100%; height: auto; }
+.badge-copy p { margin: 0 0 16px; font-size: 13.5px; line-height: 1.6; max-width: 52ch; }
+@media (max-width: 860px) {
+  .badge-panel { grid-template-columns: 1fr; }
+  .row.team { grid-template-columns: 40px minmax(0, 1fr); }
+  .row.team .right { grid-column: 2; align-items: flex-start; }
+}
+
+/* ------------------------------------------------------------------ quick start */
+.quickstart { border: var(--rule); padding: 22px 24px; margin-top: 36px; display: grid; gap: 14px; background: color-mix(in srgb, var(--ok) 5%, transparent); }
+.quickstart .qs-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.quickstart textarea { width: 100%; resize: vertical; font: inherit; }
+.quickstart .btn { justify-self: start; }

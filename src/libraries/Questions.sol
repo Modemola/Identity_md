@@ -27,11 +27,16 @@ library Questions {
     error BadParameter(uint8 field);
     error UnsupportedChain(uint64 chainId);
 
-    uint64 internal constant HOME_CHAIN = 4663;
+    /// @notice The chain the vault is deployed on. Panel questions (GitHub, page) are about no chain in
+    /// particular, so they are pinned to the vault's own: Robinhood Chain for the Robinhood vault,
+    /// Ethereum for the Ethereum one. The same source deploys unchanged on either.
+    function homeChain() internal view returns (uint64) {
+        return uint64(block.chainid);
+    }
 
     /// @notice The chain the question is about, which the attestation's `chainId` must equal.
-    function questionChain(Spec memory s) internal pure returns (uint64) {
-        return s.kind == Kind.ContractDeployed || s.kind == Kind.ValueAtLeast ? s.chainId : HOME_CHAIN;
+    function questionChain(Spec memory s) internal view returns (uint64) {
+        return s.kind == Kind.ContractDeployed || s.kind == Kind.ValueAtLeast ? s.chainId : homeChain();
     }
 
     function isChainEvidence(Kind kind) internal pure returns (bool) {
@@ -62,7 +67,7 @@ library Questions {
     /// @notice The compact UTF-8 JSON oracle body for one check.
     function body(Spec memory s, uint64 deadline, uint16 panelSize, uint16 quorum, uint32 validFor)
         internal
-        pure
+        view
         returns (bytes memory)
     {
         return bytes(

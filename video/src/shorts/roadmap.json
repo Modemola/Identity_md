@@ -1,0 +1,35 @@
+{
+  "fps": 30,
+  "duration": 20.0,
+  "frames": 600,
+  "scenes": [
+    {
+      "id": "short",
+      "start": 0.0,
+      "end": 20.0
+    }
+  ],
+  "lines": [],
+  "cues": {
+    "title": 0.0,
+    "poster": 0.4,
+    "team": 1.2,
+    "robots": 2.4,
+    "items": [
+      4.0,
+      6.0,
+      8.0,
+      10.0
+    ],
+    "scan": 0.6,
+    "yes": [
+      8,
+      8,
+      2,
+      1
+    ],
+    "score": 12.0,
+    "question": 14.0,
+    "card": 16.0
+  }
+}

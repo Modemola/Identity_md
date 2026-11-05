@@ -1,0 +1,39 @@
+{
+  "fps": 30,
+  "duration": 20.0,
+  "frames": 600,
+  "scenes": [
+    {
+      "id": "short",
+      "start": 0,
+      "end": 20
+    }
+  ],
+  "lines": [],
+  "cues": {
+    "bpm": 120,
+    "title": 0.3,
+    "lanes": 1.4,
+    "drop": 2.5,
+    "quarters": [
+      2.5,
+      4.5,
+      6.5,
+      8.5
+    ],
+    "unlock": 0.5,
+    "votes": 0.35,
+    "verdict": 1.25,
+    "kept": [
+      true,
+      true,
+      true,
+      false
+    ],
+    "result": 10.5,
+    "timeNot": 13.5,
+    "delivery": 14.6,
+    "logo": 16.0,
+    "end": 20.0
+  }
+}

@@ -67,6 +67,7 @@ const tally = (pledges) => {
 
 const NAV = [
   ["/", "Pledges"],
+  ["/board", "Board"],
   ["/new", "Make a pledge"],
   ["/referee", "Referee Fund"],
   ["/how", "How it works"],
@@ -595,6 +596,11 @@ function pledgeContent(p, c) {
     sec("01", "Milestones", `${p.count - p.open}/${p.count} settled`),
     h("div", { class: "rows" }, p.milestones.map((m) => milestoneRow(p, m, c, total, isBeneficiary, historyEls.get(m.index)))),
     budgetBox(p),
+    sec("02", "Badge and share", "live from the chain"),
+    badgePanel(`pledge=${p.id}`, {
+      href: `${SITE}/#/pledge/${p.id}`,
+      post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
+    }),
   );
 }
 
@@ -961,6 +967,45 @@ function viewNew({ quiet }) {
   nameIn.addEventListener("input", refresh);
   budgetIn.addEventListener("input", refresh);
 
+  // the quick start: an IMD launch number, optionally a repo and a roadmap, becomes a draft pledge
+  const qs = {
+    launch: h("input", { placeholder: "e.g. 2185", inputmode: "numeric" }),
+    repo: h("input", { placeholder: "owner/repo of your product (optional)", spellcheck: "false" }),
+    roadmap: h("textarea", { rows: "4", placeholder: "Your roadmap, one promise per line (optional)\nMobile app\nMainnet\nPartnerships page" }),
+    total: h("input", { type: "number", min: "0", step: "any", placeholder: "e.g. 100000000" }),
+    months: h("input", { type: "number", min: "1", max: "24", step: "1", value: "3" }),
+    note: h("div", { class: "hint qs-note" }, "Your launch number fills in the token. The repo drafts a release milestone, the roadmap one milestone per line. You review every field before anything is signed."),
+  };
+  async function quickStart(button) {
+    const n = Number(qs.launch.value.trim());
+    if (!Number.isInteger(n) || n <= 0) return toast("Enter your IMD launch number.", "alarm");
+    button.disabled = true;
+    qs.note.className = "hint qs-note";
+    qs.note.textContent = `Reading IMD launch #${n}…`;
+    try {
+      const draft = await draftFromLaunch(n, { repo: qs.repo.value.trim(), roadmap: qs.roadmap.value, total: qs.total.value.trim(), months: Number(qs.months.value) || 3 });
+      tokenIn.value = draft.token;
+      nameIn.value = draft.name;
+      await loadToken();
+      for (const m of st.milestones.slice()) m.el.remove();
+      st.milestones = [];
+      for (const m of draft.milestones) {
+        addMilestone();
+        st.milestones[st.milestones.length - 1].set(m);
+      }
+      budgetIn.value = String(Math.max(1, draft.milestones.length) * 0.5);
+      refresh();
+      qs.note.className = "hint qs-note good";
+      qs.note.textContent = `Drafted from launch #${n} (${draft.symbol}): ${draft.milestones.length} milestone${draft.milestones.length === 1 ? "" : "s"}. ${draft.notes.join(" ")}`;
+      toast("Draft ready. Review each milestone, then lock.", "ok");
+    } catch (e) {
+      qs.note.className = "hint qs-note bad";
+      qs.note.textContent = reason(e);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   const submit = magnetic(
     h(
       "button",
@@ -1028,6 +1073,16 @@ function viewNew({ quiet }) {
           h(
             "div",
             { class: "compose-main" },
+            h(
+              "div",
+              { class: "quickstart rise", style: { animationDelay: "300ms" } },
+              h("div", { class: "qs-head" }, h("span", { class: "lamp ok blink" }), h("b", {}, "Launched on IMD? Draft your pledge in one step")),
+              h("div", { class: "row2" }, field("IMD launch number", qs.launch), field("Product repository", qs.repo)),
+              field("Roadmap", qs.roadmap),
+              h("div", { class: "row2" }, field("Tokens to lock in total", qs.total, "Split evenly across the milestones."), field("Over how many months", qs.months, "Deadlines are spread across this period.")),
+              qs.note,
+              h("button", { class: "btn primary", onclick: (e) => quickStart(e.currentTarget) }, "Draft my pledge", icon("arrow", 16)),
+            ),
             sec("01", "Token"),
             h("div", { class: "form" }, field("Token to lock", tokenIn, "Plain ERC-20 only: no rebasing, balance decay, confiscation or transfer restrictions. These can strand tokens and IMD budgets; metadata does not verify compatibility."), tokenNote, h("div", { class: "row2" }, field("Pledge name", nameIn, "Shown on the pledge page. Up to 64 characters."), field("Beneficiary", beneficiaryIn, "Receives each kept tranche and controls the three check attempts."))),
             sec("02", "Milestones", "up to 8"),
@@ -1056,6 +1111,79 @@ function viewNew({ quiet }) {
   );
   addMilestone();
   if (config.token) loadToken();
+}
+
+// ------------------------------------------------------------------ quick start
+
+/** One IMD launch by number: the launch list is newest first, so `before=n+1` puts n on top. */
+async function imdLaunch(n) {
+  const r = await fetch(`${config.imdApi}/launches?before=${n + 1}&limit=1`);
+  if (!r.ok) throw new Error(`IMD answered ${r.status}`);
+  const l = (await r.json()).launches?.[0];
+  if (!l || l.launchNumber !== n) throw new Error(`IMD launch #${n} not found.`);
+  return l;
+}
+
+const nextTag = (tag) => {
+  const m = /^(v?)(\d+)\.(\d+)(?:\.(\d+))?/.exec(tag || "");
+  return m ? `${m[1]}${m[2]}.${Number(m[3]) + 1}.0` : "v1.0.0";
+};
+
+/**
+ * A draft pledge from an IMD launch: its token, a release milestone from the product repo, and a
+ * page milestone per roadmap line, deadlines spread over `months` and tokens split evenly.
+ */
+async function draftFromLaunch(n, { repo, roadmap, total, months }) {
+  const l = await imdLaunch(n);
+  if (l.chainId !== config.chainId) throw new Error(`Launch #${n} is on ${l.chainId === 1 ? "Ethereum" : `chain ${l.chainId}`}; KEPT's vault is on Robinhood Chain for now. Tell @keptonchainn you want KEPT there.`);
+  const tok = l.artifacts.find((a) => a.role === "token");
+  if (!tok) throw new Error(`Launch #${n} has no token to lock.`);
+  const info = await tokenInfo(getAddress(tok.address));
+  const notes = [];
+  const promises = [];
+  let site = "";
+  const slug = repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
+  if (slug) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new Error("The repository should look like owner/repo.");
+    const gh = await fetch(`https://api.github.com/repos/${slug}`).then((r) => (r.ok ? r.json() : null));
+    if (!gh) throw new Error(`GitHub has no public repository ${slug}.`);
+    site = /^https:\/\//.test(gh.homepage || "") ? gh.homepage : "";
+    const rel = await fetch(`https://api.github.com/repos/${slug}/releases/latest`).then((r) => (r.ok ? r.json() : null));
+    const tag = nextTag(rel?.tag_name);
+    promises.push({ kind: 0, title: `Ship ${gh.name} ${tag}`, a: slug, b: tag });
+    notes.push(rel ? `Latest release ${rel.tag_name}, so the next is ${tag}.` : "No releases yet, so the first is v1.0.0.");
+    if (!site) notes.push("Add a homepage to the repo to draft website milestones.");
+  }
+  const lines = (roadmap || "")
+    .split(/\n+/)
+    .map((x) => x.replace(/^\s*(?:[-*•]|\d+[.)]|\[[ x]\])\s*/i, "").replace(/^(?:Q[1-4]|[A-Z][a-z]{2,8} 20\d\d)\s*[:\-–]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 8 - promises.length);
+  for (const line of lines) {
+    const title = line.slice(0, 120);
+    // a phrase the team publishes on its own site the day it delivers: the swarm reads the page
+    const phrase = `${line.replace(/["'\\]/g, "").slice(0, 66)} is live`;
+    promises.push(site ? { kind: 1, title, a: site, b: phrase } : { kind: 1, title, a: "", b: phrase });
+  }
+  if (lines.length && !site) notes.push("Fill in the page URL where each roadmap item will show it is live.");
+  if (!promises.length) {
+    promises.push({ kind: 1, title: `${info.symbol} website is live`, a: site, b: `${info.symbol} is live` });
+    notes.push("No repo or roadmap given: one website milestone to start from.");
+  }
+  const span = Math.max(1, Math.min(24, months)) * 30 * 86400e3;
+  const per = total && Number(total) > 0 ? String(Number(total) / promises.length) : "";
+  const at = (i) => {
+    const d = new Date(Date.now() + (span * (i + 1)) / promises.length);
+    d.setMinutes(0, 0, 0);
+    return d;
+  };
+  return {
+    token: getAddress(tok.address),
+    symbol: info.symbol,
+    name: `${info.symbol} roadmap`.slice(0, 64),
+    notes,
+    milestones: promises.map((m, i) => ({ ...m, deadline: at(i), amount: per })),
+  };
 }
 
 function milestoneEditor(st, refresh, onRemove) {
@@ -1187,9 +1315,25 @@ function milestoneEditor(st, refresh, onRemove) {
     x.addEventListener("change", refresh);
   }
   layout();
+  /** Fills the editor from a draft (the quick start); fields left out keep their value. */
+  function set(m) {
+    if (m.kind !== undefined && m.kind !== kind) tiles[m.kind].click();
+    if (m.title !== undefined) title.value = m.title;
+    if (m.deadline) {
+      const d = new Date(m.deadline);
+      deadline.value = new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+    }
+    if (m.amount !== undefined) amount.value = m.amount;
+    if (m.a !== undefined) a.value = m.a;
+    if (m.b !== undefined) b.value = m.b;
+    if (m.chainId !== undefined) chainSel.value = String(m.chainId);
+    if (m.target !== undefined) target.value = m.target;
+    refresh();
+  }
   return {
     el,
     input,
+    set,
     title: () => title.value.trim(),
     deadlineTs,
     amount: () => amount.value,
@@ -1388,6 +1532,218 @@ function rawValue(v) {
   return full;
 }
 
+
+// ------------------------------------------------------------------ promise board
+
+// badges are served by /api/badge on the deployed site; previews elsewhere (local, IPFS) use it too
+const BADGE_HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
+const SITE = "https://keptmd.vercel.app";
+const badgeUrl = (query, style) => `${BADGE_HOST}/api/badge?${query}${style ? `&style=${style}` : ""}`;
+
+/** Pledges grouped by beneficiary: one team per address, ranked by promises kept. */
+function teams(pledges) {
+  const by = new Map();
+  for (const p of pledges) {
+    const k = p.beneficiary.toLowerCase();
+    if (!by.has(k)) by.set(k, { key: k, beneficiary: p.beneficiary, pledges: [] });
+    by.get(k).pledges.push(p);
+  }
+  return [...by.values()]
+    .map((t) => {
+      const ms = t.pledges.flatMap((p) => p.milestones.map((m) => ({ ...m, pledge: p })));
+      const kept = ms.filter((m) => m.outcome === 1).length;
+      const broken = ms.filter((m) => m.outcome === 2).length;
+      const next = ms.filter((m) => m.outcome === 0).sort((a, b) => Number(a.deadline - b.deadline))[0];
+      const lead = t.pledges[0]; // newest first
+      return { ...t, ms, kept, broken, open: ms.length - kept - broken, rate: kept + broken ? kept / (kept + broken) : null, next, lead };
+    })
+    .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.kept - a.kept || a.broken - b.broken || b.ms.length - a.ms.length);
+}
+
+/** A countdown that ticks every second while it is on screen. */
+function countdown(deadline, grace) {
+  const el = h("span", { class: "tnum" });
+  const tick = () => {
+    const t = now();
+    if (t < deadline) (el.textContent = `due in ${span(deadline - t)}`), (el.className = `tnum ${deadline - t < 259200n ? "urgent" : ""}`);
+    else if (t <= deadline + grace) (el.textContent = `proof window · ${span(deadline + grace - t)} left`), (el.className = "tnum urgent");
+    else (el.textContent = "past due"), (el.className = "tnum broken");
+  };
+  tick();
+  whileHere(liveInterval(el, tick, 1000));
+  return el;
+}
+
+function copyButton(label, text) {
+  return h(
+    "button",
+    {
+      class: "btn small",
+      onclick: () =>
+        navigator.clipboard
+          .writeText(text)
+          .then(() => toast(`${label} copied`, "ok"))
+          .catch(() => toast("Copy failed: select the text instead", "alarm")),
+    },
+    icon("copy", 14),
+    label,
+  );
+}
+
+/** Live badge previews with the snippets to embed them, and a post to X. */
+function badgePanel(query, { href, post }) {
+  const flat = badgeUrl(query);
+  const card = badgeUrl(query, "card");
+  return h(
+    "div",
+    { class: "badge-panel" },
+    h(
+      "div",
+      { class: "badge-previews" },
+      h("a", { href, target: "_blank", rel: "noopener" }, h("img", { src: flat, alt: "KEPT badge", height: 20 })),
+      h("a", { href, target: "_blank", rel: "noopener" }, h("img", { src: card, alt: "KEPT record card", width: 440, height: 120, class: "badge-card" })),
+    ),
+    h(
+      "div",
+      { class: "badge-copy" },
+      h("p", { class: "muted" }, "Live from the chain, refreshed every five minutes. Put it in your README, docs or site: holders see your record without taking your word for it."),
+      h(
+        "div",
+        { class: "chips" },
+        copyButton("Markdown", `[![KEPT](${flat})](${href})`),
+        copyButton("HTML", `<a href="${href}"><img src="${card}" alt="KEPT record" width="440" height="120"></a>`),
+        copyButton("Image URL", card),
+        post ? h("a", { class: "btn small primary", href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(href)}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post to X") : null,
+      ),
+    ),
+  );
+}
+
+function viewBoard({ quiet }) {
+  const token = navToken;
+  const figs = {
+    teams: h("div", { class: "v tnum" }, "…"),
+    kept: h("div", { class: "v kept tnum" }, "…"),
+    broken: h("div", { class: "v broken tnum" }, "…"),
+    rate: h("div", { class: "v tnum" }, "…"),
+  };
+  const boardEl = h("div", { class: "rows board" });
+  const dueEl = h("div", { class: "rows due" });
+  const badgeEl = h("div", {});
+  let lastSig = null;
+
+  const apply = (c, pledges) => {
+    const s = sig([c, pledges]);
+    if (s === lastSig) return;
+    const first = lastSig === null;
+    lastSig = s;
+    const ts = teams(pledges);
+    const { kept, broken } = tally(pledges);
+    countUp(figs.teams, ts.length);
+    countUp(figs.kept, kept);
+    countUp(figs.broken, broken);
+    figs.rate.textContent = kept + broken ? `${Math.round((100 * kept) / (kept + broken))}%` : "–";
+    setInstant(!first || quiet);
+    boardEl.replaceChildren(...(ts.length ? ts.map((t, i) => reveal(teamRow(t, i + 1, c.grace), Math.min(i, 6) * 70)) : [h("div", { class: "empty" }, "No teams yet.")]));
+    const due = pledges
+      .flatMap((p) => p.milestones.filter((m) => m.outcome === 0).map((m) => ({ m, p })))
+      .sort((a, b) => Number(a.m.deadline - b.m.deadline))
+      .slice(0, 8);
+    dueEl.replaceChildren(...(due.length ? due.map(({ m, p }, i) => reveal(dueRow(m, p, c.grace), Math.min(i, 6) * 60)) : [h("div", { class: "empty" }, "Nothing due: every promise on KEPT is settled.")]));
+    const top = ts[0];
+    badgeEl.replaceChildren(
+      top
+        ? badgePanel(`team=${top.beneficiary}`, {
+            href: `${SITE}/#/board`,
+            post: `${top.kept}/${top.kept + top.broken + top.open} promises kept, every one verified onchain by the IMD swarm. The KEPT Promise Board:`,
+          })
+        : h("div", { class: "empty" }, "Badges appear once a team has a pledge."),
+    );
+    setInstant(false);
+  };
+
+  paint(
+    "/board",
+    () =>
+      h(
+        "section",
+        { class: "wrap" },
+        h("div", { class: "label", style: { marginTop: "42px" } }, "Promise Board"),
+        h("h1", { class: "page-title" }, words("Who keeps their word.", { accent: ["word."] })),
+        h("p", { class: "lede" }, "Every team that has locked tokens on KEPT, ranked by promises kept. Each verdict was signed by the IMD swarm and checked onchain by the vault: nobody here can grade themselves."),
+        reveal(
+          h(
+            "div",
+            { class: "figures" },
+            h("div", { class: "figure" }, figs.teams, h("div", { class: "label l" }, "Teams")),
+            h("div", { class: "figure" }, figs.kept, h("div", { class: "label l" }, "Promises kept")),
+            h("div", { class: "figure" }, figs.broken, h("div", { class: "label l" }, "Promises broken")),
+            h("div", { class: "figure" }, figs.rate, h("div", { class: "label l" }, "Kept rate")),
+          ),
+        ),
+        sec("01", "Leaderboard", "kept rate, then promises kept"),
+        boardEl,
+        sec("02", "Due next", "live countdowns"),
+        dueEl,
+        sec("03", "Show your record", "a live badge for any team"),
+        badgeEl,
+      ),
+    { quiet },
+  );
+
+  if (!deployed) return boardEl.replaceChildren(notLive());
+  const c0 = cachedConstants();
+  const p0 = cachedPledges();
+  if (c0 && p0) apply(c0, p0);
+  else boardEl.replaceChildren(...skeletonRows(3));
+  const refresh = (maxAge) =>
+    Promise.all([getConstants({ maxAge }), getPledges({ maxAge })])
+      .then(([c, pledges]) => token === navToken && apply(c, pledges))
+      .catch((e) => token === navToken && !lastSig && boardEl.replaceChildren(h("div", { class: "empty" }, `Could not read the vault: ${reason(e)}`)));
+  refresh(quiet ? 0 : 5_000);
+  whileHere(liveInterval(boardEl, () => token === navToken && refresh(0), 30_000));
+}
+
+function teamRow(t, rank, grace) {
+  const tone = t.broken ? "broken" : t.kept ? "kept" : "open";
+  const rate = t.rate === null ? "–" : `${Math.round(t.rate * 100)}%`;
+  const href = link(`/pledge/${t.lead.id}`);
+  return spotlight(
+    h(
+      "a",
+      { class: "row team", href, onpointerenter: () => prefetchPledge(t.lead.id) },
+      h("span", { class: `rank tnum ${rank === 1 ? "first" : ""}` }, String(rank).padStart(2, "0")),
+      h(
+        "div",
+        { style: { minWidth: 0 } },
+        h("div", { class: "title" }, t.lead.name),
+        h(
+          "div",
+          { class: "meta" },
+          h("span", { class: "chip kept" }, h("span", { class: "lamp kept" }), `${t.kept} kept`),
+          t.broken ? h("span", { class: "chip broken" }, h("span", { class: "lamp broken" }), `${t.broken} broken`) : null,
+          t.open ? h("span", { class: "chip open" }, h("span", { class: "lamp open" }), `${t.open} open`) : null,
+          h("span", {}, `${t.lead.tokenInfo.symbol} · ${t.pledges.length} pledge${t.pledges.length === 1 ? "" : "s"} · `, short(t.beneficiary)),
+        ),
+        h("div", { class: "track" }, t.ms.map((m, i) => h("i", { class: state(m, grace).cls, title: m.title, style: { "--i": i } }))),
+      ),
+      h("div", { class: "right" }, h("span", { class: `rate tnum ${tone}` }, rate), h("span", {}, "kept rate"), t.next ? countdown(t.next.deadline, grace) : h("span", {}, "all settled")),
+    ),
+  );
+}
+
+function dueRow(m, p, grace) {
+  const st = state(m, grace);
+  return h(
+    "a",
+    { class: "row due-row", href: link(`/pledge/${p.id}`), onpointerenter: () => prefetchPledge(p.id) },
+    h("span", { class: `glyph ${st.cls}` }, icon(TEMPLATE_ICON[m.kind] ?? "lock", 18)),
+    h("div", { style: { minWidth: 0 } }, h("div", { class: "title" }, m.title), h("div", { class: "meta" }, h("span", {}, `#${p.id} · ${p.name}`), h("span", {}, `${fmt(m.amount, p.tokenInfo.decimals)} ${p.tokenInfo.symbol} at stake`))),
+    // the countdown already says "due in"; the chip only adds news (checking, kept, burn pending)
+    h("div", { class: "right" }, countdown(m.deadline, grace), st.cls !== "open" ? h("span", { class: `chip ${st.cls}` }, st.chip) : null),
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -1402,6 +1758,7 @@ function route({ quiet = false } = {}) {
   const m = path.match(/^\/pledge\/(\d+)$/);
   if (m) return viewPledge(Number(m[1]), { quiet });
   if (path === "/new") return viewNew({ quiet });
+  if (path === "/board") return viewBoard({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
   return viewHome({ quiet });
