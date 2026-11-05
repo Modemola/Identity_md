@@ -804,3 +804,17 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
 .net-switch button { border: 0; background: none; padding: 6px 12px; font-size: 11.5px; letter-spacing: var(--track); text-transform: uppercase; color: var(--dim); cursor: pointer; }
 .net-switch button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .net-switch button:focus-visible { outline: 2px solid var(--ok); outline-offset: -2px; }
+
+/* ------------------------------------------------------------------ back this pledge */
+.summary.back { display: grid; gap: 12px; }
+.summary.back.short { border-color: var(--caution); }
+.back-head { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: end; justify-content: space-between; }
+.back-figure { font-size: 28px; font-weight: 600; line-height: 1.1; }
+.back-meter { flex: 1 1 220px; max-width: 420px; height: 10px; background: var(--soft); position: relative; overflow: hidden; }
+.back-meter i { position: absolute; inset: 0; background: var(--ok); transform-origin: 0 50%; transform: scaleX(var(--x)); transition: transform 0.8s var(--ease); }
+.summary.back.short .back-meter i { background: var(--caution); }
+.back-status { margin: 0; font-weight: 500; }
+.backers { display: grid; gap: 8px; border-top: var(--hair); padding-top: 12px; }
+.backer-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.backer-list li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.backer-list li .tnum { margin-left: auto; }

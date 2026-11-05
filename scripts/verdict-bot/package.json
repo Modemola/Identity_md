@@ -1,0 +1,8 @@
+{
+  "name": "kept-verdict-bot",
+  "private": true,
+  "type": "module",
+  "description": "Posts every KEPT verdict to X with its card.",
+  "scripts": { "start": "node bot.mjs" },
+  "dependencies": { "@resvg/resvg-js": "2.6.2" }
+}

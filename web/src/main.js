@@ -565,9 +565,11 @@ function pledgeContent(p, c) {
   const acct = currentAccount();
   const isBeneficiary = acct && p.beneficiary.toLowerCase() === acct.toLowerCase();
   const historyEls = new Map(p.milestones.map((m) => [m.index, h("div", { class: "verdicts" })]));
+  const backersEl = h("div", { class: "backers" });
   historyFill = (hist) => {
     // no isConnected check: inside a view transition the rows are built before they are attached
     for (const [index, el] of historyEls) renderHistory(el, index, hist);
+    renderBackers(backersEl, p, hist);
   };
   const title = h("h1", { class: "page-title" }, p.name);
   title.style.viewTransitionName = "ptitle";
@@ -602,8 +604,8 @@ function pledgeContent(p, c) {
     h("div", { class: "muted fine" }, `Panel of ${p.panelSize}, ${p.quorum} must agree · ${c.maxAttempts} checks per milestone · ${span(c.grace)} delivery grace; page and chain verdicts must be signed by the deadline`),
     sec("01", "Milestones", `${p.count - p.open}/${p.count} settled`),
     h("div", { class: "rows" }, p.milestones.map((m) => milestoneRow(p, m, c, total, isBeneficiary, historyEls.get(m.index)))),
-    budgetBox(p),
-    sec("02", "Badge and share", "live from the chain"),
+    budgetBox(p, c, backersEl),
+    sec(p.open === 0 ? "02" : "03", "Badge and share", "live from the chain"),
     badgePanel(`pledge=${p.id}`, {
       href: siteLink(`/pledge/${p.id}`),
       post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
@@ -746,6 +748,8 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
     actions.push(h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Clear the unanswered check", one(call("clearStale")), keys) }, "Clear unanswered check"));
   }
 
+  if (m.outcome !== 0) actions.push(...verdictShare(p, m));
+
   let bodyText = m.question;
   try {
     const b = JSON.parse(m.question);
@@ -814,8 +818,16 @@ function renderHistory(el, index, hist) {
   el.replaceChildren(...rows.map((r, i) => (fresh && !reduced ? (r.node.classList.add("v-in"), r.node.style.setProperty("--i", i), r.node) : r.node)));
 }
 
-function budgetBox(p) {
-  const keys = [`pledge:${p.id}`];
+const CHECK = 5n * 10n ** 17n; // the vault's default price cap for one check: 0.5 IMD
+
+/** Milestones still waiting on proof: each needs at least one check before its window closes. */
+function unproven(p, c) {
+  const t = now();
+  return p.milestones.filter((m) => m.outcome === 0 && t <= m.deadline + c.grace && m.attempts < c.maxAttempts);
+}
+
+function budgetBox(p, c, backersEl) {
+  const keys = [`pledge:${p.id}`, `history:${p.id}`];
   if (p.open === 0) {
     if (p.budget === 0n) return null;
     return h(
@@ -825,14 +837,29 @@ function budgetBox(p) {
       h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Return the budget", one({ address: config.vault, abi: vaultAbi, functionName: "withdrawBudget", args: [BigInt(p.id)] }), keys) }, "Return it to the creator"),
     );
   }
-  const input = h("input", { type: "number", min: "0", step: "0.5", value: "0.5", "aria-label": "IMD to add" });
+  const waiting = unproven(p, c);
+  const need = BigInt(waiting.length) * CHECK;
+  const covered = Number(p.budget / CHECK);
+  const gap = need > p.budget ? need - p.budget : 0n;
+  const share = waiting.length ? Math.min(1, covered / waiting.length) : 1;
+  const input = h("input", { type: "number", min: "0", step: "0.5", value: gap ? fmt(gap, IMD_DECIMALS).replace(/,/g, "") : "0.5", "aria-label": "IMD to add" });
+  const status = !waiting.length
+    ? "Every open milestone has had its checks. Extra IMD is not needed."
+    : gap
+      ? `${covered} of ${waiting.length} check${waiting.length === 1 ? "" : "s"} paid for. ${fmt(gap, IMD_DECIMALS)} IMD more lets the swarm check every open milestone once.`
+      : `Paid for: every open milestone can be checked at least once.`;
+
   return [
-    sec("02", "Check budget"),
+    sec("02", "Back this pledge", gap ? "needs IMD for checks" : "checks covered"),
     reveal(
       h(
         "div",
-        { class: "summary" },
-        h("p", { class: "muted", style: { margin: "0 0 14px" } }, "Each check costs 0.5 IMD, paid to the IMD swarm. Anyone can add budget; whatever is left goes back to the creator once every milestone is settled."),
+        { class: `summary back ${gap ? "short" : "ok"}` },
+        h("div", { class: "back-head" },
+          h("div", {}, h("div", { class: "back-figure tnum" }, `${fmt(p.budget, IMD_DECIMALS)} IMD`), h("div", { class: "muted" }, "in the check budget")),
+          h("div", { class: "back-meter", role: "img", "aria-label": `${Math.round(share * 100)}% of the checks needed are paid for` }, h("i", { style: { "--x": share } }))),
+        h("p", { class: "back-status" }, status),
+        h("p", { class: "muted", style: { margin: "0 0 14px" } }, "A promise nobody checks burns. Each check pays 0.5 IMD to the IMD swarm, and anyone can chip in. Only the beneficiary can ask for a check. Whatever is left when the pledge ends goes back to its creator, not to backers."),
         h(
           "div",
           { class: "inline-form" },
@@ -840,7 +867,7 @@ function budgetBox(p) {
           h(
             "button",
             {
-              class: "btn small",
+              class: "btn small primary",
               onclick: async (e) => {
                 let amount;
                 try {
@@ -850,22 +877,72 @@ function budgetBox(p) {
                 }
                 if (!amount) return toast("Enter an amount of IMD.", "alarm");
                 const { imd } = await getConstants({ maxAge: 300_000 });
-                onchain(
+                const ok = await onchain(
                   e.currentTarget,
-                  "Add check budget",
+                  "Back this pledge",
                   [
                     { label: "Allow the vault to take the IMD", run: async (ph) => ((await needsAllowance(imd, config.vault, amount)) ? ensureAllowance(imd, config.vault, amount, ph) : null) },
                     { label: `Add ${fmt(amount, IMD_DECIMALS)} IMD to pledge #${p.id}`, run: (ph) => send({ address: config.vault, abi: vaultAbi, functionName: "fund", args: [BigInt(p.id), amount] }, ph) },
                   ],
                   keys,
                 );
+                if (ok) {
+                  const post = `I just backed "${p.name}" on @keptonchainn with ${fmt(amount, IMD_DECIMALS)} IMD so the IMD swarm can check their promises. Kept, they unlock. Missed, they burn.`;
+                  toast("Thanks for backing it.", "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, text: "Tell X" } });
+                }
               },
             },
-            "Add budget",
+            icon("fund", 15),
+            "Back it",
           ),
+          gap
+            ? h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(`"${p.name}" needs ${fmt(gap, IMD_DECIMALS)} IMD so the IMD swarm can check its promises. Back it on @keptonchainn:`)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Ask for backers")
+            : null,
         ),
+        backersEl,
       ),
     ),
+  ];
+}
+
+/** Who has put IMD into this pledge's check budget, biggest first. */
+function renderBackers(el, p, hist) {
+  if (!el || !hist.funds) return;
+  const by = new Map();
+  for (const l of hist.funds) {
+    const k = l.args.from.toLowerCase();
+    const b = by.get(k) ?? { from: l.args.from, amount: 0n, times: 0 };
+    b.amount += l.args.amount;
+    b.times += 1;
+    by.set(k, b);
+  }
+  const list = [...by.values()].sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
+  if (!list.length) return el.replaceChildren(h("div", { class: "muted fine" }, "No backers yet. Be the first."));
+  el.replaceChildren(
+    h("div", { class: "label l" }, `${list.length} backer${list.length === 1 ? "" : "s"}`),
+    h("ul", { class: "backer-list" },
+      list.map((b) =>
+        h("li", {},
+          addrLink(b.from),
+          b.from.toLowerCase() === p.creator.toLowerCase() ? h("span", { class: "chip kind" }, "creator") : null,
+          h("span", { class: "tnum" }, `${fmt(b.amount, IMD_DECIMALS)} IMD`)))),
+  );
+}
+
+/** Buttons to post a decided milestone: the verdict card's text, and the card itself. */
+function verdictShare(p, m) {
+  const kept = p.milestones.filter((x) => x.outcome === 1).length;
+  const broken = p.milestones.filter((x) => x.outcome === 2).length;
+  const record = broken ? `${kept} kept, ${broken} broken` : `${kept}/${p.count} promises kept`;
+  const amt = `${fmt(m.amount, p.tokenInfo.decimals)} $${p.tokenInfo.symbol}`;
+  const text =
+    m.outcome === 1
+      ? `KEPT. "${m.title}" was delivered, verified by the IMD swarm. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
+      : `BURNED. "${m.title}" was not delivered. ${amt} from "${p.name}" is gone for good. Record: ${record}.`;
+  const card = `${BADGE_HOST}/api/verdict?pledge=${p.id}&m=${m.index}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}`;
+  return [
+    h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post the verdict"),
+    h("a", { class: "btn small", href: card, target: "_blank", rel: "noopener" }, "Verdict card"),
   ];
 }
 
@@ -1764,7 +1841,12 @@ function dueRow(m, p, grace) {
     h("span", { class: `glyph ${st.cls}` }, icon(TEMPLATE_ICON[m.kind] ?? "lock", 18)),
     h("div", { style: { minWidth: 0 } }, h("div", { class: "title" }, m.title), h("div", { class: "meta" }, h("span", {}, `#${p.id} · ${p.name}`), h("span", {}, `${fmt(m.amount, p.tokenInfo.decimals)} ${p.tokenInfo.symbol} at stake`))),
     // the countdown already says "due in"; the chip only adds news (checking, kept, burn pending)
-    h("div", { class: "right" }, countdown(m.deadline, grace), st.cls !== "open" ? h("span", { class: `chip ${st.cls}` }, st.chip) : null),
+    h(
+      "div",
+      { class: "right" },
+      countdown(m.deadline, grace),
+      st.cls !== "open" ? h("span", { class: `chip ${st.cls}` }, st.chip) : p.budget < CHECK ? h("span", { class: "chip open", title: "No IMD for a check yet: anyone can back it" }, "needs backing") : null,
+    ),
   );
 }
 
