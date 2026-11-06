@@ -21,7 +21,7 @@ const reply = (body, type, status, maxAge) =>
     },
   });
 
-async function allPledges(chainId, net) {
+export async function allPledges(chainId, net) {
   const n = await pledgeCount(net);
   const out = [];
   // a few at a time, to stay friendly with public RPCs
