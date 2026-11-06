@@ -1725,9 +1725,11 @@ function teams(pledges) {
       const broken = ms.filter((m) => m.outcome === 2).length;
       const next = ms.filter((m) => m.outcome === 0).sort((a, b) => Number(a.deadline - b.deadline))[0];
       const lead = t.pledges[0]; // newest first
-      return { ...t, ms, kept, broken, open: ms.length - kept - broken, rate: kept + broken ? kept / (kept + broken) : null, next, lead };
+      // the same score /api/score serves: the kept rate with one kept and one broken promise as a prior
+      const score = kept + broken ? Math.round((100 * (kept + 1)) / (kept + broken + 2)) : null;
+      return { ...t, ms, kept, broken, open: ms.length - kept - broken, rate: kept + broken ? kept / (kept + broken) : null, score, next, lead };
     })
-    .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.kept - a.kept || a.broken - b.broken || b.ms.length - a.ms.length);
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.kept - a.kept || a.broken - b.broken || b.ms.length - a.ms.length);
 }
 
 /** A countdown that ticks every second while it is on screen. */
@@ -1840,7 +1842,7 @@ function viewBoard({ quiet }) {
         { class: "wrap" },
         h("div", { class: "label", style: { marginTop: "42px" } }, "Promise Board"),
         h("h1", { class: "page-title" }, words("Who keeps their word.", { accent: ["word."] })),
-        h("p", { class: "lede" }, "Every team that has locked tokens on KEPT, ranked by promises kept. Each verdict was signed by the IMD swarm and checked onchain by the vault: nobody here can grade themselves."),
+        h("p", { class: "lede" }, "Every team that has locked tokens on KEPT, ranked by KEPT score. Each verdict was signed by the IMD swarm and checked onchain by the vault, so nobody here can grade themselves. Apps can read any score at /api/score."),
         reveal(
           h(
             "div",
@@ -1851,7 +1853,7 @@ function viewBoard({ quiet }) {
             h("div", { class: "figure" }, figs.rate, h("div", { class: "label l" }, "Kept rate")),
           ),
         ),
-        sec("01", "Leaderboard", "kept rate, then promises kept"),
+        sec("01", "Leaderboard", "KEPT score, then promises kept"),
         boardEl,
         sec("02", "Due next", "live countdowns"),
         dueEl,
@@ -1875,8 +1877,8 @@ function viewBoard({ quiet }) {
 }
 
 function teamRow(t, rank, grace) {
-  const tone = t.broken ? "broken" : t.kept ? "kept" : "open";
-  const rate = t.rate === null ? "–" : `${Math.round(t.rate * 100)}%`;
+  const tone = t.score === null ? "open" : t.score >= 75 ? "kept" : t.score >= 50 ? "open" : "broken";
+  const score = t.score === null ? "–" : String(t.score);
   const href = link(`/pledge/${t.lead.id}`);
   return spotlight(
     h(
@@ -1897,7 +1899,7 @@ function teamRow(t, rank, grace) {
         ),
         h("div", { class: "track" }, t.ms.map((m, i) => h("i", { class: state(m, grace).cls, title: m.title, style: { "--i": i } }))),
       ),
-      h("div", { class: "right" }, h("span", { class: `rate tnum ${tone}` }, rate), h("span", {}, "kept rate"), t.next ? countdown(t.next.deadline, grace) : h("span", {}, "all settled")),
+      h("div", { class: "right" }, h("span", { class: `rate tnum ${tone}`, title: "KEPT score: (kept + 1) / (settled + 2)" }, score), h("span", {}, "KEPT score"), t.next ? countdown(t.next.deadline, grace) : h("span", {}, "all settled")),
     ),
   );
 }
