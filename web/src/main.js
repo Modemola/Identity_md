@@ -940,10 +940,79 @@ function verdictShare(p, m) {
       ? `KEPT. "${m.title}" was delivered, verified by the IMD swarm. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
       : `BURNED. "${m.title}" was not delivered. ${amt} from "${p.name}" is gone for good. Record: ${record}.`;
   const card = `${BADGE_HOST}/api/verdict?pledge=${p.id}&m=${m.index}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}`;
+  const url = siteLink(`/pledge/${p.id}`);
+  const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   return [
-    h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post the verdict"),
+    shareCardButton(card, `kept-pledge${p.id}-milestone${m.index + 1}.png`, `${text}\n${url}`, intent),
+    h("a", { class: "btn small", href: intent, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post the verdict"),
     h("a", { class: "btn small", href: card, target: "_blank", rel: "noopener" }, "Verdict card"),
   ];
+}
+
+/**
+ * One tap to post a verdict with its card, free: on a phone the card is drawn as a PNG ahead of
+ * time (a share sheet must open straight from the tap), then shared with the text. On a desktop
+ * the PNG downloads and the post opens on X to attach it to.
+ */
+function shareCardButton(card, name, text, intent) {
+  let job = null;
+  let file = null;
+  const prepare = () =>
+    (job ??= import("./sharecard.js")
+      .then((sc) => sc.cardPng(card, name))
+      .then((f) => (file = f))
+      .catch((e) => {
+        job = null;
+        throw e;
+      }));
+  let phone = false;
+  import("./sharecard.js").then((sc) => {
+    phone = sc.canShareImages();
+    if (phone) (window.requestIdleCallback ?? setTimeout)(() => prepare().catch(() => {}));
+  });
+  const label = h("span", {}, "Share card");
+  const btn = h(
+    "button",
+    {
+      class: "btn small primary",
+      type: "button",
+      onclick: async () => {
+        if (phone) {
+          if (!file) {
+            label.textContent = "Preparing…";
+            try {
+              await prepare();
+            } catch (e) {
+              label.textContent = "Share card";
+              return toast(`Could not make the card: ${reason(e)}`, "alarm");
+            }
+            label.textContent = "Share card";
+          }
+          try {
+            await navigator.share({ files: [file], text });
+          } catch (e) {
+            if (e?.name === "AbortError") return; // closed the share sheet
+            if (e?.name === "NotAllowedError") return toast("The card is ready. Tap Share card again.", "ok");
+            toast(`Could not share: ${reason(e)}`, "alarm");
+          }
+          return;
+        }
+        label.textContent = "Preparing…";
+        try {
+          const sc = await import("./sharecard.js");
+          sc.download(await prepare());
+          toast("Card saved to your downloads. Attach it to the post on X.", "ok", { ms: 12000, link: { href: intent, text: "Open X" } });
+        } catch (e) {
+          toast(`Could not make the card: ${reason(e)}`, "alarm");
+        } finally {
+          label.textContent = "Share card";
+        }
+      },
+    },
+    icon("arrow", 14),
+    label,
+  );
+  return btn;
 }
 
 // ------------------------------------------------------------------ make a pledge
