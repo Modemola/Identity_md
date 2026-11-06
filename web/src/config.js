@@ -1,7 +1,7 @@
 // The networks KEPT runs on. Each has its own vault; the site shows one at a time. A network
 // without a vault address is hidden until it is deployed (fill in `vault` and `fromBlock`).
 // Any value can be overridden from the URL for review or local testing:
-// ?net=ethereum&vault=0x…&hook=0x…&token=0x…&rpc=https://…&chain=1&from=123
+// ?net=ethereum&vault=0x…&hook=0x…&token=0x…&rpc=https://…&chain=1&from=123&markets=0x…&marketsFrom=123
 export const NETWORKS = {
   robinhood: {
     name: "Robinhood Chain",
@@ -13,6 +13,8 @@ export const NETWORKS = {
     hook: "0xb5f28198750864e199477a6898bad44ae4d1e0cc", // KeptHook, IMD launch #2185
     token: "0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3", // KEPT token, IMD launch #2185
     fromBlock: 91910657, // the vault's deploy block: history scans start here
+    markets: "", // KeptMarkets: fill in after `launch.mjs markets`
+    marketsFrom: 0, // its deploy block
   },
   ethereum: {
     name: "Ethereum",
@@ -24,6 +26,8 @@ export const NETWORKS = {
     hook: "",
     token: "",
     fromBlock: 0,
+    markets: "",
+    marketsFrom: 0,
   },
 };
 
@@ -55,12 +59,16 @@ export const config = {
   hook: pick("hook", n.hook),
   token: pick("token", n.token),
   fromBlock: BigInt(pick("from", n.fromBlock)),
+  markets: pick("markets", n.markets),
+  marketsFrom: BigInt(pick("marketsFrom", n.marketsFrom || n.fromBlock)),
   imdApi: "https://api.imd.fun",
   imdExplorer: "https://explorer.imd.fun",
   repo: "https://github.com/modemola/identity_md",
 };
 
 export const deployed = isAddr(config.vault);
+/** Will they ship? markets are live on this network. */
+export const marketsLive = deployed && isAddr(config.markets);
 
 /** The network that serves a chain id, if KEPT is live there. */
 export const networkFor = (chainId) => LIVE.find((k) => NETWORKS[k].chainId === chainId);
