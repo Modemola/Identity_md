@@ -1,0 +1,9 @@
+{
+  "name": "kept",
+  "private": true,
+  "description": "KEPT: promises the IMD swarm enforces. Root package for the Vercel API functions in api/; the site lives in web/ and ships prebuilt in dist/.",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

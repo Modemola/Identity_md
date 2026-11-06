@@ -50,5 +50,5 @@ A cron line that checks every 5 minutes:
 
 ## Notes
 
-- The card uses IBM Plex Mono, bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`).
+- The card uses IBM Plex Mono, bundled in `api/_lib/fonts/` under the SIL Open Font License (`api/_lib/fonts/OFL.txt`).
 - `KEPT_RPC` and `KEPT_VAULT` override the Robinhood Chain RPC and vault. `KEPT_RPC_1` and `KEPT_VAULT_1` do the same for Ethereum.

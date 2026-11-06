@@ -30,7 +30,7 @@ const ONCE = flag("--once");
 const EVERY = Number(opt("--every") || 60) * 1000;
 const OUT = join(HERE, "out");
 const STATE = join(HERE, ".state.json");
-const FONTS = ["IBMPlexMono-SemiBold.ttf", "IBMPlexMono-Regular.ttf"].map((f) => join(HERE, "fonts", f));
+const FONTS = ["IBMPlexMono-SemiBold.ttf", "IBMPlexMono-Regular.ttf"].map((f) => join(HERE, "../../api/_lib/fonts", f));
 
 if (!NET || !NET.vault) {
   console.error(`KEPT has no vault on chain ${CHAIN} yet.`);

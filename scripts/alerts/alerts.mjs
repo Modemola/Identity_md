@@ -36,7 +36,7 @@ const CHANNEL = process.env.TELEGRAM_CHANNEL;
 const BOT = (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "");
 const API = process.env.TELEGRAM_API || "https://api.telegram.org"; // overridable for tests
 const STATE = join(HERE, ".state.json");
-const FONTS = ["IBMPlexMono-SemiBold.ttf", "IBMPlexMono-Regular.ttf"].map((f) => join(HERE, "../verdict-bot/fonts", f));
+const FONTS = ["IBMPlexMono-SemiBold.ttf", "IBMPlexMono-Regular.ttf"].map((f) => join(HERE, "../../api/_lib/fonts", f));
 const DAY = 86_400;
 
 if (!NET?.vault) die(`KEPT has no vault on chain ${CHAIN}.`);
@@ -75,7 +75,8 @@ async function tg(method, body) {
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 /** One tap from the channel: opens the bot, which follows the pledge. */
 const followLink = (id) => (BOT ? `<a href="https://t.me/${BOT}?start=follow_${id}">Get alerts for this pledge</a>` : `Alerts for this pledge: message the bot /follow ${id}`);
-const link = (id) => `https://${SITE}/${CHAIN === "1" ? "?net=ethereum" : ""}#/pledge/${id}`;
+// /p/ share links: Telegram shows the pledge's live record card under the alert
+const link = (id) => `https://${SITE}/p/${id}${CHAIN === "1" ? "?chain=1" : ""}`;
 
 /** Sends to the channel and to everyone following this pledge. */
 async function broadcast(pledgeId, html, png) {
@@ -90,7 +91,7 @@ async function broadcast(pledgeId, html, png) {
         form.append("photo", new Blob([png], { type: "image/png" }), "verdict.png");
         await tg("sendPhoto", DRY ? { chat_id, caption: html, photo: `${png.length} bytes` } : form);
       } else {
-        await tg("sendMessage", { chat_id, text: html, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+        await tg("sendMessage", { chat_id, text: html, parse_mode: "HTML", link_preview_options: { prefer_large_media: true } });
       }
     } catch (e) {
       console.error(`could not send to ${chat_id}: ${e.message}`);

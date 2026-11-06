@@ -105,7 +105,8 @@ export function verdictPost(p, index, verdict, chainId = 4663) {
   const kept = p.milestones.filter((x) => x.outcome === 1).length;
   const broken = p.milestones.filter((x) => x.outcome === 2).length;
   const record = broken ? `${kept} kept, ${broken} broken` : `${kept}/${p.count} promises kept`;
-  const link = `https://${SITE}/${Number(chainId) === 1 ? "?net=ethereum" : ""}#/pledge/${p.id}`;
+  // the /p/ share link: X shows this milestone's card under the post
+  const link = `https://${SITE}/p/${p.id}/${index + 1}${Number(chainId) === 1 ? "?chain=1" : ""}`;
   if (m.outcome === 1) {
     const panel = verdict ? `${verdict.agreed} of ${verdict.panelSize} agents agreed. ` : "";
     return `KEPT. "${m.title}" was delivered.\n\n${panel}${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}".\n\nRecord: ${record}.\n${link}`;
@@ -115,4 +116,59 @@ export function verdictPost(p, index, verdict, chainId = 4663) {
     return `BURNED. "${m.title}" was not delivered.\n\n${why}${amt} from "${p.name}" is gone for good.\n\nRecord: ${record}.\n${link}`;
   }
   return `"${m.title}" is due. ${amt} from "${p.name}" is on the line.\n${link}`;
+}
+
+// ------------------------------------------------------------------ link previews (1200x630)
+
+/** A pledge's whole record as a 1200x630 card: what X shows under a shared /p/<id> link. */
+export function recordCard(p, score) {
+  const W = 1200, H = 630;
+  const kept = p.milestones.filter((m) => m.outcome === 1).length;
+  const broken = p.milestones.filter((m) => m.outcome === 2).length;
+  const open = p.count - kept - broken;
+  const tone = score === null ? C.muted : score >= 75 ? C.kept : score >= 50 ? C.open : C.broken;
+  const total = p.milestones.reduce((x, m) => x + m.amount, 0n);
+  const name = wrap(p.name, 30, 2);
+  const rows = p.milestones.slice(0, 4).map((m, i) => {
+    const y = 300 + i * 52;
+    const col = m.outcome === 1 ? C.kept : m.outcome === 2 ? C.broken : C.open;
+    const label = m.outcome === 1 ? "KEPT" : m.outcome === 2 ? "BURNED" : `DUE ${new Date(m.deadline * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()}`;
+    const t = m.title.length > 40 ? `${m.title.slice(0, 39)}…` : m.title;
+    return `<rect x="64" y="${y - 17}" width="22" height="22" rx="4" fill="${m.outcome ? col : "none"}" stroke="${col}" stroke-width="2.5"/>
+<text x="104" y="${y}" fill="${C.text}" font-family="${MONO}" font-size="24">${esc(t)}</text>
+<text x="840" y="${y}" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="20">${esc(`${amount(m.amount, p.decimals)} ${p.symbol}`)}</text>
+<text x="${W - 64}" y="${y}" text-anchor="end" fill="${col}" font-family="${MONO}" font-size="20" font-weight="600" letter-spacing="1">${label}</text>`;
+  });
+  const more = p.count > 4 ? `<text x="104" y="${300 + 4 * 52}" fill="${C.muted}" font-family="${MONO}" font-size="20">+ ${p.count - 4} more</text>` : "";
+  const record = broken ? `${kept} kept · ${broken} broken · ${open} open` : `${kept}/${p.count} promises kept${open ? ` · ${open} open` : ""}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<defs>
+  <radialGradient id="glow" cx="0.85" cy="0.2" r="0.6"><stop offset="0" stop-color="${tone}" stop-opacity="0.22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></radialGradient>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#ffffff" stroke-opacity="0.04"/></pattern>
+</defs>
+<rect width="${W}" height="${H}" fill="${C.ink}"/>
+<rect width="${W}" height="${H}" fill="url(#grid)"/>
+<rect width="${W}" height="${H}" fill="url(#glow)"/>
+<rect x="1.5" y="1.5" width="${W - 3}" height="${H - 3}" fill="none" stroke="${tone}" stroke-opacity="0.5" stroke-width="3"/>
+${seal(64, 52, 32)}
+<text x="110" y="78" fill="${C.text}" font-family="${MONO}" font-size="24" font-weight="600" letter-spacing="5">KEPT</text>
+<text x="64" y="132" fill="${C.muted}" font-family="${MONO}" font-size="20" letter-spacing="2">PLEDGE #${p.id} · ${esc(amount(total, p.decimals))} $${esc(p.symbol)} LOCKED</text>
+${name.map((l, i) => `<text x="64" y="${184 + i * 52}" fill="${C.text}" font-family="${MONO}" font-size="44" font-weight="600">${esc(l)}</text>`).join("\n")}
+<text x="${W - 64}" y="150" text-anchor="end" fill="${tone}" font-family="${MONO}" font-size="104" font-weight="600">${score ?? "–"}</text>
+<text x="${W - 64}" y="186" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="18" letter-spacing="3">KEPT SCORE</text>
+${rows.join("\n")}
+${more}
+<line x1="64" y1="540" x2="${W - 64}" y2="540" stroke="${C.line}" stroke-width="2"/>
+<text x="64" y="584" fill="${C.text}" font-family="${MONO}" font-size="22">${esc(record)}</text>
+<text x="${W - 64}" y="584" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="20">verified by the IMD swarm · ${SITE}</text>
+</svg>`;
+}
+
+/** Fits a card of any size into the 1200x630 link-preview frame, centred on the card's ink. */
+export function ogFrame(svg, w = 1200, h = 675) {
+  const W = 1200, H = 630;
+  const s = Math.min(W / w, H / h);
+  const x = (W - w * s) / 2, y = (H - h * s) / 2;
+  const inner = svg.replace(/^<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${C.ink}"/><svg x="${x}" y="${y}" width="${w * s}" height="${h * s}" viewBox="0 0 ${w} ${h}">${inner}</svg></svg>`;
 }
