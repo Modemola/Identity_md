@@ -32,13 +32,23 @@ export const TOPIC = {
   settled: "0x68fbc2551545ee5402e50cd6d73fd08205d73ca5b85c3a5320e4c7fb9f5b0f2f",
   verdict: "0x006c4215c60df81476fb90ec908a4eea91e38acb768ec907359d9d5c1c704d19",
   funded: "0xa9f7081b3f19af4d38c503ee34ec0d349e9072ae7bc1ea5d350ecf8a348478fe",
+  created: "0xe89999e6cb721fbde519355a42612e3d1199f8b9976aab236aa2250409b6070f",
 };
 
 export const word = (n) => BigInt(n).toString(16).padStart(64, "0");
 const hex = (n) => `0x${Number(n).toString(16)}`;
 
+/** POST to the RPC, retrying a rate limit or a server error up to three times with backoff. */
+async function post(net, body) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(net.rpc, { method: "POST", headers: { "content-type": "application/json" }, body });
+    if (res.ok || attempt === 3 || !(res.status === 429 || res.status >= 500)) return res;
+    await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+  }
+}
+
 export async function rpc(net, method, params) {
-  const res = await fetch(net.rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const res = await post(net, JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
   if (!res.ok) throw new Error(`rpc ${res.status}`);
   const j = await res.json();
   if (j.error) throw new Error(j.error.message);
@@ -47,7 +57,7 @@ export async function rpc(net, method, params) {
 
 async function calls(net, batch) {
   const body = batch.map(([to, data], id) => ({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to, data }, "latest"] }));
-  const res = await fetch(net.rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const res = await post(net, JSON.stringify(body));
   if (!res.ok) throw new Error(`rpc ${res.status}`);
   const out = await res.json();
   return out.sort((a, b) => a.id - b.id).map((r) => {

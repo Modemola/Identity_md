@@ -1,0 +1,63 @@
+# KEPT alerts on Telegram (scripts/alerts): every 10 minutes, posts due dates, verdicts, burns and
+# new pledges to the channel and to people who follow a pledge, and answers the bot's commands.
+#
+# Setup (see scripts/alerts/README.md):
+#   secret    TELEGRAM_BOT_TOKEN     from @BotFather
+#   variable  TELEGRAM_CHANNEL       e.g. @keptalerts (the bot is an admin of it)
+#   variable  TELEGRAM_BOT_USERNAME  e.g. keptalerts_bot
+# Telegram's API is free, so this costs nothing.
+
+name: KEPT alerts
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kept-alerts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: scripts/alerts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: scripts/alerts/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      # what has been sent and who follows what, carried from run to run
+      - name: Restore alerts memory
+        uses: actions/cache/restore@v4
+        with:
+          path: scripts/alerts/.state.json
+          key: alerts-state-${{ github.run_id }}
+          restore-keys: alerts-state-
+
+      - name: Send alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}
+          TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then echo "TELEGRAM_BOT_TOKEN is not set: dry run."; node alerts.mjs --dry; else node alerts.mjs; fi
+
+      - name: Save alerts memory
+        if: always() && hashFiles('scripts/alerts/.state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: scripts/alerts/.state.json
+          key: alerts-state-${{ github.run_id }}

@@ -61,6 +61,8 @@ export const config = {
   fromBlock: BigInt(pick("from", n.fromBlock)),
   markets: pick("markets", n.markets),
   marketsFrom: BigInt(pick("marketsFrom", n.marketsFrom || n.fromBlock)),
+  // the KEPT alerts bot's username (scripts/alerts); a pledge page offers one-tap Telegram alerts once set
+  telegramBot: "",
   imdApi: "https://api.imd.fun",
   imdExplorer: "https://explorer.imd.fun",
   repo: "https://github.com/modemola/identity_md",

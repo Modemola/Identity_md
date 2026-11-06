@@ -835,3 +835,6 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
 .mk-fine { margin: 0; }
 .mk-form .unit-input { max-width: 160px; }
 .hot-row .mk-bar { margin-top: 8px; max-width: 420px; }
+
+/* ------------------------------------------------------------------ telegram alerts */
+.alerts-link { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 14px; }

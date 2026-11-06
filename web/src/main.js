@@ -586,6 +586,10 @@ function pledgeContent(p, c) {
     h("div", { class: "label", style: { marginTop: "22px" } }, `Pledge #${p.id} · locks ${p.tokenInfo.symbol}`),
     title,
     h("div", { class: "muted meta-line" }, "Token ", addrLink(p.token), " · created ", when(p.createdAt), " by ", addrLink(p.creator), " · beneficiary ", addrLink(p.beneficiary)),
+    // the alerts bot watches Robinhood Chain's vault
+    config.telegramBot && config.net === "robinhood"
+      ? h("div", { class: "alerts-link" }, h("a", { class: "btn small", href: `https://t.me/${config.telegramBot}?start=follow_${p.id}`, target: "_blank", rel: "noopener" }, icon("pulse", 14), "Get alerts on Telegram"), h("span", { class: "muted fine" }, "due dates, verdicts and burns for this pledge"))
+      : null,
     pendingBanner(c),
     reveal(
       h(
