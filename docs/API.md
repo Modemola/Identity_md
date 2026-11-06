@@ -52,6 +52,24 @@ Link to the pledge `url` so people can check the verdicts themselves.
 <img src="https://keptmd.vercel.app/api/score?token=0x…&format=svg" alt="KEPT score">
 ```
 
+## Embed: a live card in one line
+
+```html
+<script src="https://keptmd.vercel.app/embed.js" data-token="0x…" async></script>
+```
+
+This drops a 380x128 card with the KEPT score, kept, broken and open counts, a lamp per milestone and the next deadline. It links to the pledge on KEPT and refreshes from the chain every 5 minutes.
+
+- `data-token`, `data-team` or `data-pledge` picks the record.
+- `data-theme="light"` or `"dark"` sets the theme. By default it follows the viewer's system setting.
+- `data-width` sets the width (default 380).
+
+The card is a sandboxed iframe with no scripts, so it can't affect the host page. Without the script, use the iframe directly:
+
+```html
+<iframe src="https://keptmd.vercel.app/api/embed?token=0x…" width="380" height="128" style="border:0" title="KEPT record"></iframe>
+```
+
 ## Record badge: `/api/badge`
 
 | query | returns |
