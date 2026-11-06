@@ -614,7 +614,7 @@ function pledgeContent(p, c) {
     budgetBox(p, c, backersEl),
     sec(p.open === 0 ? "02" : "03", "Badge and share", "live from the chain"),
     badgePanel(`pledge=${p.id}`, {
-      href: siteLink(`/pledge/${p.id}`),
+      href: shareLink(p.id),
       post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
     }),
   );
@@ -896,7 +896,7 @@ function budgetBox(p, c, backersEl) {
                 );
                 if (ok) {
                   const post = `I just backed "${p.name}" on @keptonchainn with ${fmt(amount, IMD_DECIMALS)} IMD so the IMD swarm can check their promises. Kept, they unlock. Missed, they burn.`;
-                  toast("Thanks for backing it.", "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, text: "Tell X" } });
+                  toast("Thanks for backing it.", "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id))}`, text: "Tell X" } });
                 }
               },
             },
@@ -904,7 +904,7 @@ function budgetBox(p, c, backersEl) {
             "Back it",
           ),
           gap
-            ? h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(`"${p.name}" needs ${fmt(gap, IMD_DECIMALS)} IMD so the IMD swarm can check its promises. Back it on @keptonchainn:`)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Ask for backers")
+            ? h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(`"${p.name}" needs ${fmt(gap, IMD_DECIMALS)} IMD so the IMD swarm can check its promises. Back it on @keptonchainn:`)}&url=${encodeURIComponent(shareLink(p.id))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Ask for backers")
             : null,
         ),
         backersEl,
@@ -1053,7 +1053,7 @@ function betForm(p, m, mk, keys) {
     );
     if (ok) {
       const post = `I bet ${side} on "${m.title}" from "${p.name}". The IMD swarm decides, the market pays. Will they ship?`;
-      toast(`Bet placed on ${side}.`, "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, text: "Tell X" } });
+      toast(`Bet placed on ${side}.`, "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id))}`, text: "Tell X" } });
     }
   };
   return h(
@@ -1077,7 +1077,7 @@ function verdictShare(p, m) {
       ? `KEPT. "${m.title}" was delivered, verified by the IMD swarm. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
       : `BURNED. "${m.title}" was not delivered. ${amt} from "${p.name}" is gone for good. Record: ${record}.`;
   const card = `${BADGE_HOST}/api/verdict?pledge=${p.id}&m=${m.index}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}`;
-  const url = siteLink(`/pledge/${p.id}`);
+  const url = shareLink(p.id, m.index + 1);
   const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   return [
     shareCardButton(card, `kept-pledge${p.id}-milestone${m.index + 1}.png`, `${text}\n${url}`, intent),
@@ -1845,6 +1845,8 @@ function rawValue(v) {
 const BADGE_HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const SITE = "https://keptmd.vercel.app";
 const siteLink = (path) => `${SITE}/${netQuery()}#${path}`;
+/** A share link with a live preview card on X, Telegram and Discord: /p/1, or /p/1/2 for milestone 2. */
+const shareLink = (id, m) => `${SITE}/p/${id}${m ? `/${m}` : ""}${config.net === "robinhood" ? "" : `?chain=${config.chainId}`}`;
 const badgeUrl = (query, style) => `${BADGE_HOST}/api/badge?${query}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}${style ? `&style=${style}` : ""}`;
 
 /** Pledges grouped by beneficiary: one team per address, ranked by promises kept. */
