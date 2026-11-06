@@ -32,16 +32,6 @@ node bot.mjs --post
 
 Keep these keys out of the repo. `.env` and `.state.json` are already gitignored.
 
-## Run it on GitHub instead (no computer needed)
-
-`.github/workflows/verdict-bot.yml` runs the bot every 10 minutes on GitHub Actions. It remembers what it has posted from run to run.
-
-1. In the repo on GitHub, go to **Settings > Secrets and variables > Actions > New repository secret**. Add the four keys, named exactly `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN` and `X_ACCESS_SECRET`.
-2. That's it: the next scheduled run posts any new verdict. Without the secrets it only does a dry run.
-3. To post past verdicts once, go to **Actions > KEPT verdict bot > Run workflow** and enter `93300000` as the start block.
-
-GitHub can start scheduled runs a few minutes late, and it pauses them if the repo has no activity for 60 days. A push or a manual run turns them back on.
-
 ## Options
 
 | flag | what it does |
