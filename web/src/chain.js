@@ -7,8 +7,9 @@ import { config } from "./config.js";
 import { load, put, peek, epoch } from "./store.js";
 import vaultAbi from "./abi/KeptVault.json";
 import hookAbi from "./abi/KeptHook.json";
+import marketsAbi from "./abi/KeptMarkets.json";
 
-export { vaultAbi, hookAbi, erc20Abi };
+export { vaultAbi, hookAbi, marketsAbi, erc20Abi };
 
 export const chain = defineChain({
   id: config.chainId,
@@ -216,6 +217,58 @@ export async function pledgeHistory(id) {
     logsInChunks("BudgetFunded", args),
   ]);
   return { verdicts, checks, settles, rebates, funds };
+}
+
+// ------------------------------------------------------------------ markets
+
+export const MarketState = ["none", "open", "yes", "no", "refund", "void"];
+const mread = (functionName, args = []) =>
+  client.readContract({ address: config.markets, abi: marketsAbi, functionName, args });
+
+async function loadMarket(pledgeId, index, who) {
+  const id = BigInt(pledgeId);
+  const [m, q, cap, paused, stake, owed] = await Promise.all([
+    mread("market", [id, index]),
+    mread("quote", [id, index]),
+    mread("yesCap"),
+    mread("paused"),
+    who ? mread("stakeOf", [id, index, who]) : { yes: 0n, no: 0n },
+    who ? mread("owed", [id, index, who]) : 0n,
+  ]);
+  return {
+    pledgeId: Number(pledgeId),
+    index,
+    state: MarketState[Number(m.state)],
+    yes: m.yes,
+    no: m.no,
+    deadline: m.deadline,
+    open: q[0],
+    yesBps: Number(q[1]),
+    pot: q[2],
+    closesAt: q[3],
+    yesCap: cap,
+    paused,
+    stake: { yes: stake.yes, no: stake.no },
+    owed,
+  };
+}
+
+/** One milestone's market, with the connected account's position. */
+export function getMarket(pledgeId, index, { maxAge = 0, who = account } = {}) {
+  return load(`market:${pledgeId}:${index}:${who || "-"}`, () => loadMarket(pledgeId, index, who), { maxAge });
+}
+
+/** Every market ever opened, from MarketOpened logs, with its pools. */
+export function getAllMarkets({ maxAge = 0 } = {}) {
+  return load("markets", async () => {
+    const latest = await client.getBlockNumber();
+    const logs = [];
+    for (let from = config.marketsFrom; from <= latest; from += 9_999_999n) {
+      const to = from + 9_999_998n > latest ? latest : from + 9_999_998n;
+      logs.push(...(await client.getContractEvents({ address: config.markets, abi: marketsAbi, eventName: "MarketOpened", fromBlock: from, toBlock: to })));
+    }
+    return Promise.all(logs.map((l) => loadMarket(l.args.pledgeId, Number(l.args.index), null)));
+  }, { maxAge });
 }
 
 // ------------------------------------------------------------------ oracle

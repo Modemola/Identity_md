@@ -1,10 +1,13 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed, LIVE, NETWORKS, networkFor, netQuery, setNetwork } from "./config.js";
+import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork } from "./config.js";
 import {
   client,
   vaultAbi,
   hookAbi,
+  marketsAbi,
+  getMarket,
+  getAllMarkets,
   tokenInfo,
   getPledges,
   getPledge,
@@ -772,6 +775,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
         h("details", { class: "q", "data-k": `q${m.index}` }, h("summary", {}, "What the swarm is asked"), h("pre", {}, bodyText)),
         historyEl,
         actions.length ? h("div", { class: "actions" }, actions) : null,
+        marketPanel(p, m, c),
       ),
       h("div", { class: "amount tnum" }, `${fmt(m.amount, dec)} ${p.tokenInfo.symbol}`, h("small", {}, `${pct}% · ${m.attempts}/${c.maxAttempts} checks`)),
       stamp,
@@ -926,6 +930,135 @@ function renderBackers(el, p, hist) {
           addrLink(b.from),
           b.from.toLowerCase() === p.creator.toLowerCase() ? h("span", { class: "chip kind" }, "creator") : null,
           h("span", { class: "tnum" }, `${fmt(b.amount, IMD_DECIMALS)} IMD`)))),
+  );
+}
+
+// ------------------------------------------------------------------ will they ship? markets
+
+const MARKET_CHIP = { yes: ["kept", "YES won"], no: ["broken", "NO won"], refund: ["open", "refunded"], void: ["open", "voided"] };
+const pctOf = (part, whole) => (whole ? Number((part * 1000n) / whole) / 10 : 50);
+
+/** The YES/NO bar: green for YES, red for NO, split by the pools. */
+function marketBar(yes, no) {
+  const pot = yes + no;
+  const y = pctOf(yes, pot);
+  return h(
+    "div",
+    { class: "mk-bar", role: "img", "aria-label": pot ? `YES ${y}%, NO ${Math.round((100 - y) * 10) / 10}%` : "No bets yet" },
+    h("i", { class: "y", style: { width: `${pot ? y : 50}%` } }),
+    h("i", { class: "n", style: { width: `${pot ? 100 - y : 50}%` } }),
+  );
+}
+
+/** What a stake would pay if its side wins, with the pools as they are now (2% of the losing side is the fee). */
+const wouldPay = (stake, mine, theirs) => (stake && mine ? stake + (stake * (theirs - (theirs * 200n) / 10_000n)) / mine : 0n);
+
+/** "Will they ship?": the market on one milestone. Loads on its own; hidden where it has nothing to show. */
+function marketPanel(p, m, c) {
+  if (!marketsLive) return null;
+  const el = h("div", { class: "market", "aria-busy": "true" }, h("div", { class: "sk sk-line w60" }));
+  const acct = currentAccount();
+  getMarket(p.id, m.index, { maxAge: 10_000, who: acct })
+    .then((mk) => {
+      // a decided milestone that never had a market has nothing to show
+      if (mk.state === "none" && !mk.open) return el.remove();
+      el.removeAttribute("aria-busy");
+      el.replaceChildren(...marketBody(p, m, c, mk, acct));
+    })
+    .catch(() => el.replaceChildren(h("div", { class: "muted fine" }, "Market unavailable right now.")));
+  return el;
+}
+
+function marketBody(p, m, c, mk, acct) {
+  const dec = IMD_DECIMALS;
+  const keys = [`market:${p.id}:${m.index}:${acct || "-"}`, `pledge:${p.id}`, `history:${p.id}`, "markets"];
+  const insider = acct && [p.creator, p.beneficiary].some((a) => a.toLowerCase() === acct.toLowerCase());
+  const settledState = MARKET_CHIP[mk.state];
+  const chip = settledState
+    ? h("span", { class: `chip ${settledState[0]}` }, h("span", { class: `lamp ${settledState[0]}` }), settledState[1])
+    : mk.open
+      ? h("span", { class: "chip open" }, h("span", { class: "lamp open" }), "betting open")
+      : h("span", { class: "chip kind" }, "betting closed");
+  const y = pctOf(mk.yes, mk.pot);
+  const out = [
+    h("div", { class: "mk-head" }, h("span", { class: "mk-title" }, "Will they ship?"), chip, h("span", { class: "muted mk-pot tnum" }, `${fmt(mk.pot, dec)} IMD in the pot`)),
+    marketBar(mk.yes, mk.no),
+    h(
+      "div",
+      { class: "mk-sides tnum" },
+      h("span", { class: "kept" }, `YES ${mk.pot ? `${y}%` : "–"} · ${fmt(mk.yes, dec)} IMD`),
+      h("span", { class: "broken" }, `NO ${mk.pot ? `${Math.round((100 - y) * 10) / 10}%` : "–"} · ${fmt(mk.no, dec)} IMD`),
+    ),
+  ];
+
+  // the connected wallet's position
+  if (mk.stake.yes || mk.stake.no) {
+    const parts = [];
+    if (mk.stake.yes) parts.push(`${fmt(mk.stake.yes, dec)} IMD on YES${mk.state === "open" ? ` (pays ${fmt(wouldPay(mk.stake.yes, mk.yes, mk.no), dec)} if kept)` : ""}`);
+    if (mk.stake.no) parts.push(`${fmt(mk.stake.no, dec)} IMD on NO${mk.state === "open" ? ` (pays ${fmt(wouldPay(mk.stake.no, mk.no, mk.yes), dec)} if broken)` : ""}`);
+    out.push(h("div", { class: "mk-mine" }, "Your bet: ", parts.join(" and ")));
+  }
+
+  const actions = [];
+  if (mk.owed > 0n) {
+    actions.push(
+      h("button", { class: "btn small primary", onclick: (e) => onchain(e.currentTarget, "Claim your winnings", one({ address: config.markets, abi: marketsAbi, functionName: "claim", args: [BigInt(p.id), m.index] }), keys) }, icon("check", 15), `Claim ${fmt(mk.owed, dec)} IMD`),
+    );
+  }
+  const decided = m.outcome !== 0 || now() > m.deadline + c.grace;
+  if (mk.state === "open" && !mk.open && decided) {
+    actions.push(
+      h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Settle the market", one({ address: config.markets, abi: marketsAbi, functionName: "resolve", args: [BigInt(p.id), m.index] }), keys) }, "Settle the market"),
+    );
+  }
+  if (mk.open) {
+    if (!acct) actions.push(h("span", { class: "note" }, `Connect a wallet to bet. Betting closes ${when(mk.closesAt)}, or at the team's first check.`));
+    else if (insider) actions.push(h("span", { class: "note" }, "The team can't bet on its own milestone."));
+    else if (mk.paused) actions.push(h("span", { class: "note" }, "New bets are paused."));
+    else actions.push(betForm(p, m, mk, keys));
+  }
+  if (actions.length) out.push(h("div", { class: "actions" }, actions));
+  if (mk.open || mk.state === "open") {
+    out.push(h("p", { class: "muted fine mk-fine" }, "Bets are in IMD. If the swarm marks this kept, YES splits the NO pool; if it burns, NO splits the YES pool. 2% of the losing pool pays for checks. Prediction markets may be restricted where you live. Only bet what you can afford to lose."));
+  }
+  return out;
+}
+
+function betForm(p, m, mk, keys) {
+  const room = mk.yesCap > mk.yes ? mk.yesCap - mk.yes : 0n;
+  const input = h("input", { type: "number", min: "0", step: "1", value: "10", "aria-label": "IMD to bet" });
+  const place = async (button, yes) => {
+    let amount;
+    try {
+      amount = parseUnits(input.value || "0", IMD_DECIMALS);
+    } catch {
+      return toast("Enter an amount of IMD.", "alarm");
+    }
+    if (!amount) return toast("Enter an amount of IMD.", "alarm");
+    if (yes && amount > room) return toast(`The YES side has room for ${fmt(room, IMD_DECIMALS)} IMD more.`, "alarm");
+    const { imd } = await getConstants({ maxAge: 300_000 });
+    const side = yes ? "YES" : "NO";
+    const ok = await onchain(
+      button,
+      `Bet ${side}`,
+      [
+        { label: "Allow the market to take the IMD", run: async (ph) => ((await needsAllowance(imd, config.markets, amount)) ? ensureAllowance(imd, config.markets, amount, ph) : null) },
+        { label: `Bet ${fmt(amount, IMD_DECIMALS)} IMD on ${side}`, run: (ph) => send({ address: config.markets, abi: marketsAbi, functionName: "bet", args: [BigInt(p.id), m.index, yes, amount] }, ph) },
+      ],
+      keys,
+    );
+    if (ok) {
+      const post = `I bet ${side} on "${m.title}" from "${p.name}". The IMD swarm decides, the market pays. Will they ship?`;
+      toast(`Bet placed on ${side}.`, "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(siteLink(`/pledge/${p.id}`))}`, text: "Tell X" } });
+    }
+  };
+  return h(
+    "div",
+    { class: "inline-form mk-form" },
+    h("div", { class: "unit-input" }, input, h("span", {}, "IMD")),
+    h("button", { class: "btn small primary", type: "button", disabled: room === 0n, onclick: (e) => place(e.currentTarget, true) }, "Bet YES"),
+    h("button", { class: "btn small danger", type: "button", onclick: (e) => place(e.currentTarget, false) }, "Bet NO"),
+    room < mk.yesCap / 4n ? h("span", { class: "note" }, room ? `YES has room for ${fmt(room, IMD_DECIMALS)} IMD more` : "The YES side is full") : null,
   );
 }
 
@@ -1801,6 +1934,7 @@ function viewBoard({ quiet }) {
   };
   const boardEl = h("div", { class: "rows board" });
   const dueEl = h("div", { class: "rows due" });
+  const hotEl = marketsLive ? h("div", { class: "rows hot" }, skeletonRows(1)) : null;
   const badgeEl = h("div", {});
   let lastSig = null;
 
@@ -1822,6 +1956,18 @@ function viewBoard({ quiet }) {
       .sort((a, b) => Number(a.m.deadline - b.m.deadline))
       .slice(0, 8);
     dueEl.replaceChildren(...(due.length ? due.map(({ m, p }, i) => reveal(dueRow(m, p, c.grace), Math.min(i, 6) * 60)) : [h("div", { class: "empty" }, "Nothing due: every promise on KEPT is settled.")]));
+    if (hotEl)
+      getAllMarkets({ maxAge: 20_000 })
+        .then((all) => {
+          const hot = all.filter((mk) => mk.open).sort((a, b) => (b.pot > a.pot ? 1 : b.pot < a.pot ? -1 : 0)).slice(0, 6);
+          const byId = new Map(pledges.map((p) => [p.id, p]));
+          hotEl.replaceChildren(
+            ...(hot.length
+              ? hot.map((mk, i) => reveal(hotRow(mk, byId.get(mk.pledgeId)), Math.min(i, 6) * 60))
+              : [h("div", { class: "empty" }, "No open markets yet. Every open milestone takes bets: open a pledge and place the first one.")]),
+          );
+        })
+        .catch(() => hotEl.replaceChildren(h("div", { class: "empty" }, "Markets unavailable right now.")));
     const top = ts[0];
     badgeEl.replaceChildren(
       top
@@ -1857,7 +2003,9 @@ function viewBoard({ quiet }) {
         boardEl,
         sec("02", "Due next", "live countdowns"),
         dueEl,
-        sec("03", "Show your record", "a live badge for any team"),
+        hotEl ? sec("03", "Will they ship?", "the biggest open markets") : null,
+        hotEl,
+        sec(hotEl ? "04" : "03", "Show your record", "a live badge for any team"),
         badgeEl,
       ),
     { quiet },
@@ -1901,6 +2049,17 @@ function teamRow(t, rank, grace) {
       ),
       h("div", { class: "right" }, h("span", { class: `rate tnum ${tone}`, title: "KEPT score: (kept + 1) / (settled + 2)" }, score), h("span", {}, "KEPT score"), t.next ? countdown(t.next.deadline, grace) : h("span", {}, "all settled")),
     ),
+  );
+}
+
+function hotRow(mk, p) {
+  const m = p?.milestones[mk.index];
+  return h(
+    "a",
+    { class: "row hot-row", href: link(`/pledge/${mk.pledgeId}`), onpointerenter: () => prefetchPledge(mk.pledgeId) },
+    h("span", { class: "glyph open" }, icon("pulse", 18)),
+    h("div", { style: { minWidth: 0 } }, h("div", { class: "title" }, m?.title ?? `Milestone ${mk.index + 1}`), h("div", { class: "meta" }, h("span", {}, `#${mk.pledgeId} · ${p?.name ?? ""}`), h("span", {}, `closes ${when(mk.closesAt)}`)), marketBar(mk.yes, mk.no)),
+    h("div", { class: "right" }, h("span", { class: "rate tnum kept" }, mk.pot ? `${pctOf(mk.yes, mk.pot)}%` : "–"), h("span", {}, "YES"), h("span", { class: "tnum" }, `${fmt(mk.pot, IMD_DECIMALS)} IMD pot`)),
   );
 }
 

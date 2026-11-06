@@ -35,6 +35,12 @@ node launch.mjs token --vault 0xVAULT --remainder 0xYOU --pool-bps 6000
 node launch.mjs site --name kept --dry-run
 node launch.mjs site --name kept
 
+# 4. Will they ship? markets on the live vault (docs/MARKETS.md). You become the owner, who can
+#    only pause new bets or lower the 1,000 IMD cap. Then put the address and its deploy block in
+#    web/src/config.js (markets, marketsFrom), rebuild and push: the market panels appear on their own.
+node launch.mjs markets --owner 0xYOU --dry-run
+node launch.mjs markets --owner 0xYOU
+
 # Re-attach to an order later:
 node launch.mjs status vault
 ```
