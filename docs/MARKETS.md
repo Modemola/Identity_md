@@ -1,6 +1,6 @@
 # Will they ship? Markets on KEPT milestones
 
-Design, for review before any code. Status: proposed.
+Status: contract and tests done (`src/KeptMarkets.sol`, `test/KeptMarkets.t.sol`, `test/fork/MarketsFork.t.sol`). Not deployed. Decided: bets in IMD, a 1,000 IMD YES cap, a fee of 1% to the check budget and 1% to the Referee Fund.
 
 ## The idea
 
@@ -38,7 +38,7 @@ There are two pools, YES and NO, both in IMD. When the market resolves, the winn
   - Winners: `stake + stake * losingPool * 0.98 / winningPool`.
   - One-sided market (nobody on the other side): everyone is refunded and no fee is taken.
   - Void market: everyone is refunded.
-- **Claiming:** each winner calls `claim` (pull, not push). Rounding dust goes to the Referee Fund at the end.
+- **Claiming:** each winner calls `claim` (pull, not push). Payouts round down, so at most one wei per winner stays in the contract.
 
 ## The fee: 2% of the losing pool, all of it back into KEPT
 
