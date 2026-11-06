@@ -1,0 +1,8 @@
+{
+  "name": "kept-alerts",
+  "private": true,
+  "type": "module",
+  "description": "KEPT due dates, verdicts and new pledges on Telegram.",
+  "scripts": { "start": "node alerts.mjs" },
+  "dependencies": { "@resvg/resvg-js": "2.6.2" }
+}
