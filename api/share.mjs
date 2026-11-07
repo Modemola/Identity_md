@@ -16,13 +16,20 @@ export async function GET(request) {
   const m = q.get("m") ? Number(q.get("m")) : 0;
   const origin = `https://${SITE}`;
   const net_q = chain === "1" ? "?net=ethereum" : "";
-  const target = `${origin}/${net_q}#/pledge/${Number.isInteger(id) && id > 0 ? id : ""}`;
+  const target = q.get("page") === "teams" ? `${origin}/#/teams` : `${origin}/${net_q}#/pledge/${Number.isInteger(id) && id > 0 ? id : ""}`;
 
   let title = "KEPT: promises the swarm enforces";
   let desc = "Teams lock tokens behind milestones. The IMD swarm checks each one. Kept tranches unlock, missed ones burn.";
   let image = `${origin}/api/og?pledge=1`;
   let maxAge = 300;
   try {
+    if (q.get("page") === "teams") {
+      // the outreach link: KEPT's pitch to teams, with our own live record as the card
+      title = "Prove you'll ship · KEPT for teams";
+      desc = "Lock part of your supply behind your milestones. The IMD swarm checks each one. Kept tranches unlock to you; missed ones burn. Draft a pledge from your IMD launch number.";
+      image = `${origin}/api/og?pledge=1`;
+      throw new Error("page"); // nothing pledge-specific to read
+    }
     if (!net?.vault || !Number.isInteger(id) || id < 1) throw new Error("bad");
     const p = await readPledge(net, id);
     if (!p) throw new Error("missing");
