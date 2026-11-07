@@ -43,6 +43,8 @@ initTheme();
 
 const TEMPLATE_LABEL = ["GitHub release", "Page contains", "Contract deployed", "Value at least"];
 const TIMEOUT = 86400n;
+/** The last moment a milestone can be checked: GitHub releases get the grace window, every other kind closes at its deadline (KeptVault._checkDeadline). */
+const checkBy = (m, grace) => m.deadline + (m.kind === 0 ? grace : 0n);
 const ZERO32 = `0x${"0".repeat(64)}`;
 
 function state(m, grace) {
@@ -737,7 +739,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
     } else if (isBeneficiary) {
       actions.push(h("span", { class: "note" }, "A check needs enough budget and an Intake price at or below 0.5 IMD."));
     } else {
-      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this. Not proven by ${when(m.deadline + c.grace)}: it burns.`));
+      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this, until ${when(checkBy(m, c.grace))}. Not proven by then, it burns.`));
     }
   }
   const checkPending = m.inFlight !== ZERO32 && now() < m.askedAt + TIMEOUT; // the vault refuses to settle then
@@ -2143,7 +2145,7 @@ function viewGraveyard({ quiet }) {
           { class: "empty gy-empty" },
           h("p", {}, "Nothing has burned yet. Every promise on KEPT so far was kept, or is still open."),
           next
-            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If nobody proves it by ${when(next.m.deadline + c.grace)}, it lands here.`)
+            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If the swarm hasn't confirmed it by ${when(checkBy(next.m, c.grace))}, it burns and lands here.`)
             : null,
           next ? h("a", { class: "btn small", href: link(`/pledge/${next.p.id}`) }, "See it", icon("arrow", 14)) : null,
         ),
@@ -2287,7 +2289,7 @@ function viewTeams({ quiet }) {
           "div",
           { class: "tm-steps" },
           step("1", "Lock", "Pick 1 to 8 milestones with deadlines, and how much of your token unlocks at each. The tokens move into the KEPT vault. Nobody can withdraw them, including KEPT."),
-          step("2", "Get checked", "At each milestone, ask the swarm. Nine IMD agents check the evidence and seven must agree. You get three tries per milestone, and a 3-day window after the deadline before anything burns."),
+          step("2", "Get checked", "At each milestone, ask the swarm. Nine IMD agents check the evidence and seven must agree. You get three tries per milestone, all before the deadline (a GitHub release can still be checked for 3 days after it)."),
           step("3", "Unlock or burn", "Kept: the tranche goes to your wallet and the check is refunded by the Referee Fund when it can. Missed: the tranche goes to the dead address, for good."),
         ),
 
@@ -2334,7 +2336,7 @@ function viewTeams({ quiet }) {
           qa("What if the swarm gets it wrong?", "Each check goes to a panel of nine agents, and seven must agree. A \"not delivered\" answer before the deadline doesn't burn anything: fix what's missing and ask again, up to three times. Choose milestones with evidence anyone can see, like a release tag or a page."),
           qa("Can KEPT take my tokens?", "No. Only two things move locked tokens: a kept verdict, which sends them to your beneficiary address, or a missed deadline, which burns them. The vault owner can't touch either."),
           qa("What does it cost?", "Your own tokens, locked, plus at most 0.5 IMD per check. When a milestone is kept, the Referee Fund refunds that check when it has IMD. Unused check budget comes back to you when the pledge ends."),
-          qa("What if I'm late?", "Ship before the deadline and prove it within the 3-day window after it. After that, anyone can settle the milestone and the tranche burns. There is no extension button."),
+          qa("What if I'm late?", "Ship and ask the swarm before the deadline: checks close then. A GitHub release is the one exception, checkable for 3 days after its deadline, since the release date is on record. Three days after any deadline, anyone can settle an unproven milestone and the tranche burns. There is no extension button."),
           qa("Which chains?", "Robinhood Chain today, any token. Ethereum is next."),
         ),
 
