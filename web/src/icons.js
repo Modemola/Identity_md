@@ -40,4 +40,4 @@ export function icon(name, size = 18) {
   );
 }
 
-export const TEMPLATE_ICON = ["release", "page", "cube", "gauge"];
+export const TEMPLATE_ICON = ["release", "page", "cube", "gauge", "gauge"];

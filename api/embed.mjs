@@ -39,6 +39,7 @@ a.card:hover{border-color:var(--kept)}a.card:focus-visible{outline:2px solid var
 .lamps{grid-column:1/3;display:flex;flex-wrap:wrap;gap:4px}
 .lamps i{width:18px;height:7px;border-radius:2px;background:var(--soft)}
 .lamps i.k{background:var(--kept)}.lamps i.b{background:var(--broken)}.lamps i.o{background:var(--open);opacity:.45}
+.lamps i.p{background:linear-gradient(90deg,var(--kept) var(--s),var(--broken) var(--s))}
 .foot{grid-column:1/3;display:flex;justify-content:space-between;gap:10px;color:var(--dim);font-size:11px;white-space:nowrap;min-width:0}
 .foot span:first-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
 .kept{color:var(--kept)}.broken{color:var(--broken)}.open{color:var(--open)}.none{color:var(--dim)}
@@ -62,14 +63,14 @@ function card({ title, href, pledges, chainLabel }) {
   const s = scoreOf(pledges);
   const tone = s.score === null ? "none" : s.score >= 75 ? "kept" : s.score >= 50 ? "open" : "broken";
   const ms = pledges.flatMap((p) => p.milestones.map((m) => ({ ...m, p })));
-  const lamps = ms.slice(0, 24).map((m) => `<i class="${m.outcome === 1 ? "k" : m.outcome === 2 ? "b" : "o"}" title="${esc(m.title)}"></i>`).join("");
+  const lamps = ms.slice(0, 24).map((m) => `<i class="${m.outcome === 1 ? "k" : m.outcome === 2 ? "b" : m.outcome === 3 ? "p" : "o"}" title="${esc(m.title)}"${m.outcome === 3 ? ` style="--s:${(m.shareBps ?? 0) / 100}%"` : ""}></i>`).join("");
   const now = Date.now() / 1000;
   const next = ms.filter((m) => m.outcome === 0 && m.deadline > now).sort((a, b) => a.deadline - b.deadline)[0];
   const due = next
     ? `next: ${amount(next.amount, next.p.decimals)} $${esc(next.p.symbol)} · ${new Date(next.deadline * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`
     : pledges.length ? "no open deadline" : "";
   const record = pledges.length
-    ? `${s.kept} kept · ${s.broken} broken · ${s.open} open`
+    ? `${s.kept} kept · ${s.partial ? `${s.partial} partial · ` : ""}${s.broken} broken · ${s.open} open`
     : "no KEPT pledge yet";
   return `<a class="card" href="${esc(href)}" target="_blank" rel="noopener" aria-label="${esc(`${title}: KEPT score ${s.score ?? "none"}, ${record}. Open on KEPT.`)}">
 <div class="brand">${SEAL}KEPT</div>

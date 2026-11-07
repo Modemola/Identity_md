@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 /// @notice The parts of KeptVault that KeptMarkets reads and calls. Enums travel as uint8:
-/// Outcome is 0 Open, 1 Kept, 2 Broken.
+/// Outcome is 0 Open, 1 Kept, 2 Broken, and on KeptVaultV2 3 Partial.
 interface IKeptVault {
     function imd() external view returns (address);
 

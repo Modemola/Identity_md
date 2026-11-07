@@ -25,7 +25,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 import { verdictCard } from "../../api/_lib/cards.mjs";
-import { NETS, SITE, TOPIC, amount, lastVerdict, pledgeCount, readPledge, rpc, uint, vaultLogs } from "../../api/_lib/vault.mjs";
+import { NETS, SITE, TOPIC, allVaultLogs, amount, lastVerdict, pledgeIds, readPledge, rpc, uint } from "../../api/_lib/vault.mjs";
+
+const SCALED = 4; // KeptVault v2's ValueScaled: a number read on chain at the deadline
+const pct = (bps) => Math.round(bps / 100);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRY = process.argv.includes("--dry");
@@ -160,16 +163,19 @@ async function dueAlerts(pledges, now, grace) {
       const key = (k) => `${k}:${p.id}:${m.index}`;
       let msg = null;
       if (left > 0 && left <= DAY && !state.sent[key("due1")]) {
-        msg = `⏰ Due in ${span(left)}\n${head}\n${at} unlocks if the swarm confirms it${m.kind === 0 ? "" : " before the deadline, when checks close"}. Otherwise it burns.\n${link(p.id)}`;
+        msg =
+          m.kind === SCALED
+            ? `⏰ Due in ${span(left)}\n${head}\nAt the deadline the swarm reads the number on chain: the share of the target reached unlocks from ${at}, the rest burns.\n${link(p.id)}`
+            : `⏰ Due in ${span(left)}\n${head}\n${at} unlocks if the swarm confirms it${m.checkBy > m.deadline ? "" : " before the deadline, when checks close"}. Otherwise it burns.\n${link(p.id)}`;
         state.sent[key("due1")] = state.sent[key("due7")] = now;
       } else if (left > DAY && left <= 7 * DAY && !state.sent[key("due7")]) {
         msg = `📅 Due in ${span(left)}\n${head}\n${at} on the line.\n${link(p.id)}`;
         state.sent[key("due7")] = now;
       } else if (left <= 0 && -left < grace && !state.sent[key("window")]) {
-        // only a GitHub release can still be checked after its deadline (KeptVault._checkDeadline)
+        // whether checks are still open comes from the vault itself (v1: only releases; v2: all but pages)
         msg =
-          m.kind === 0
-            ? `⚠️ Deadline passed, not proven yet\n${head}\nThe team has ${span(grace + left)} to prove the release, or ${at} burns.\n${link(p.id)}`
+          now <= m.checkBy
+            ? `⚠️ Deadline passed, not proven yet\n${head}\nThe team has ${span(m.checkBy - now)} to ask the swarm, or ${at} burns.\n${link(p.id)}`
             : `⚠️ Deadline passed, not proven\n${head}\nChecks are closed. Unless a check already asked confirms it, ${at} burns in ${span(grace + left)}.\n${link(p.id)}`;
         state.sent[key("due1")] = state.sent[key("due7")] = state.sent[key("window")] = now;
       }
@@ -185,15 +191,11 @@ async function dueAlerts(pledges, now, grace) {
 // ------------------------------------------------------------------ events
 
 async function eventAlerts(byId, from, to) {
-  // one after another: kinder to public RPCs than three at once
-  const verdicts = await vaultLogs(NET, [TOPIC.verdict], { from, to });
-  const settles = await vaultLogs(NET, [TOPIC.settled], { from, to });
-  const created = await vaultLogs(NET, [TOPIC.created], { from, to });
-  const all = [
-    ...verdicts.logs.map((l) => ({ l, kind: "verdict" })),
-    ...settles.logs.map((l) => ({ l, kind: "settled" })),
-    ...created.logs.map((l) => ({ l, kind: "created" })),
-  ].sort((a, b) => Number(BigInt(a.l.blockNumber) - BigInt(b.l.blockNumber)) || Number(BigInt(a.l.logIndex) - BigInt(b.l.logIndex)));
+  // one after another: kinder to public RPCs than all at once. Every vault on the chain (v1, v2).
+  const kinds = [["verdict", TOPIC.verdict], ["settled", TOPIC.settled], ["created", TOPIC.created], ["scored", TOPIC.scored], ["appealed", TOPIC.appealed]];
+  const all = [];
+  for (const [kind, topic] of kinds) all.push(...(await allVaultLogs(NET, [topic], { from, to })).logs.map((l) => ({ l, kind })));
+  all.sort((a, b) => Number(BigInt(a.l.blockNumber) - BigInt(b.l.blockNumber)) || Number(BigInt(a.l.logIndex) - BigInt(b.l.logIndex)));
 
   for (const { l, kind } of all) {
     const id = Number(BigInt(l.topics[1]));
@@ -209,7 +211,27 @@ async function eventAlerts(byId, from, to) {
       const m = p.milestones[index];
       const head = `<b>${esc(p.name)}</b> · milestone ${index + 1}: ${esc(m.title)}`;
       const d = l.data.slice(2);
-      if (kind === "verdict") {
+      if (kind === "scored") {
+        // v2 partial credit: the number at the deadline and the share it earned
+        const share = Number(uint(d, 1));
+        const m2 = { ...m, outcome: share >= 10_000 ? 1 : share === 0 ? 2 : 3, shareBps: share };
+        const p2 = { ...p, milestones: p.milestones.map((x, i) => (i === index ? m2 : x)) };
+        const png = render(verdictCard(p2, index, null));
+        const paid = (m.amount * BigInt(share)) / 10_000n;
+        await broadcast(
+          id,
+          share >= 10_000
+            ? `✅ KEPT: 100% of the target, measured on chain\n${head}\n${amount(m.amount, p.decimals)} $${p.symbol} unlocks to the team.\n${link(id)}`
+            : share === 0
+              ? `🔥 Nothing above the floor, measured on chain\n${head}\n${amount(m.amount, p.decimals)} $${p.symbol} burns.\n${link(id)}`
+              : `🟡 PARTLY KEPT: ${pct(share)}% of the target, measured on chain\n${head}\n${amount(paid, p.decimals)} $${p.symbol} unlocks to the team. ${amount(m.amount - paid, p.decimals)} burns.\n${link(id)}`,
+          png,
+        );
+      } else if (kind === "appealed") {
+        await broadcast(id, `⚖️ Appeal\n${head}\nThe team asked again after a "not delivered". A 15-agent panel decides, and 11 must agree. This answer is final.\n${link(id)}`);
+      } else if (kind === "verdict" && m.kind === SCALED) {
+        // a scaled milestone's verdict is reported by its "scored" event, with the share
+      } else if (kind === "verdict") {
         const kept = uint(d, 0) === 1n;
         const agreed = Number(uint(d, 1));
         const panel = Number(uint(d, 3));
@@ -221,7 +243,10 @@ async function eventAlerts(byId, from, to) {
         }
       } else {
         const outcome = Number(uint(d, 0));
-        if (outcome === 2) {
+        if (outcome === 3) {
+          const paid = BigInt(`0x${d.slice(128, 192)}`);
+          await broadcast(id, `🔓 ${pct(m.shareBps)}% released\n${head}\n${amount(paid, p.decimals)} $${p.symbol} sent to the team; ${amount(m.amount - paid, p.decimals)} burned.\n${link(id)}`);
+        } else if (outcome === 2) {
           const v = await lastVerdict(NET, id, index);
           const png = render(verdictCard(p, index, v));
           await broadcast(id, `🔥 BURNED\n${head}\nNot proven in time. ${amount(m.amount, p.decimals)} $${p.symbol} is gone for good.\n${link(id)}`, png);
@@ -243,9 +268,8 @@ const block = await rpc(NET, "eth_getBlockByNumber", ["latest", false]);
 // KEPT_NOW pretends it is another time, for testing the due-date alerts
 const now = Number(process.env.KEPT_NOW || BigInt(block.timestamp));
 const grace = 3 * DAY;
-const n = await pledgeCount(NET);
 const pledges = [];
-for (let i = 1; i <= n; i++) pledges.push(await readPledge(NET, i));
+for (const id of await pledgeIds(NET)) pledges.push(await readPledge(NET, id));
 const byId = new Map(pledges.map((p) => [p.id, p]));
 
 await commands(pledges.map((p) => p.id));
@@ -255,7 +279,7 @@ if (from <= latest) await eventAlerts(byId, from, latest);
 state.block = latest;
 // re-read after the events above: a verdict that just landed must not be followed by a "due" ping
 const fresh = [];
-for (let i = 1; i <= (await pledgeCount(NET)); i++) fresh.push(await readPledge(NET, i));
+for (const id of await pledgeIds(NET)) fresh.push(await readPledge(NET, id));
 await dueAlerts(fresh, now, grace);
 // forget sent keys older than 90 days, so the state stays small
 for (const [k, t] of Object.entries(state.sent)) if (now - t > 90 * DAY) delete state.sent[k];

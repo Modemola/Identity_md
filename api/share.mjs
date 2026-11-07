@@ -37,10 +37,13 @@ export async function GET(request) {
     const s = scoreOf([p]);
     if (m && m <= p.count) {
       const ms = p.milestones[m - 1];
-      const word = ms.outcome === 1 ? "KEPT" : ms.outcome === 2 ? "BURNED" : "OPEN";
+      const pct = Math.round((ms.shareBps ?? 0) / 100);
+      const word = ms.outcome === 1 ? "KEPT" : ms.outcome === 2 ? "BURNED" : ms.outcome === 3 ? `${pct}% KEPT` : "OPEN";
       title = `${word}: ${ms.title} · ${p.name}`;
       desc =
-        ms.outcome === 1
+        ms.outcome === 3
+          ? `Reached ${pct}% of its target, measured on chain at the deadline. ${pct}% of ${amount(ms.amount, p.decimals)} $${p.symbol} unlocks to the team; the rest burns.`
+          : ms.outcome === 1
           ? `The IMD swarm confirmed it. ${amount(ms.amount, p.decimals)} $${p.symbol} ${ms.settled ? "released" : "unlocks"} to the team.`
           : ms.outcome === 2
             ? `Not proven in time. ${amount(ms.amount, p.decimals)} $${p.symbol} burned for good.`
@@ -49,7 +52,7 @@ export async function GET(request) {
       if (ms.settled) maxAge = 3600;
     } else {
       title = `${p.name} · KEPT score ${s.score ?? "pending"}`;
-      desc = `${s.kept} kept, ${s.broken} broken, ${s.open} open. $${p.symbol} locked behind milestones the IMD swarm checks. Missed ones burn.`;
+      desc = `${s.kept} kept, ${s.partial ? `${s.partial} partial, ` : ""}${s.broken} broken, ${s.open} open. $${p.symbol} locked behind milestones the IMD swarm checks. Missed ones burn.`;
       image = `${origin}/api/og?pledge=${id}${c}`;
     }
   } catch {

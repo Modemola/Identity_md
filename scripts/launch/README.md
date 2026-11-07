@@ -41,6 +41,12 @@ node launch.mjs site --name kept
 node launch.mjs markets --owner 0xYOU --dry-run
 node launch.mjs markets --owner 0xYOU
 
+# 5. KeptVault v2 (docs/VAULT_V2.md): partial credit, checks after the deadline, appeals. Two
+#    contracts in one launch: the question builder, then the vault. v1 and its pledges stay as they are.
+#    Then put the vault address and its deploy block in web/src/config.js (vault2, vault2From).
+node launch.mjs vault-v2 --owner 0xYOU --dry-run
+node launch.mjs vault-v2 --owner 0xYOU
+
 # Re-attach to an order later:
 node launch.mjs status vault
 ```

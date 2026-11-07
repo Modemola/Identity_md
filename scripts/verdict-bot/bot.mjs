@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 import { verdictCard, verdictPost } from "../../api/_lib/cards.mjs";
-import { NETS, TOPIC, lastVerdict, readPledge, rpc, vaultLogs } from "../../api/_lib/vault.mjs";
+import { NETS, TOPIC, allVaultLogs, lastVerdict, readPledge, rpc } from "../../api/_lib/vault.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -126,7 +126,8 @@ async function pass() {
   // first run: start from now, so a fresh bot does not post the whole history
   const from = since ? Number(since) : mine.block != null ? mine.block + 1 : latest;
   if (from > latest) return;
-  const { logs } = await vaultLogs(NET, [TOPIC.settled], { from, to: latest });
+  // every vault on the chain: v1, and v2 once live (a partial settle posts its PARTLY KEPT card)
+  const { logs } = await allVaultLogs(NET, [TOPIC.settled], { from, to: latest });
   for (const l of logs) await handle(Number(BigInt(l.topics[1])), Number(BigInt(l.topics[2])));
   mine.block = latest;
   since = undefined;

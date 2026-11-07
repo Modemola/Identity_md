@@ -1,7 +1,15 @@
 // The verdict card: one milestone's outcome as a 1200x675 SVG, sized for an X post.
 // The endpoint serves it as SVG; the verdict bot renders the same SVG to PNG.
 
-import { SITE, amount } from "./vault.mjs";
+import { SITE, amount, recordOf, recordText } from "./vault.mjs";
+
+const SCALED = 4; // KeptVault v2's ValueScaled kind: a number read on chain at the deadline
+const pctOf = (m) => Math.round((m.shareBps ?? 0) / 100);
+/** The tokens a partial milestone unlocks, and the rest. */
+const splitOf = (m) => {
+  const paid = (m.amount * BigInt(m.shareBps ?? 0)) / 10_000n;
+  return [paid, m.amount - paid];
+};
 
 const C = { kept: "#3ecf7a", broken: "#ff6b62", open: "#f0b429", ink: "#070908", text: "#eef2ef", muted: "#8d9792", line: "#1f2723" };
 const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
@@ -39,19 +47,23 @@ const seal = (x, y, s, check = C.kept, edge = "#fff") =>
 export function verdictCard(p, index, verdict) {
   const m = p.milestones[index];
   const W = 1200, H = 675;
+  const partial = m.outcome === 3;
   const tone = m.outcome === 1 ? "kept" : m.outcome === 2 ? "broken" : "open";
   const col = C[tone];
-  const amt = `${amount(m.amount, p.decimals)} ${p.symbol}`;
-  const stampText = tone === "kept" ? "KEPT" : tone === "broken" ? "BURNED" : "OPEN";
-  const what =
-    tone === "kept" ? (m.settled ? "released to the team" : "unlocks to the team") : tone === "broken" ? "burned for good" : `due ${new Date(m.deadline * 1000).toUTCString().slice(5, 16)}`;
+  const [paid, burned] = splitOf(m);
+  const amt = partial ? `${amount(paid, p.decimals)} of ${amount(m.amount, p.decimals)} ${p.symbol}` : `${amount(m.amount, p.decimals)} ${p.symbol}`;
+  const stampText = partial ? "PARTIAL" : tone === "kept" ? "KEPT" : tone === "broken" ? "BURNED" : "OPEN";
+  const what = partial
+    ? `${m.settled ? "unlocked" : "unlocks"} · ${amount(burned, p.decimals)} burned`
+    : tone === "kept" ? (m.settled ? "released to the team" : "unlocks to the team") : tone === "broken" ? "burned for good" : `due ${new Date(m.deadline * 1000).toUTCString().slice(5, 16)}`;
   const title = wrap(m.title, 22, 3);
-  const kept = p.milestones.filter((x) => x.outcome === 1).length;
-  const broken = p.milestones.filter((x) => x.outcome === 2).length;
 
   // the panel: one dot per agent
   let panel = "";
-  if (verdict) {
+  if (m.kind === SCALED && m.outcome) {
+    // a number read on chain is not a vote: say what was measured
+    panel = `<text x="64" y="555" fill="${C.text}" font-family="${MONO}" font-size="20">measured on chain at the deadline: ${pctOf(m)}% of the target</text>`;
+  } else if (verdict) {
     const n = verdict.panelSize;
     const gap = Math.min(30, 300 / n);
     for (let i = 0; i < n; i++) {
@@ -64,9 +76,9 @@ export function verdictCard(p, index, verdict) {
   }
 
   const lamps = p.milestones
-    .map((x, i) => `<rect x="${W - 64 - (p.count - i) * 34 + 6}" y="540" width="26" height="12" rx="3" fill="${x.outcome === 1 ? C.kept : x.outcome === 2 ? C.broken : C.line}"${x.index === index ? ` stroke="${C.text}" stroke-width="2"` : ""}/>`)
+    .map((x, i) => `<rect x="${W - 64 - (p.count - i) * 34 + 6}" y="540" width="26" height="12" rx="3" fill="${x.outcome === 1 ? C.kept : x.outcome === 2 ? C.broken : x.outcome === 3 ? C.open : C.line}"${x.index === index ? ` stroke="${C.text}" stroke-width="2"` : ""}/>`)
     .join("");
-  const record = broken ? `${kept} kept · ${broken} broken` : `${kept}/${p.count} promises kept`;
+  const record = recordText(recordOf(p.milestones), p.count);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs>
@@ -87,7 +99,7 @@ ${title.map((l, i) => `<text x="64" y="${226 + i * 62}" fill="${C.text}" font-fa
 <g transform="translate(940 300) rotate(-9)">
   <rect x="-170" y="-74" width="340" height="148" rx="10" fill="none" stroke="${col}" stroke-width="9"/>
   <rect x="-156" y="-60" width="312" height="120" rx="6" fill="none" stroke="${col}" stroke-width="2.5" stroke-opacity="0.7"/>
-  <text x="0" y="${tone === "broken" ? 22 : 26}" text-anchor="middle" fill="${col}" font-family="${MONO}" font-size="${tone === "broken" ? 62 : 78}" font-weight="600" letter-spacing="6">${stampText}</text>
+  <text x="0" y="${stampText.length > 4 ? 22 : 26}" text-anchor="middle" fill="${col}" font-family="${MONO}" font-size="${stampText.length > 4 ? 58 : 78}" font-weight="600" letter-spacing="6">${stampText}</text>
 </g>
 <line x1="64" y1="500" x2="${W - 64}" y2="500" stroke="${C.line}" stroke-width="2"/>
 ${panel}
@@ -102,17 +114,19 @@ ${lamps}
 export function verdictPost(p, index, verdict, chainId = 4663) {
   const m = p.milestones[index];
   const amt = `${amount(m.amount, p.decimals)} $${p.symbol}`;
-  const kept = p.milestones.filter((x) => x.outcome === 1).length;
-  const broken = p.milestones.filter((x) => x.outcome === 2).length;
-  const record = broken ? `${kept} kept, ${broken} broken` : `${kept}/${p.count} promises kept`;
+  const record = recordText(recordOf(p.milestones), p.count).replace(/ · /g, ", ");
   // the /p/ share link: X shows this milestone's card under the post
   const link = `https://${SITE}/p/${p.id}/${index + 1}${Number(chainId) === 1 ? "?chain=1" : ""}`;
+  if (m.outcome === 3) {
+    const [paid, burned] = splitOf(m);
+    return `PARTLY KEPT. "${m.title}" reached ${pctOf(m)}% of its target, measured on chain at the deadline.\n\n${amount(paid, p.decimals)} $${p.symbol} ${m.settled ? "unlocked" : "unlocks"} to the team behind "${p.name}". ${amount(burned, p.decimals)} $${p.symbol} burns.\n\nRecord: ${record}.\n${link}`;
+  }
   if (m.outcome === 1) {
-    const panel = verdict ? `${verdict.agreed} of ${verdict.panelSize} agents agreed. ` : "";
+    const panel = m.kind === SCALED ? "Measured on chain: 100% of the target. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents agreed. ` : "";
     return `KEPT. "${m.title}" was delivered.\n\n${panel}${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}".\n\nRecord: ${record}.\n${link}`;
   }
   if (m.outcome === 2) {
-    const why = verdict ? `${verdict.agreed} of ${verdict.panelSize} agents said it was not delivered. ` : "Nobody proved it by the deadline. ";
+    const why = m.kind === SCALED && verdict ? "Measured on chain at the deadline: nothing above the floor. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents said it was not delivered. ` : "Nobody proved it by the deadline. ";
     return `BURNED. "${m.title}" was not delivered.\n\n${why}${amt} from "${p.name}" is gone for good.\n\nRecord: ${record}.\n${link}`;
   }
   return `"${m.title}" is due. ${amt} from "${p.name}" is on the line.\n${link}`;
@@ -123,16 +137,14 @@ export function verdictPost(p, index, verdict, chainId = 4663) {
 /** A pledge's whole record as a 1200x630 card: what X shows under a shared /p/<id> link. */
 export function recordCard(p, score) {
   const W = 1200, H = 630;
-  const kept = p.milestones.filter((m) => m.outcome === 1).length;
-  const broken = p.milestones.filter((m) => m.outcome === 2).length;
-  const open = p.count - kept - broken;
+  const rec = recordOf(p.milestones);
   const tone = score === null ? C.muted : score >= 75 ? C.kept : score >= 50 ? C.open : C.broken;
   const total = p.milestones.reduce((x, m) => x + m.amount, 0n);
   const name = wrap(p.name, 30, 2);
   const rows = p.milestones.slice(0, 4).map((m, i) => {
     const y = 300 + i * 52;
     const col = m.outcome === 1 ? C.kept : m.outcome === 2 ? C.broken : C.open;
-    const label = m.outcome === 1 ? "KEPT" : m.outcome === 2 ? "BURNED" : `DUE ${new Date(m.deadline * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()}`;
+    const label = m.outcome === 1 ? "KEPT" : m.outcome === 2 ? "BURNED" : m.outcome === 3 ? `${pctOf(m)}% KEPT` : `DUE ${new Date(m.deadline * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()}`;
     const t = m.title.length > 40 ? `${m.title.slice(0, 39)}…` : m.title;
     return `<rect x="64" y="${y - 17}" width="22" height="22" rx="4" fill="${m.outcome ? col : "none"}" stroke="${col}" stroke-width="2.5"/>
 <text x="104" y="${y}" fill="${C.text}" font-family="${MONO}" font-size="24">${esc(t)}</text>
@@ -140,7 +152,7 @@ export function recordCard(p, score) {
 <text x="${W - 64}" y="${y}" text-anchor="end" fill="${col}" font-family="${MONO}" font-size="20" font-weight="600" letter-spacing="1">${label}</text>`;
   });
   const more = p.count > 4 ? `<text x="104" y="${300 + 4 * 52}" fill="${C.muted}" font-family="${MONO}" font-size="20">+ ${p.count - 4} more</text>` : "";
-  const record = broken ? `${kept} kept · ${broken} broken · ${open} open` : `${kept}/${p.count} promises kept${open ? ` · ${open} open` : ""}`;
+  const record = `${recordText(rec, p.count)}${rec.open ? ` · ${rec.open} open` : ""}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs>
   <radialGradient id="glow" cx="0.85" cy="0.2" r="0.6"><stop offset="0" stop-color="${tone}" stop-opacity="0.22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></radialGradient>

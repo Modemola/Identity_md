@@ -150,7 +150,9 @@ contract KeptMarkets is ReentrancyGuard {
 
         State s;
         if (outcome == 1) s = State.Yes;
-        else if (outcome == 2) s = State.No;
+        // 2 Broken; 3 Partial (KeptVaultV2): the market asks whether the milestone is delivered,
+        // so only a full delivery pays YES (docs/VAULT_V2.md, Markets)
+        else if (outcome == 2 || outcome == 3) s = State.No;
         else if (block.timestamp > uint256(m.deadline) + grace + VOID_AFTER) s = State.Void;
         else revert NotResolvable();
 

@@ -4,6 +4,7 @@
 //   node launch.mjs vault --owner 0xYOU [--dry-run]
 //   node launch.mjs eth-vault --owner 0xYOU [--dry-run]           (the same vault on Ethereum)
 //   node launch.mjs markets --owner 0xYOU [--vault 0xVAULT] [--chain ethereum] [--dry-run]
+//   node launch.mjs vault-v2 --owner 0xYOU [--chain ethereum] [--dry-run]   (KeptVault v2 + its question builder)
 //   node launch.mjs token --vault 0xVAULT --remainder 0xYOU [--pool-bps 6000] [--dry-run]
 //   node launch.mjs site [--name kept] [--dry-run]     (after web/src/config.js has the addresses)
 //   node launch.mjs status <label>
@@ -132,6 +133,38 @@ function vaultInput(source, owner, chain = "robinhood") {
 // The live KeptVault each markets launch points at (Ethereum's is passed with --vault once it exists).
 const LIVE_VAULT = { robinhood: "0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896", ethereum: "" };
 const YES_CAP = "1000000000000000000000"; // 1,000 IMD (18 decimals): the most one market's YES pool may hold
+
+function vaultV2Input(source, owner, chain = "robinhood") {
+  const eth = chain === "ethereum";
+  const where = eth ? "Ethereum mainnet (chain id 1)" : "Robinhood Chain (chain id 4663)";
+  const on = eth ? "on Ethereum" : "on Robinhood";
+  // IMD's current Intake: the same address on every chain (api.imd.fun/requests/capabilities)
+  const intake = ETH.intake;
+  const imd = eth ? ETH.imd : RH.imd;
+  return {
+    objective: [
+      `Deploy two contracts from this repository on ${where}, in this order, with no changes to the production source`,
+      "unless an audit finding requires one. They are KEPT's second vault (design: docs/VAULT_V2.md); the first,",
+      "src/KeptVault.sol, is already live and must not be redeployed or changed.",
+      "1) src/v2/KeptQuestionsV2.sol:KeptQuestionsV2, no constructor arguments: a stateless question builder.",
+      "2) src/v2/KeptVaultV2.sol:KeptVaultV2 with constructor arguments in order: owner_ = $owner;",
+      `intake_ = ${intake} (IMD's current Intake ${on}); imd_ = ${imd} (IMD ${on});`,
+      `action_ = ${RH.action} (bytes32 "oracle.request@oracle-1"); signer_ = ${RH.signer} (IMD oracle signer);`,
+      "panelSize_ = 9; quorum_ = 7; questions_ = the address of the KeptQuestionsV2 deployed in step 1.",
+      "No token, pool, hook, ETH or initialization calls. KeptVaultV2 is 22.2 KB, under the EIP-170 limit.",
+      "Tests: forge test --match-path 'test/v2/*' (offline, 114 tests including v1's ported suites and fuzzing);",
+      `forge test --match-contract VaultV2ForkTest --fork-url ${eth ? "<an Ethereum RPC>" : "https://rpc.mainnet.chain.robinhood.com"}`,
+      "(a real paid request to the live Intake after a deadline).",
+    ].join(" "),
+    repoUrl: source.repoUrl,
+    baseCommit: source.baseCommit,
+    onchain: "evm_contracts",
+    chainId: eth ? ETHEREUM : ROBINHOOD,
+    owner,
+    shape: "chain",
+    steps: STEPS,
+  };
+}
 
 function marketsInput(source, owner, vault, chain = "robinhood") {
   const eth = chain === "ethereum";
@@ -503,6 +536,12 @@ if (cmd === "vault") {
   const source = await importRepo();
   console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
   await pay()("eth-vault", vaultInput(source, addr("owner"), "ethereum"));
+} else if (cmd === "vault-v2") {
+  const chain = flag("chain", "robinhood");
+  if (!["robinhood", "ethereum"].includes(chain)) die("--chain must be robinhood or ethereum");
+  const source = await importRepo();
+  console.log(`Imported ${source.repoUrl} @ ${source.baseCommit}`);
+  await pay()(chain === "ethereum" ? "eth-vault-v2" : "vault-v2", vaultV2Input(source, addr("owner"), chain));
 } else if (cmd === "markets") {
   const chain = flag("chain", "robinhood");
   if (!["robinhood", "ethereum"].includes(chain)) die("--chain must be robinhood or ethereum");
@@ -526,7 +565,7 @@ if (cmd === "vault") {
 } else if (cmd === "status") {
   const label = argv[1];
   const path = new URL(`${label}.json`, STATE_DIR);
-  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|eth-vault|markets|eth-markets|token|site>");
+  if (!label || !existsSync(path)) die("usage: node launch.mjs status <vault|eth-vault|vault-v2|eth-vault-v2|markets|eth-markets|token|site>");
   const s = JSON.parse(readFileSync(path, "utf8"));
   if (s.onchain) await followOnchain(label, s.chainId, s.txHash);
   else await follow(label, s.orderId, s.token);

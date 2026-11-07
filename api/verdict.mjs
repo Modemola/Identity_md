@@ -40,7 +40,7 @@ export async function GET(request) {
     if (json) {
       const ms = p.milestones[index];
       return reply(
-        JSON.stringify({ pledge: p.id, name: p.name, milestone: index, title: ms.title, outcome: ["open", "kept", "broken"][ms.outcome], settled: ms.settled, amount: ms.amount.toString(), symbol: p.symbol, verdict: v, post: verdictPost(p, index, v, chain) }),
+        JSON.stringify({ pledge: p.id, name: p.name, milestone: index, title: ms.title, outcome: ["open", "kept", "broken", "partial"][ms.outcome], shareBps: ms.shareBps, settled: ms.settled, amount: ms.amount.toString(), symbol: p.symbol, verdict: v, post: verdictPost(p, index, v, chain) }),
         "application/json",
         200,
         maxAge,

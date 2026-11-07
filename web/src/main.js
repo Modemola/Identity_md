@@ -1,9 +1,12 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork } from "./config.js";
+import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v2Live } from "./config.js";
 import {
   client,
   vaultAbi,
+  vaultCall,
+  newPledgeVault,
+  previewQuestionV2,
   hookAbi,
   marketsAbi,
   getMarket,
@@ -41,31 +44,43 @@ initTheme();
 
 // ------------------------------------------------------------------ milestone state
 
-const TEMPLATE_LABEL = ["GitHub release", "Page contains", "Contract deployed", "Value at least"];
+const TEMPLATE_LABEL = ["GitHub release", "Page contains", "Contract deployed", "Value at least", "Value, partial credit"];
 const TIMEOUT = 86400n;
 /** The last moment a milestone can be checked: GitHub releases get the grace window, every other kind closes at its deadline (KeptVault._checkDeadline). */
-const checkBy = (m, grace) => m.deadline + (m.kind === 0 ? grace : 0n);
+/** The last moment a milestone can be checked: read from its vault (chain.js fills it for v1 and v2). */
+const checkBy = (m) => m.checkBy;
+const sharePct = (m) => Math.round(m.shareBps / 100);
+/** A partial milestone's split: what unlocks, and what burns. */
+const splitOf = (m) => {
+  const paid = (m.amount * BigInt(m.shareBps)) / 10_000n;
+  return [paid, m.amount - paid];
+};
 const ZERO32 = `0x${"0".repeat(64)}`;
 
 function state(m, grace) {
   const t = now();
   if (m.outcome === 1) return m.settled ? { cls: "kept", chip: "Kept · released" } : { cls: "kept", chip: "Kept · ready to release" };
-  if (m.outcome === 2) return { cls: "broken", chip: "Broken · burned" };
-  if (m.inFlight !== ZERO32 && t < m.askedAt + TIMEOUT) return { cls: "checking", chip: "Swarm checking" };
+  if (m.outcome === 3) return { cls: "kept", chip: `${sharePct(m)}% kept · ${m.settled ? "settled" : "ready to settle"}` };
+  if (m.outcome === 2) return { cls: "broken", chip: m.settled ? "Broken · burned" : "Broken · burn pending" };
+  if (m.inFlight !== ZERO32 && t < m.askedAt + TIMEOUT) return { cls: "checking", chip: m.inFlightAppeal ? "Appeal · 15 agents checking" : "Swarm checking" };
   if (t < m.deadline) return { cls: "open", chip: `Due in ${span(m.deadline - t)}` };
-  if (t <= m.deadline + grace) return { cls: "open", chip: `${m.kind === 0 ? "Proof" : "Delivery"} window · ${span(m.deadline + grace - t)} left` };
+  if (t <= m.checkBy) return { cls: "open", chip: `Proof window · ${span(m.checkBy - t)} left` };
+  if (t <= m.deadline + grace) return { cls: "open", chip: `Checks closed · burns in ${span(m.deadline + grace - t)}` };
   return { cls: "broken", chip: "Unproven · burn pending" };
 }
 
 const tally = (pledges) => {
   let kept = 0;
   let broken = 0;
+  let partial = 0;
+  let credit = 0; // kept milestones plus each partial's share: what the KEPT score counts
   for (const p of pledges)
     for (const m of p.milestones) {
-      if (m.outcome === 1) kept++;
+      if (m.outcome === 1) (kept++, (credit += 1));
       if (m.outcome === 2) broken++;
+      if (m.outcome === 3) (partial++, (credit += m.shareBps / 10_000));
     }
-  return { kept, broken };
+  return { kept, broken, partial, credit };
 };
 
 // ------------------------------------------------------------------ the shell (built once, never re-rendered)
@@ -146,6 +161,7 @@ function shell() {
         "div",
         { class: "foot-links" },
         deployed ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
+        v2Live ? h("span", {}, "Vault v2 ", addrLink(config.vault2)) : null,
         config.hook ? h("span", {}, "Hook ", addrLink(config.hook)) : null,
         h("a", { href: config.repo, target: "_blank", rel: "noopener" }, "Source"),
         h("a", { href: "https://imd.fun", target: "_blank", rel: "noopener" }, "IMD"),
@@ -253,6 +269,8 @@ const bar = {
   pledges: h("b", { class: "tnum" }, "…"),
   kept: h("b", { class: "tnum" }, "…"),
   broken: h("b", { class: "tnum" }, "…"),
+  // v2 partial deliveries: shown only once there is one
+  partialCell: h("span", { hidden: true }),
   oracle: h("b", { class: "tnum" }, "…"),
   end: h("div", { class: "cell end" }, h("span", { class: "lamp caution" }), deployed ? "Reading the vault" : "Launching"),
 };
@@ -264,7 +282,7 @@ function statusbar() {
     { class: "statusbar", "aria-label": "Network status" },
     h("div", { class: "cell" }, h("span", { class: "lamp ok blink" }), `${config.short} `, bar.block),
     h("div", { class: "cell" }, bar.pledges, " pledges"),
-    h("div", { class: "cell" }, bar.kept, " kept · ", bar.broken, " broken"),
+    h("div", { class: "cell" }, bar.kept, " kept · ", bar.partialCell, bar.broken, " broken"),
     h("div", { class: "cell" }, bar.oracle, " IMD oracle answers"),
     bar.end,
   );
@@ -307,6 +325,9 @@ function setStats(pledges) {
   bar.pledges.textContent = pledges.length;
   bar.kept.textContent = kept;
   bar.broken.textContent = broken;
+  const { partial } = tally(pledges);
+  bar.partialCell.hidden = !partial;
+  bar.partialCell.replaceChildren(h("b", { class: "tnum" }, String(partial)), " partial · ");
   bar.end.className = "cell end ok";
   bar.end.replaceChildren(h("span", { class: "lamp ok" }), "Vault live");
 }
@@ -574,7 +595,7 @@ function pledgeContent(p, c) {
   const backersEl = h("div", { class: "backers" });
   historyFill = (hist) => {
     // no isConnected check: inside a view transition the rows are built before they are attached
-    for (const [index, el] of historyEls) renderHistory(el, index, hist);
+    for (const [index, el] of historyEls) renderHistory(el, index, hist, p.milestones[index]?.kind);
     renderBackers(backersEl, p, hist);
   };
   const title = h("h1", { class: "page-title" }, p.name);
@@ -705,6 +726,8 @@ function specLine(m) {
       return ["page ", h("a", { href: x.a, target: "_blank", rel: "noopener nofollow" }, x.a), " shows ", h("code", {}, x.b)];
     case 2:
       return ["contract ", h("code", {}, short(x.target)), ` deployed on chain ${x.chainId}`];
+    case 4:
+      return [h("code", {}, x.a), " on ", h("code", {}, short(x.target)), ` (chain ${x.chainId}): from `, rawValue(x.floor), " (none) to ", rawValue(x.threshold), " (all)"];
     default:
       return [h("code", {}, x.a), " on ", h("code", {}, short(x.target)), ` (chain ${x.chainId}) ≥ `, rawValue(x.threshold)];
   }
@@ -715,7 +738,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
   const dec = p.tokenInfo.decimals;
   const pct = total ? Number((m.amount * 10000n) / total) / 100 : 0;
   const id = BigInt(p.id);
-  const call = (functionName) => ({ address: config.vault, abi: vaultAbi, functionName, args: [id, m.index] });
+  const call = (functionName, extra = []) => ({ ...vaultCall(p.id), functionName, args: [id, m.index, ...extra] });
   const keys = [`pledge:${p.id}`, `history:${p.id}`];
   const actions = [];
   if (m.outcome === 0 && st.cls !== "checking" && m.gate.open) {
@@ -739,18 +762,48 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
     } else if (isBeneficiary) {
       actions.push(h("span", { class: "note" }, "A check needs enough budget and an Intake price at or below 0.5 IMD."));
     } else {
-      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this, until ${when(checkBy(m, c.grace))}. Not proven by then, it burns.`));
+      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this, until ${when(checkBy(m))}. Not proven by then, it burns.`));
+    }
+  }
+  // v2 partial credit: the number is read once, at the deadline
+  if (m.kind === 4 && m.outcome === 0 && now() <= m.deadline) {
+    actions.push(h("span", { class: "note" }, `Read on chain at the deadline. ${isBeneficiary ? "Ask the swarm" : "The team asks the swarm"} after ${when(m.deadline)} and before ${when(checkBy(m))}: the share of the target reached unlocks, the rest burns.`));
+  }
+  // v2 appeal: once, after a "not delivered", to a 15-agent panel
+  if (m.outcome === 0 && m.appealOpen && st.cls !== "checking") {
+    if (isBeneficiary && p.budget >= 5n * 10n ** 17n) {
+      actions.push(
+        h(
+          "button",
+          {
+            class: "btn small",
+            onclick: async (e) => {
+              if (await onchain(e.currentTarget, "Appeal the verdict", [{ label: `Ask a 15-agent panel about milestone ${m.index + 1} · at most 1 IMD · final`, run: (ph) => send(call("appeal", [10n ** 18n]), ph) }], keys))
+                toast("Appeal sent. Fifteen agents check it and eleven must agree. Their answer is final.", "ok");
+            },
+          },
+          icon("pulse", 15),
+          "Appeal · 15 agents · final",
+        ),
+      );
+    } else if (isBeneficiary) {
+      actions.push(h("span", { class: "note" }, "You can appeal once to a 15-agent panel. Add IMD to the check budget first."));
+    } else {
+      actions.push(h("span", { class: "note" }, `The swarm said "not delivered". The team can appeal once to a 15-agent panel, until ${when(checkBy(m))}.`));
     }
   }
   const checkPending = m.inFlight !== ZERO32 && now() < m.askedAt + TIMEOUT; // the vault refuses to settle then
-  if (!m.settled && (m.outcome === 1 || (m.outcome === 0 && now() > m.deadline + c.grace && !checkPending))) {
-    const burning = m.outcome !== 1;
+  // kept, partial and (v2) a scaled zero settle at once; an unproven milestone after its grace window
+  if (!m.settled && (m.outcome !== 0 || (now() > m.deadline + c.grace && !checkPending))) {
+    const burning = m.outcome === 0 || m.outcome === 2;
+    const [paid, burned] = splitOf(m);
+    const label = m.outcome === 3 ? `Settle · release ${fmt(paid, dec)}, burn ${fmt(burned, dec)}` : burning ? "Settle · burn tranche" : "Settle · release to team";
     actions.push(
       h(
         "button",
-        { class: `btn small ${burning ? "danger" : "primary"}`, onclick: (e) => onchain(e.currentTarget, burning ? "Burn the tranche" : "Release the tranche", one(call("settle")), keys) },
+        { class: `btn small ${burning ? "danger" : "primary"}`, onclick: (e) => onchain(e.currentTarget, m.outcome === 3 ? "Release the share, burn the rest" : burning ? "Burn the tranche" : "Release the tranche", one(call("settle")), keys) },
         icon(burning ? "flame" : "check", 15),
-        burning ? "Settle · burn tranche" : "Settle · release to team",
+        label,
       ),
     );
   }
@@ -766,7 +819,11 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
     bodyText = `${b.question}\n\nevidence: ${b.evidence} · chain ${b.chainId} · panel ${b.panelSize}, quorum ${b.quorum}`;
   } catch {}
 
-  const stamp = m.outcome === 1 ? h("div", { class: "stamp kept", "aria-hidden": "true" }, "KEPT ✓") : m.outcome === 2 ? h("div", { class: "stamp broken", "aria-hidden": "true" }, "BROKEN ✕") : null;
+  const stamp =
+    m.outcome === 1 ? h("div", { class: "stamp kept", "aria-hidden": "true" }, "KEPT ✓")
+    : m.outcome === 2 ? h("div", { class: "stamp broken", "aria-hidden": "true" }, "BROKEN ✕")
+    : m.outcome === 3 ? h("div", { class: "stamp kept", "aria-hidden": "true" }, `${sharePct(m)}% ✓`)
+    : null;
 
   return reveal(
     h(
@@ -782,21 +839,36 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
         h("details", { class: "q", "data-k": `q${m.index}` }, h("summary", {}, "What the swarm is asked"), h("pre", {}, bodyText)),
         historyEl,
         actions.length ? h("div", { class: "actions" }, actions) : null,
-        marketPanel(p, m, c),
+        // markets read the v1 vault for now (KeptMarkets takes one vault at deploy)
+        p.id < FIRST_V2 ? marketPanel(p, m, c) : null,
       ),
-      h("div", { class: "amount tnum" }, `${fmt(m.amount, dec)} ${p.tokenInfo.symbol}`, h("small", {}, `${pct}% · ${m.attempts}/${c.maxAttempts} checks`)),
+      h(
+        "div",
+        { class: "amount tnum" },
+        m.outcome === 3 ? `${fmt(splitOf(m)[0], dec)} of ${fmt(m.amount, dec)} ${p.tokenInfo.symbol}` : `${fmt(m.amount, dec)} ${p.tokenInfo.symbol}`,
+        h("small", {}, m.outcome === 3 ? `${sharePct(m)}% unlocked · ${100 - sharePct(m)}% burns` : `${pct}% · ${Math.min(m.attempts, c.maxAttempts)}/${c.maxAttempts} checks${m.appealed ? " + appeal" : ""}`),
+      ),
       stamp,
     ),
   );
 }
 
-function renderHistory(el, index, hist) {
+function renderHistory(el, index, hist, kind = 0) {
   const rows = [];
+  for (const log of (hist.scores ?? []).filter((l) => Number(l.args.index) === index)) {
+    const share = Number(log.args.shareBps);
+    const cls = share >= 10_000 ? "kept" : share === 0 ? "broken" : "kept";
+    rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: `chip ${cls}` }, h("span", { class: `lamp ${cls}` }), `measured: ${Math.round(share / 100)}%`), `read on chain at the deadline: ${log.args.value.toLocaleString("en-US")} (raw units)`) });
+  }
+  for (const log of (hist.appeals ?? []).filter((l) => Number(l.args.index) === index)) {
+    rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: "chip checking" }, h("span", { class: "lamp open" }), "appeal"), "asked a 15-agent panel, 11 must agree · final") });
+  }
   const tx = (hash) => h("a", { href: `${config.explorer}/tx/${hash}`, target: "_blank", rel: "noopener" }, "tx");
   for (const log of hist.checks.filter((l) => Number(l.args.index) === index)) {
     rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: "chip checking" }, h("span", { class: "lamp open" }), `check ${log.args.attempt}`), "asked the swarm · ", tx(log.transactionHash)) });
   }
-  for (const log of hist.verdicts.filter((l) => Number(l.args.index) === index)) {
+  // a scaled milestone's verdict is its measurement, shown above
+  for (const log of kind === 4 ? [] : hist.verdicts.filter((l) => Number(l.args.index) === index)) {
     const uuid = uuidFromBytes32(log.args.oracleRequestId);
     const jobLink = h("span", {});
     const kept = log.args.kept;
@@ -821,8 +893,10 @@ function renderHistory(el, index, hist) {
     rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: "chip kept" }, h("span", { class: "lamp kept" }), "rebate"), `Referee Fund refunded ${fmt(log.args.amount, IMD_DECIMALS)} IMD`) });
   }
   for (const log of hist.settles.filter((l) => Number(l.args.index) === index)) {
-    const kept = Number(log.args.outcome) === 1;
-    rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: `chip ${kept ? "kept" : "broken"}` }, h("span", { class: `lamp ${kept ? "kept" : "broken"}` }), kept ? "released" : "burned"), kept ? "tranche sent to the beneficiary · " : "tranche sent to 0x…dEaD · ", tx(log.transactionHash)) });
+    const outcome = Number(log.args.outcome);
+    const kept = outcome === 1 || outcome === 3;
+    const what = outcome === 3 ? "the share sent to the beneficiary, the rest to 0x…dEaD · " : kept ? "tranche sent to the beneficiary · " : "tranche sent to 0x…dEaD · ";
+    rows.push({ block: log.blockNumber, at: log.logIndex, node: h("div", { class: "verdict" }, h("span", { class: `chip ${kept ? "kept" : "broken"}` }, h("span", { class: `lamp ${kept ? "kept" : "broken"}` }), outcome === 3 ? "partly released" : kept ? "released" : "burned"), what, tx(log.transactionHash)) });
   }
   rows.sort((a, b) => Number(a.block - b.block) || a.at - b.at);
   const fresh = !el.childElementCount;
@@ -834,7 +908,8 @@ const CHECK = 5n * 10n ** 17n; // the vault's default price cap for one check: 0
 /** Milestones still waiting on proof: each needs at least one check before its window closes. */
 function unproven(p, c) {
   const t = now();
-  return p.milestones.filter((m) => m.outcome === 0 && t <= m.deadline + c.grace && m.attempts < c.maxAttempts);
+  // still checkable: open, inside its own check window, with tries left
+  return p.milestones.filter((m) => m.outcome === 0 && t <= m.checkBy && m.attempts < c.maxAttempts && !m.appealed);
 }
 
 function budgetBox(p, c, backersEl) {
@@ -845,7 +920,7 @@ function budgetBox(p, c, backersEl) {
       "div",
       { class: "summary inline", style: { marginTop: "28px" } },
       h("span", {}, h("b", {}, `${fmt(p.budget, IMD_DECIMALS)} IMD`), " of unused check budget is waiting for the creator."),
-      h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Return the budget", one({ address: config.vault, abi: vaultAbi, functionName: "withdrawBudget", args: [BigInt(p.id)] }), keys) }, "Return it to the creator"),
+      h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Return the budget", one({ ...vaultCall(p.id), functionName: "withdrawBudget", args: [BigInt(p.id)] }), keys) }, "Return it to the creator"),
     );
   }
   const waiting = unproven(p, c);
@@ -892,8 +967,8 @@ function budgetBox(p, c, backersEl) {
                   e.currentTarget,
                   "Back this pledge",
                   [
-                    { label: "Allow the vault to take the IMD", run: async (ph) => ((await needsAllowance(imd, config.vault, amount)) ? ensureAllowance(imd, config.vault, amount, ph) : null) },
-                    { label: `Add ${fmt(amount, IMD_DECIMALS)} IMD to pledge #${p.id}`, run: (ph) => send({ address: config.vault, abi: vaultAbi, functionName: "fund", args: [BigInt(p.id), amount] }, ph) },
+                    { label: "Allow the vault to take the IMD", run: async (ph) => ((await needsAllowance(imd, vaultCall(p.id).address, amount)) ? ensureAllowance(imd, vaultCall(p.id).address, amount, ph) : null) },
+                    { label: `Add ${fmt(amount, IMD_DECIMALS)} IMD to pledge #${p.id}`, run: (ph) => send({ ...vaultCall(p.id), functionName: "fund", args: [BigInt(p.id), amount] }, ph) },
                   ],
                   keys,
                 );
@@ -1071,12 +1146,13 @@ function betForm(p, m, mk, keys) {
 
 /** Buttons to post a decided milestone: the verdict card's text, and the card itself. */
 function verdictShare(p, m) {
-  const kept = p.milestones.filter((x) => x.outcome === 1).length;
-  const broken = p.milestones.filter((x) => x.outcome === 2).length;
-  const record = broken ? `${kept} kept, ${broken} broken` : `${kept}/${p.count} promises kept`;
+  const { kept, broken, partial } = tally([p]);
+  const record = broken || partial ? [`${kept} kept`, partial && `${partial} partial`, broken && `${broken} broken`].filter(Boolean).join(", ") : `${kept}/${p.count} promises kept`;
   const amt = `${fmt(m.amount, p.tokenInfo.decimals)} $${p.tokenInfo.symbol}`;
   const text =
-    m.outcome === 1
+    m.outcome === 3
+      ? `PARTLY KEPT. "${m.title}" reached ${sharePct(m)}% of its target, measured on chain. ${fmt(splitOf(m)[0], p.tokenInfo.decimals)} $${p.tokenInfo.symbol} unlocks to the team behind "${p.name}"; the rest burns. Record: ${record}.`
+      : m.outcome === 1
       ? `KEPT. "${m.title}" was delivered, verified by the IMD swarm. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
       : `BURNED. "${m.title}" was not delivered. ${amt} from "${p.name}" is gone for good. Record: ${record}.`;
   const card = `${BADGE_HOST}/api/verdict?pledge=${p.id}&m=${m.index}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}`;
@@ -1329,16 +1405,19 @@ function viewNew({ quiet }) {
             return toast(reason(err), "alarm");
           }
           let created = null;
+          const target = newPledgeVault();
           const ok = await runSteps(
             "Create the pledge",
             [
-              { label: `Allow the vault to lock ${fmt(total, st.token.decimals)} ${st.token.symbol}`, run: async (ph) => ((await needsAllowance(st.token.address, config.vault, total)) ? ensureAllowance(st.token.address, config.vault, total, ph) : null) },
-              { label: `Allow ${fmt(budget, IMD_DECIMALS)} IMD for checks`, run: async (ph) => ((await needsAllowance(imd, config.vault, budget)) ? ensureAllowance(imd, config.vault, budget, ph) : null) },
+              { label: `Allow the vault to lock ${fmt(total, st.token.decimals)} ${st.token.symbol}`, run: async (ph) => ((await needsAllowance(st.token.address, target.address, total)) ? ensureAllowance(st.token.address, target.address, total, ph) : null) },
+              { label: `Allow ${fmt(budget, IMD_DECIMALS)} IMD for checks`, run: async (ph) => ((await needsAllowance(imd, target.address, budget)) ? ensureAllowance(imd, target.address, budget, ph) : null) },
               {
                 label: "Lock the tokens and create the pledge",
                 run: async (ph) => {
-                  const receipt = await send({ address: config.vault, abi: vaultAbi, functionName: "createPledge", args: [st.token.address, beneficiary, nameIn.value.trim(), inputs, budget] }, ph);
-                  [created] = parseEventLogs({ abi: vaultAbi, logs: receipt.logs, eventName: "PledgeCreated" });
+                  // v1 has no floor field; v2 needs one on every milestone
+                  const args = target.v2 ? inputs : inputs.map(({ floor, ...m }) => m);
+                  const receipt = await send({ address: target.address, abi: target.abi, functionName: "createPledge", args: [st.token.address, beneficiary, nameIn.value.trim(), args, budget] }, ph);
+                  [created] = parseEventLogs({ abi: target.abi, logs: receipt.logs, eventName: "PledgeCreated" });
                   return receipt;
                 },
               },
@@ -1505,6 +1584,7 @@ function milestoneEditor(st, refresh, onRemove) {
   const chainSel = h("select", {}, CHAINS.map(([id, n]) => h("option", { value: id }, n)));
   const target = h("input", { placeholder: "0x… contract address", spellcheck: "false" });
   const threshold = h("input", { type: "number", min: "1", step: "1", placeholder: "Raw uint256, e.g. 1000000000000000000" });
+  const floor = h("input", { type: "number", min: "0", step: "1", value: "0", placeholder: "Raw uint256, e.g. 0" });
   const params = h("div", { class: "params" });
   // polite live region: the question (or what is wrong) is read out once typing pauses
   const preview = h("div", { class: "preview", "aria-live": "polite" }, "Fill in the milestone to see the swarm's question.");
@@ -1514,7 +1594,8 @@ function milestoneEditor(st, refresh, onRemove) {
   d.setMinutes(0, 0, 0);
   deadline.value = new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
 
-  const tiles = TEMPLATE_LABEL.map((l, i) =>
+  // partial credit (kind 4) exists only on KeptVault v2, where new pledges go once it is live
+  const tiles = TEMPLATE_LABEL.slice(0, v2Live ? 5 : 4).map((l, i) =>
     h(
       "button",
       {
@@ -1542,12 +1623,24 @@ function milestoneEditor(st, refresh, onRemove) {
     } else if (kind === 1) {
       a.placeholder = "https://…";
       b.placeholder = "Exact text the page must show (no quotes)";
-      params.replaceChildren(field("Page URL", a), field("Text that must appear", b, "Up to 80 characters. Pick text that only appears once you deliver."));
+      params.replaceChildren(
+        field("Page URL", a),
+        field("Text that must appear", b, "Up to 80 characters. Pick text that only appears once you deliver."),
+        h("p", { class: "hint" }, "A page is read live, so the swarm must check it before the deadline. Every other kind can still be checked for 3 days after it."),
+      );
     } else if (kind === 2) {
       params.replaceChildren(h("div", { class: "row2" }, field("Chain", chainSel), field("Contract address", target, "True once code exists at this address.")));
-    } else {
+    } else if (kind === 3) {
       a.placeholder = "e.g. totalSupply()";
       params.replaceChildren(h("div", { class: "row2" }, field("Chain", chainSel), field("Contract address", target)), h("div", { class: "row2" }, field("View function (no arguments)", a), field("At least", threshold, "Compared with the raw returned uint256.")));
+    } else {
+      a.placeholder = "e.g. collected()";
+      params.replaceChildren(
+        h("div", { class: "row2" }, field("Chain", chainSel), field("Contract address", target)),
+        field("View function (no arguments)", a),
+        h("div", { class: "row2" }, field("Nothing unlocks at", floor, "Raw uint256. At or below this, the whole tranche burns."), field("All of it unlocks at", threshold, "Raw uint256. Between the two, that share unlocks.")),
+        h("p", { class: "hint" }, "The swarm reads the number once, on chain, at the deadline. Halfway from the floor to the target unlocks half the tranche and burns the rest."),
+      );
     }
     if (animate && !reduced) {
       params.classList.remove("swap");
@@ -1567,7 +1660,8 @@ function milestoneEditor(st, refresh, onRemove) {
       amount: parseUnits(amount.value || "0", decimals),
       chainId,
       target: tgt,
-      threshold: kind === 3 ? BigInt(threshold.value || "0") : 0n,
+      threshold: kind >= 3 ? BigInt(threshold.value || "0") : 0n,
+      floor: kind === 4 ? BigInt(floor.value || "0") : 0n,
       title: title.value.trim(),
       a: kind === 2 ? "" : a.value.trim(),
       b: kind >= 2 ? "" : b.value.trim(),
@@ -1597,13 +1691,14 @@ function milestoneEditor(st, refresh, onRemove) {
     };
     if (!deployed) return set("", "The question preview appears once KEPT is deployed: the vault itself writes it.");
     try {
-      const body = await previewQuestion(i);
+      // v2 keeps the question writer on its builder contract
+      const body = v2Live ? await previewQuestionV2(i) : await previewQuestion(i);
       if (mine !== seq) return;
       const q = JSON.parse(body);
       set("good", `${q.question}\n\nevidence: ${q.evidence} · chain ${q.chainId} · panel ${q.panelSize}, quorum ${q.quorum}`);
     } catch (e) {
       if (mine !== seq) return;
-      const touched = [title, a, b, target, threshold, amount].some((x) => x.value.trim());
+      const touched = [title, a, b, target, threshold, floor, amount].some((x) => x.value.trim() && x.value !== "0");
       if (!touched) return set("", "Fill in the milestone to see the swarm's question.");
       set("bad", explain(e, kind, i));
     }
@@ -1657,6 +1752,7 @@ const FIELD_NAMES = [
   ["the page URL (must start with https://)", "the text (1 to 80 characters, no quotes or backslashes)"],
   ["", "", "the contract address"],
   ["the view function, e.g. totalSupply()", "", "the contract address", "the threshold (above zero)"],
+  ["the view function, e.g. collected()", "", "the contract address", "the target (above zero)", "the floor (below the target)"],
 ];
 
 /** Turns the vault's validation errors into the field the user needs to fix. */
@@ -1863,13 +1959,14 @@ function teams(pledges) {
   return [...by.values()]
     .map((t) => {
       const ms = t.pledges.flatMap((p) => p.milestones.map((m) => ({ ...m, pledge: p })));
-      const kept = ms.filter((m) => m.outcome === 1).length;
-      const broken = ms.filter((m) => m.outcome === 2).length;
+      const { kept, broken, partial, credit } = tally(t.pledges);
+      const settled = kept + broken + partial;
       const next = ms.filter((m) => m.outcome === 0).sort((a, b) => Number(a.deadline - b.deadline))[0];
       const lead = t.pledges[0]; // newest first
-      // the same score /api/score serves: the kept rate with one kept and one broken promise as a prior
-      const score = kept + broken ? Math.round((100 * (kept + 1)) / (kept + broken + 2)) : null;
-      return { ...t, ms, kept, broken, open: ms.length - kept - broken, rate: kept + broken ? kept / (kept + broken) : null, score, next, lead };
+      // the same score /api/score serves: the kept rate with one kept and one broken promise as a
+      // prior, where a partial delivery counts as its share
+      const score = settled ? Math.round((100 * (credit + 1)) / (settled + 2)) : null;
+      return { ...t, ms, kept, broken, partial, open: ms.length - settled, rate: settled ? credit / settled : null, score, next, lead };
     })
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.kept - a.kept || a.broken - b.broken || b.ms.length - a.ms.length);
 }
@@ -2110,10 +2207,12 @@ function viewGraveyard({ quiet }) {
     lastSig = s;
     const t = now();
     const all = pledges.flatMap((p) => p.milestones.map((m) => ({ m, p })));
-    const graves = all.filter(({ m }) => m.outcome === 2).sort((a, b) => Number(b.m.deadline - a.m.deadline));
+    // a partial delivery burned the rest of its tranche: it belongs here too, with what burned
+    const graves = all.filter(({ m }) => m.outcome === 2 || (m.outcome === 3 && m.shareBps < 10_000)).sort((a, b) => Number(b.m.deadline - a.m.deadline));
     // past their proof window, unproven, and not settled yet: anyone can burn them now
     const pending = all.filter(({ m }) => m.outcome === 0 && t > m.deadline + c.grace);
     const open = all.filter(({ m }) => m.outcome === 0 && t <= m.deadline + c.grace);
+    const burnedOf = (m) => (m.outcome === 3 ? splitOf(m)[1] : m.amount);
 
     countUp(figs.broken, graves.length);
     // burned amounts are per token: list each symbol's total
@@ -2121,7 +2220,7 @@ function viewGraveyard({ quiet }) {
     for (const { m, p } of graves) {
       const k = p.tokenInfo.symbol;
       const cur = bySym.get(k) ?? { amt: 0n, dec: p.tokenInfo.decimals };
-      cur.amt += m.amount;
+      cur.amt += burnedOf(m);
       bySym.set(k, cur);
     }
     figs.burned.textContent = bySym.size ? [...bySym].map(([sym, v]) => `${short_(v.amt, v.dec)} ${sym}`).join(" · ") : "0";
@@ -2145,7 +2244,7 @@ function viewGraveyard({ quiet }) {
           { class: "empty gy-empty" },
           h("p", {}, "Nothing has burned yet. Every promise on KEPT so far was kept, or is still open."),
           next
-            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If the swarm hasn't confirmed it by ${when(checkBy(next.m, c.grace))}, it burns and lands here.`)
+            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If the swarm hasn't confirmed it by ${when(checkBy(next.m))}, it burns and lands here.`)
             : null,
           next ? h("a", { class: "btn small", href: link(`/pledge/${next.p.id}`) }, "See it", icon("arrow", 14)) : null,
         ),
@@ -2216,12 +2315,16 @@ function graveRow(m, p, hist, pending = false) {
   const idx = m.index;
   const verdict = hist?.verdicts.filter((l) => Number(l.args.index) === idx).at(-1);
   const burn = hist?.settles.find((l) => Number(l.args.index) === idx);
-  const why = pending
+  const partial = m.outcome === 3;
+  const burnt = partial ? splitOf(m)[1] : m.amount;
+  const why = partial
+    ? `delivered ${sharePct(m)}% of the target · the rest burned`
+    : pending
     ? "not proven in time · anyone can settle it now"
     : verdict && !verdict.args.kept
       ? `swarm: ${verdict.args.agreed} of ${verdict.args.panelSize} said not delivered`
       : "not proven in time";
-  const post = `BURNED. "${m.title}" was not delivered. ${fmt(m.amount, dec)} $${p.tokenInfo.symbol} from "${p.name}" is gone for good. Verified on @keptonchainn.`;
+  const post = partial ? `PARTLY KEPT. "${m.title}" reached ${sharePct(m)}% of its target. ${fmt(burnt, dec)} $${p.tokenInfo.symbol} from "${p.name}" burned. Verified on @keptonchainn.` : `BURNED. "${m.title}" was not delivered. ${fmt(m.amount, dec)} $${p.tokenInfo.symbol} from "${p.name}" is gone for good. Verified on @keptonchainn.`;
   return h(
     "div",
     { class: "row grave-row" },
@@ -2239,7 +2342,7 @@ function graveRow(m, p, hist, pending = false) {
         pending ? null : h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id, idx + 1))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post it"),
       ),
     ),
-    h("div", { class: "right" }, h("span", { class: "rate tnum broken" }, `${short_(m.amount, dec)} ${p.tokenInfo.symbol}`), h("span", {}, pending ? "burns when settled" : "burned")),
+    h("div", { class: "right" }, h("span", { class: "rate tnum broken" }, `${short_(burnt, dec)} ${p.tokenInfo.symbol}`), h("span", {}, pending ? "burns when settled" : "burned")),
   );
 }
 
