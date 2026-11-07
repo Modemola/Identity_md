@@ -3,13 +3,20 @@ import { createClient, custom, defineChain, erc20Abi, http, getAddress } from "v
 // every action viem has (signature verification, ENS, EIP-6492...) and pull ~100 KB of curves and
 // helpers into the bundle that KEPT never calls.
 import { readContract, getBlockNumber, getContractEvents, simulateContract, waitForTransactionReceipt, writeContract } from "viem/actions";
-import { config } from "./config.js";
+import { config, FIRST_V2, v2Live, vaultOf } from "./config.js";
 import { load, put, peek, epoch } from "./store.js";
 import vaultAbi from "./abi/KeptVault.json";
 import hookAbi from "./abi/KeptHook.json";
 import marketsAbi from "./abi/KeptMarkets.json";
+import vault2Abi from "./abi/KeptVaultV2.json";
+import questions2Abi from "./abi/KeptQuestionsV2.json";
 
-export { vaultAbi, hookAbi, marketsAbi, erc20Abi };
+export { vaultAbi, vault2Abi, hookAbi, marketsAbi, erc20Abi };
+
+/** Address and ABI of the vault that holds pledge `id`, for reads and writes alike. */
+export const vaultCall = (id) => (Number(id) >= FIRST_V2 ? { address: config.vault2, abi: vault2Abi } : { address: config.vault, abi: vaultAbi });
+/** Where a new pledge goes: v2 once it is live. */
+export const newPledgeVault = () => (v2Live ? { address: config.vault2, abi: vault2Abi, v2: true } : { address: config.vault, abi: vaultAbi, v2: false });
 
 export const chain = defineChain({
   id: config.chainId,
@@ -35,6 +42,8 @@ export const Kind = ["GithubRelease", "PageContains", "ContractDeployed", "Value
 
 const read = (functionName, args = []) =>
   client.readContract({ address: config.vault, abi: vaultAbi, functionName, args });
+/** A read on the vault that holds pledge `id`. */
+const readOf = (id, functionName, args = []) => client.readContract({ ...vaultCall(id), functionName, args });
 
 // ------------------------------------------------------------------ vault reads
 
@@ -77,7 +86,7 @@ export async function vaultConstants() {
 }
 
 export async function loadPledge(id) {
-  const p = await read("pledge", [BigInt(id)]);
+  const p = await readOf(id, "pledge", [BigInt(id)]);
   const [creator, beneficiary, token, name, createdAt, count, open, locked, budget, panelSize, quorum] = p;
   const milestones = await Promise.all(
     Array.from({ length: Number(count) }, (_, i) => loadMilestone(id, i)),
@@ -96,19 +105,35 @@ export async function loadPledge(id) {
     panelSize,
     quorum,
     milestones,
+    version: Number(id) >= FIRST_V2 ? 2 : 1,
     tokenInfo: await tokenInfo(token),
   };
 }
 
+const GRACE_V1 = 3n * 86400n;
+
 export async function loadMilestone(id, index) {
-  const [m, spec, question, gate] = await Promise.all([
-    read("milestone", [BigInt(id), index]),
-    read("milestoneSpec", [BigInt(id), index]),
-    read("questionOf", [BigInt(id), index]),
-    read("checkOpen", [BigInt(id), index]),
+  const v2 = Number(id) >= FIRST_V2;
+  const args = [BigInt(id), index];
+  const [m, spec, question, gate, extra, appealOpen] = await Promise.all([
+    readOf(id, "milestone", args),
+    readOf(id, "milestoneSpec", args),
+    readOf(id, "questionOf", args),
+    readOf(id, "checkOpen", args),
+    v2 ? readOf(id, "milestoneV2", args) : null,
+    v2 ? readOf(id, "appealOpen", args) : false,
   ]);
   const [kind, title, deadline, amount, outcome, settled, attempts, inFlight, askedAt] = m;
   return {
+    // the same fields for v1 and v2, so pages read fields instead of asking which vault:
+    // shareBps is the share of the tranche that unlocks (v1: all or nothing), checkBy the last moment
+    // the swarm can be asked (v1: a GitHub release gets the grace window, nothing else does)
+    shareBps: extra ? Number(extra[0]) : Number(outcome) === 1 ? 10_000 : 0,
+    lastNo: extra ? extra[1] : false,
+    appealed: extra ? extra[2] : false,
+    inFlightAppeal: extra ? extra[3] : false,
+    checkBy: extra ? extra[4] : deadline + (Number(kind) === 0 ? GRACE_V1 : 0n),
+    appealOpen,
     index,
     kind: Number(kind),
     title,
@@ -128,7 +153,22 @@ export async function loadMilestone(id, index) {
 export async function loadAllPledges() {
   const count = Number(await read("pledgeCount"));
   const ids = Array.from({ length: count }, (_, i) => count - i);
+  // v2's pledge count is its last number (it starts at 1000); newest first, v2 before v1
+  if (v2Live) {
+    const last = Number(await client.readContract({ address: config.vault2, abi: vault2Abi, functionName: "pledgeCount" }));
+    for (let i = last; i >= FIRST_V2; i--) ids.push(i);
+    ids.sort((a, b) => b - a);
+  }
   return Promise.all(ids.map(loadPledge));
+}
+
+/** v2's question builder: the oracle body a milestone would send, before creating it. */
+export async function previewQuestionV2(input) {
+  const builder = await client.readContract({ address: config.vault2, abi: vault2Abi, functionName: "questions" });
+  const spec = { kind: input.kind, chainId: input.chainId, target: input.target, threshold: input.threshold, floor: input.floor ?? 0n, a: input.a, b: input.b };
+  await client.readContract({ address: builder, abi: questions2Abi, functionName: "validate", args: [spec] });
+  const body = await client.readContract({ address: builder, abi: questions2Abi, functionName: "body", args: [spec, input.deadline, input.deadline, 9, 7, 86400] });
+  return new TextDecoder().decode(Uint8Array.from(body.slice(2).match(/../g) ?? [], (b) => parseInt(b, 16)));
 }
 
 // ------------------------------------------------------------------ cached accessors (see store.js)
@@ -181,17 +221,17 @@ export async function previewQuestion(input) {
  * here pins one event and one pledge, a single value per topic, which Robinhood Chain's RPC
  * serves ten million blocks at a time; others refuse and the span shrinks.
  */
-async function logsInChunks(event, args) {
+async function logsInChunks(event, args, id = 0) {
   const latest = await client.getBlockNumber();
-  let from = config.fromBlock;
+  const v2 = Number(id) >= FIRST_V2;
+  let from = v2 ? config.vault2From : config.fromBlock;
   let span = 9_999_999n;
   const out = [];
   while (from <= latest) {
     const to = from + span - 1n > latest ? latest : from + span - 1n;
     try {
       const logs = await client.getContractEvents({
-        address: config.vault,
-        abi: vaultAbi,
+        ...vaultCall(id || 1),
         eventName: event,
         args,
         fromBlock: from,
@@ -209,14 +249,18 @@ async function logsInChunks(event, args) {
 
 export async function pledgeHistory(id) {
   const args = { pledgeId: BigInt(id) };
-  const [verdicts, checks, settles, rebates, funds] = await Promise.all([
-    logsInChunks("Verdict", args),
-    logsInChunks("CheckRequested", args),
-    logsInChunks("Settled", args),
-    logsInChunks("Rebated", args),
-    logsInChunks("BudgetFunded", args),
+  const v2 = Number(id) >= FIRST_V2;
+  const [verdicts, checks, settles, rebates, funds, scores, appeals] = await Promise.all([
+    logsInChunks("Verdict", args, id),
+    logsInChunks("CheckRequested", args, id),
+    logsInChunks("Settled", args, id),
+    logsInChunks("Rebated", args, id),
+    logsInChunks("BudgetFunded", args, id),
+    // v2 only: the number a scaled milestone was read at, and appeals
+    v2 ? logsInChunks("Scored", args, id) : [],
+    v2 ? logsInChunks("Appealed", args, id) : [],
   ]);
-  return { verdicts, checks, settles, rebates, funds };
+  return { verdicts, checks, settles, rebates, funds, scores, appeals };
 }
 
 // ------------------------------------------------------------------ markets

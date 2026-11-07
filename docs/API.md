@@ -37,7 +37,7 @@ GET /api/score?token=0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3
 }
 ```
 
-**How the score works.** It is the kept rate, starting from one kept and one broken promise: `(kept + 1) / (kept + broken + 2)`, rounded to a whole number. One kept promise scores 67, not 100. Ten kept and none broken scores 92. One broken promise scores 33. A team with no settled promise has `score: null`: no record yet, which is different from a bad one.
+**How the score works.** It is the kept rate, starting from one kept and one broken promise: `(kept + 1) / (settled + 2)`, rounded to a whole number. On KeptVault v2, a milestone can be **partly** kept (a numeric target reached in part). It counts as its share: a 60% delivery adds 0.6 to kept and 0.4 to broken, and the response lists it under `partial`. One kept promise scores 67, not 100. Ten kept and none broken scores 92. One broken promise scores 33. A team with no settled promise has `score: null`: no record yet, which is different from a bad one.
 
 **Suggested display:**
 - green at 75 and above
@@ -86,6 +86,10 @@ One milestone's outcome as a 1200x675 SVG, sized for an X post.
 | --- | --- |
 | `?pledge=1&m=0` | milestone 1 of pledge 1 (`m` counts from 0) |
 | `&format=json` | the outcome, the numbers and ready-to-post text |
+
+## Pledge numbers
+
+KEPT's second vault, v2, numbers its pledges from **#1001**, so a number always names one vault: `?pledge=1` is v1's first pledge and `?pledge=1001` is v2's first. `?team=` and `?token=` cover both vaults.
 
 ## Chains
 

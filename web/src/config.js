@@ -15,6 +15,8 @@ export const NETWORKS = {
     fromBlock: 91910657, // the vault's deploy block: history scans start here
     markets: "", // KeptMarkets: fill in after `launch.mjs markets`
     marketsFrom: 0, // its deploy block
+    vault2: "", // KeptVault v2 (docs/VAULT_V2.md): fill in after `launch.mjs vault-v2`
+    vault2From: 0, // its deploy block
   },
   ethereum: {
     name: "Ethereum",
@@ -28,6 +30,8 @@ export const NETWORKS = {
     fromBlock: 0,
     markets: "",
     marketsFrom: 0,
+    vault2: "",
+    vault2From: 0,
   },
 };
 
@@ -61,6 +65,8 @@ export const config = {
   fromBlock: BigInt(pick("from", n.fromBlock)),
   markets: pick("markets", n.markets),
   marketsFrom: BigInt(pick("marketsFrom", n.marketsFrom || n.fromBlock)),
+  vault2: pick("vault2", n.vault2),
+  vault2From: BigInt(pick("vault2From", n.vault2From || n.fromBlock)),
   // the KEPT alerts bot's username (scripts/alerts); a pledge page offers one-tap Telegram alerts once set
   telegramBot: "",
   imdApi: "https://api.imd.fun",
@@ -69,6 +75,13 @@ export const config = {
 };
 
 export const deployed = isAddr(config.vault);
+/** v2 numbers its pledges from here, so a number names its vault. */
+export const FIRST_V2 = 1001;
+/** KeptVault v2 is live on this network: new pledges are made there. */
+export const v2Live = deployed && isAddr(config.vault2);
+/** The vault that holds pledge `id`. */
+export const vaultOf = (id) => (Number(id) >= FIRST_V2 ? config.vault2 : config.vault);
+
 /** Will they ship? markets are live on this network. */
 export const marketsLive = deployed && isAddr(config.markets);
 

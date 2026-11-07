@@ -1,6 +1,17 @@
 # KeptVault v2
 
-Design, for review before any code. Status: proposed.
+Status: built and tested, not deployed. Decided: all three features, an appeal panel of 15 with quorum 11, pledges from #1001, and markets pay YES only at 100%.
+
+**Built:**
+- **Contracts:** `src/v2/KeptVaultV2.sol` (22.2 KB) and `src/v2/KeptQuestionsV2.sol`, the question builder deployed beside it to stay under the 24 KB limit.
+- **Tests:** v1's vault suites ported, 18 feature tests including a conservation fuzz test, markets on v2, and a fork test that buys a real oracle request after a deadline.
+- **Server and bots:** every API, the alerts and the verdict bot read both vaults.
+- **Site:** reads both vaults, shows partial results and appeals, and adds the partial-credit milestone type to the pledge form once v2 is live.
+- **Launch:** `launch.mjs vault-v2`.
+
+**Two things to know:**
+- **Referee Fund:** the KEPT hook sends its trading fees to **v1's** Referee Fund, because the hook was deployed pointing at v1 and can't be changed. Until something else funds v2's own Referee Fund, its check rebates come only from donations, and from market fees once a v2 market exists.
+- **Markets:** `KeptMarkets` takes one vault at deploy, so markets on v2 pledges need their own deploy. The site shows markets on v1 pledges only for now.
 
 v1 stays live and unchanged. Pledge #1 stays on v1, because locked tokens can't move between contracts. v2 is a second vault: new pledges choose it, and the site, badge, score, alerts and embed read both.
 
