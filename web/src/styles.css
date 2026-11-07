@@ -838,3 +838,13 @@ html.vt-theme header.top, html.vt-theme .statusbar, html.vt-theme [style*="view-
 
 /* ------------------------------------------------------------------ telegram alerts */
 .alerts-link { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 14px; }
+
+/* ------------------------------------------------------------------ graveyard */
+.figure-link { color: inherit; text-decoration: none; }
+.figure-link:hover .label, .figure-link:focus-visible .label { color: var(--alarm); }
+.gy-burned { font-size: clamp(20px, 3vw, 30px); }
+.gy-empty { display: grid; gap: 8px; justify-items: start; text-align: left; }
+.gy-empty p { margin: 0; max-width: 70ch; }
+.grave-row .title { color: inherit; text-decoration: none; }
+.grave-row .title:hover { text-decoration: underline; }
+.grave-links { margin-top: 10px; }

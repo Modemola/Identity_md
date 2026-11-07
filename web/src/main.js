@@ -2001,7 +2001,7 @@ function viewBoard({ quiet }) {
             { class: "figures" },
             h("div", { class: "figure" }, figs.teams, h("div", { class: "label l" }, "Teams")),
             h("div", { class: "figure" }, figs.kept, h("div", { class: "label l" }, "Promises kept")),
-            h("div", { class: "figure" }, figs.broken, h("div", { class: "label l" }, "Promises broken")),
+            h("a", { class: "figure figure-link", href: link("/graveyard"), title: "Every broken promise and what it burned" }, figs.broken, h("div", { class: "label l" }, "Promises broken →")),
             h("div", { class: "figure" }, figs.rate, h("div", { class: "label l" }, "Kept rate")),
           ),
         ),
@@ -2086,6 +2086,160 @@ function dueRow(m, p, grace) {
   );
 }
 
+// ------------------------------------------------------------------ graveyard
+
+/** Broken promises: every milestone a team failed to prove, and what it burned. */
+function viewGraveyard({ quiet }) {
+  const token = navToken;
+  const figs = {
+    broken: h("div", { class: "v broken tnum" }, "…"),
+    burned: h("div", { class: "v broken tnum gy-burned" }, "…"),
+    teams: h("div", { class: "v tnum" }, "…"),
+    open: h("div", { class: "v tnum" }, "…"),
+  };
+  const listEl = h("div", { class: "rows graves" }, skeletonRows(2));
+  const pendingEl = h("div", {});
+  let lastSig = null;
+
+  const apply = (c, pledges) => {
+    const s = sig([c, pledges]);
+    if (s === lastSig) return;
+    lastSig = s;
+    const t = now();
+    const all = pledges.flatMap((p) => p.milestones.map((m) => ({ m, p })));
+    const graves = all.filter(({ m }) => m.outcome === 2).sort((a, b) => Number(b.m.deadline - a.m.deadline));
+    // past their proof window, unproven, and not settled yet: anyone can burn them now
+    const pending = all.filter(({ m }) => m.outcome === 0 && t > m.deadline + c.grace);
+    const open = all.filter(({ m }) => m.outcome === 0 && t <= m.deadline + c.grace);
+
+    countUp(figs.broken, graves.length);
+    // burned amounts are per token: list each symbol's total
+    const bySym = new Map();
+    for (const { m, p } of graves) {
+      const k = p.tokenInfo.symbol;
+      const cur = bySym.get(k) ?? { amt: 0n, dec: p.tokenInfo.decimals };
+      cur.amt += m.amount;
+      bySym.set(k, cur);
+    }
+    figs.burned.textContent = bySym.size ? [...bySym].map(([sym, v]) => `${short_(v.amt, v.dec)} ${sym}`).join(" · ") : "0";
+    countUp(figs.teams, new Set(graves.map(({ p }) => p.beneficiary.toLowerCase())).size);
+    countUp(figs.open, open.length);
+
+    pendingEl.replaceChildren(
+      ...(pending.length
+        ? [
+            sec("02", "About to burn", "past the proof window, not settled yet"),
+            h("div", { class: "rows" }, pending.map(({ m, p }, i) => reveal(graveRow(m, p, null, true), Math.min(i, 6) * 60))),
+          ]
+        : []),
+    );
+
+    if (!graves.length) {
+      const next = open.sort((a, b) => Number(a.m.deadline - b.m.deadline))[0];
+      listEl.replaceChildren(
+        h(
+          "div",
+          { class: "empty gy-empty" },
+          h("p", {}, "Nothing has burned yet. Every promise on KEPT so far was kept, or is still open."),
+          next
+            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If nobody proves it by ${when(next.m.deadline + c.grace)}, it lands here.`)
+            : null,
+          next ? h("a", { class: "btn small", href: link(`/pledge/${next.p.id}`) }, "See it", icon("arrow", 14)) : null,
+        ),
+      );
+      return;
+    }
+    listEl.replaceChildren(...graves.map(({ m, p }, i) => reveal(graveRow(m, p, cachedHistory(p.id)), Math.min(i, 6) * 60)));
+    // the burn transactions and verdicts come from each pledge's history
+    for (const id of new Set(graves.map(({ p }) => p.id)))
+      getHistory(id, { maxAge: 60_000 })
+        .then(() => token === navToken && listEl.replaceChildren(...graves.map(({ m, p }) => graveRow(m, p, cachedHistory(p.id)))))
+        .catch(() => {});
+  };
+
+  paint(
+    "/graveyard",
+    () =>
+      h(
+        "section",
+        { class: "wrap" },
+        h("a", { class: "back", href: link("/board") }, "← Promise Board"),
+        h("div", { class: "label", style: { marginTop: "22px" } }, "Graveyard"),
+        h("h1", { class: "page-title" }, words("Promises that burned.", { accent: ["burned."] })),
+        h("p", { class: "lede" }, "Every milestone a team failed to prove in time. Its tranche went to the dead address, and nobody could stop it: not the team, not KEPT. A kept promise means something because a broken one costs this much."),
+        reveal(
+          h(
+            "div",
+            { class: "figures" },
+            h("div", { class: "figure" }, figs.broken, h("div", { class: "label l" }, "Promises broken")),
+            h("div", { class: "figure" }, figs.burned, h("div", { class: "label l" }, "Burned for good")),
+            h("div", { class: "figure" }, figs.teams, h("div", { class: "label l" }, "Teams with a burn")),
+            h("div", { class: "figure" }, figs.open, h("div", { class: "label l" }, "Promises still open")),
+          ),
+        ),
+        sec("01", "Burned", "newest first"),
+        listEl,
+        pendingEl,
+      ),
+    { quiet },
+  );
+
+  if (!deployed) return listEl.replaceChildren(notLive());
+  const c0 = cachedConstants();
+  const p0 = cachedPledges();
+  if (c0 && p0) apply(c0, p0);
+  const refresh = (maxAge) =>
+    Promise.all([getConstants({ maxAge }), getPledges({ maxAge })])
+      .then(([c, pledges]) => token === navToken && apply(c, pledges))
+      .catch((e) => {
+        console.error("graveyard:", e);
+        if (token === navToken && !lastSig) listEl.replaceChildren(h("div", { class: "empty" }, `Could not read the vault: ${reason(e)}`));
+      });
+  refresh(quiet ? 0 : 5_000);
+  whileHere(liveInterval(listEl, () => token === navToken && refresh(0), 60_000));
+}
+
+/** 150000000 -> "150M": burned totals read better short. */
+function short_(amt, dec) {
+  const n = Number(amt / 10n ** BigInt(Math.max(0, dec - 2))) / 100;
+  if (n >= 1e9) return `${+(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${+(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `${+(n / 1e3).toFixed(1)}K`;
+  return String(+n.toFixed(2));
+}
+
+function graveRow(m, p, hist, pending = false) {
+  const dec = p.tokenInfo.decimals;
+  const idx = m.index;
+  const verdict = hist?.verdicts.filter((l) => Number(l.args.index) === idx).at(-1);
+  const burn = hist?.settles.find((l) => Number(l.args.index) === idx);
+  const why = pending
+    ? "not proven in time · anyone can settle it now"
+    : verdict && !verdict.args.kept
+      ? `swarm: ${verdict.args.agreed} of ${verdict.args.panelSize} said not delivered`
+      : "not proven in time";
+  const post = `BURNED. "${m.title}" was not delivered. ${fmt(m.amount, dec)} $${p.tokenInfo.symbol} from "${p.name}" is gone for good. Verified on @keptonchainn.`;
+  return h(
+    "div",
+    { class: "row grave-row" },
+    h("span", { class: "glyph broken" }, icon("flame", 18)),
+    h(
+      "div",
+      { style: { minWidth: 0 } },
+      h("a", { class: "title", href: link(`/pledge/${p.id}`) }, m.title),
+      h("div", { class: "meta" }, h("span", {}, `#${p.id} · ${p.name}`), h("span", {}, `due ${when(m.deadline)}`), h("span", {}, why)),
+      h(
+        "div",
+        { class: "chips grave-links" },
+        burn ? h("a", { class: "btn small", href: `${config.explorer}/tx/${burn.transactionHash}`, target: "_blank", rel: "noopener" }, "Burn transaction") : null,
+        pending ? h("a", { class: "btn small danger", href: link(`/pledge/${p.id}`) }, icon("flame", 14), "Settle it") : null,
+        pending ? null : h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id, idx + 1))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post it"),
+      ),
+    ),
+    h("div", { class: "right" }, h("span", { class: "rate tnum broken" }, `${short_(m.amount, dec)} ${p.tokenInfo.symbol}`), h("span", {}, pending ? "burns when settled" : "burned")),
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -2101,6 +2255,7 @@ function route({ quiet = false } = {}) {
   if (m) return viewPledge(Number(m[1]), { quiet });
   if (path === "/new") return viewNew({ quiet });
   if (path === "/board") return viewBoard({ quiet });
+  if (path === "/graveyard") return viewGraveyard({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
   return viewHome({ quiet });
