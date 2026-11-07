@@ -160,13 +160,17 @@ async function dueAlerts(pledges, now, grace) {
       const key = (k) => `${k}:${p.id}:${m.index}`;
       let msg = null;
       if (left > 0 && left <= DAY && !state.sent[key("due1")]) {
-        msg = `⏰ Due in ${span(left)}\n${head}\n${at} unlocks if the swarm confirms it. Otherwise it burns.\n${link(p.id)}`;
+        msg = `⏰ Due in ${span(left)}\n${head}\n${at} unlocks if the swarm confirms it${m.kind === 0 ? "" : " before the deadline, when checks close"}. Otherwise it burns.\n${link(p.id)}`;
         state.sent[key("due1")] = state.sent[key("due7")] = now;
       } else if (left > DAY && left <= 7 * DAY && !state.sent[key("due7")]) {
         msg = `📅 Due in ${span(left)}\n${head}\n${at} on the line.\n${link(p.id)}`;
         state.sent[key("due7")] = now;
       } else if (left <= 0 && -left < grace && !state.sent[key("window")]) {
-        msg = `⚠️ Deadline passed, not proven yet\n${head}\nThe team has ${span(grace + left)} to prove it, or ${at} burns.\n${link(p.id)}`;
+        // only a GitHub release can still be checked after its deadline (KeptVault._checkDeadline)
+        msg =
+          m.kind === 0
+            ? `⚠️ Deadline passed, not proven yet\n${head}\nThe team has ${span(grace + left)} to prove the release, or ${at} burns.\n${link(p.id)}`
+            : `⚠️ Deadline passed, not proven\n${head}\nChecks are closed. Unless a check already asked confirms it, ${at} burns in ${span(grace + left)}.\n${link(p.id)}`;
         state.sent[key("due1")] = state.sent[key("due7")] = state.sent[key("window")] = now;
       }
       if (msg) {

@@ -39,6 +39,10 @@
     {
       "source": "/p/:pledge(\\d+)/:m(\\d+)",
       "destination": "/api/share?pledge=:pledge&m=:m"
+    },
+    {
+      "source": "/teams",
+      "destination": "/api/share?page=teams"
     }
   ],
   "functions": {

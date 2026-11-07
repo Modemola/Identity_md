@@ -43,6 +43,8 @@ initTheme();
 
 const TEMPLATE_LABEL = ["GitHub release", "Page contains", "Contract deployed", "Value at least"];
 const TIMEOUT = 86400n;
+/** The last moment a milestone can be checked: GitHub releases get the grace window, every other kind closes at its deadline (KeptVault._checkDeadline). */
+const checkBy = (m, grace) => m.deadline + (m.kind === 0 ? grace : 0n);
 const ZERO32 = `0x${"0".repeat(64)}`;
 
 function state(m, grace) {
@@ -74,6 +76,7 @@ const NAV = [
   ["/new", "Make a pledge"],
   ["/referee", "Referee Fund"],
   ["/how", "How it works"],
+  ["/teams", "For teams"],
 ];
 const navLinks = NAV.map(([p, l]) => h("a", { href: link(p), "data-p": p }, l));
 const navInd = h("span", { class: "nav-ind", "aria-hidden": "true" });
@@ -736,7 +739,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
     } else if (isBeneficiary) {
       actions.push(h("span", { class: "note" }, "A check needs enough budget and an Intake price at or below 0.5 IMD."));
     } else {
-      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this. Not proven by ${when(m.deadline + c.grace)}: it burns.`));
+      actions.push(h("span", { class: "note" }, `Only the beneficiary can ask the swarm to confirm this, until ${when(checkBy(m, c.grace))}. Not proven by then, it burns.`));
     }
   }
   const checkPending = m.inFlight !== ZERO32 && now() < m.askedAt + TIMEOUT; // the vault refuses to settle then
@@ -2142,7 +2145,7 @@ function viewGraveyard({ quiet }) {
           { class: "empty gy-empty" },
           h("p", {}, "Nothing has burned yet. Every promise on KEPT so far was kept, or is still open."),
           next
-            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If nobody proves it by ${when(next.m.deadline + c.grace)}, it lands here.`)
+            ? h("p", { class: "muted" }, `${open.length} open right now. The next deadline is "${next.m.title}" (#${next.p.id} · ${next.p.name}), with ${fmt(next.m.amount, next.p.tokenInfo.decimals)} ${next.p.tokenInfo.symbol} on the line, due ${when(next.m.deadline)}. If the swarm hasn't confirmed it by ${when(checkBy(next.m, c.grace))}, it burns and lands here.`)
             : null,
           next ? h("a", { class: "btn small", href: link(`/pledge/${next.p.id}`) }, "See it", icon("arrow", 14)) : null,
         ),
@@ -2240,6 +2243,116 @@ function graveRow(m, p, hist, pending = false) {
   );
 }
 
+// ------------------------------------------------------------------ for teams
+
+/** The page linked from every outreach DM: what KEPT does for a team, our own record as proof, one step to start. */
+function viewTeams({ quiet }) {
+  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: "e.g. 1033", "aria-label": "Your IMD launch number", id: "teams-launch" });
+  const start = (e) => {
+    e?.preventDefault();
+    const n = launchIn.value.trim();
+    if (!/^\d{1,7}$/.test(n)) return toast("Enter your IMD launch number, the N in launch #N.", "alarm");
+    // the quick start reads ?launch= and drafts the pledge from that launch
+    location.href = `${location.pathname}?${new URLSearchParams({ ...(config.net === "robinhood" ? {} : { net: config.net }), launch: n })}#/new`;
+  };
+  const step = (n, title, body) => h("div", { class: "tm-step" }, h("span", { class: "tm-n tnum" }, n), h("div", {}, h("h3", {}, title), h("p", { class: "muted" }, body)));
+  const get = (ic, title, body) => h("div", { class: "tm-get" }, icon(ic, 18), h("div", {}, h("b", {}, title), h("p", { class: "muted" }, body)));
+  const qa = (q, a) => h("details", { class: "tm-qa" }, h("summary", {}, q), h("p", { class: "muted" }, a));
+  const proof = `${BADGE_HOST}/api/og?pledge=1`;
+
+  paint(
+    "/teams",
+    () =>
+      h(
+        "section",
+        { class: "wrap" },
+        h("div", { class: "label", style: { marginTop: "42px" } }, "For teams"),
+        h("h1", { class: "page-title" }, words("Prove you'll ship.", { accent: ["ship."] })),
+        h(
+          "p",
+          { class: "lede" },
+          "Every roadmap says it will deliver. On KEPT you lock part of your own supply behind your milestones. The IMD swarm checks each one at its deadline. Kept tranches unlock to you; missed ones burn. Your holders stop taking your word for it and start reading your record.",
+        ),
+        reveal(
+          h(
+            "form",
+            { class: "tm-start", onsubmit: start },
+            h("label", { for: "teams-launch" }, "Launched on IMD? Draft your pledge from your launch number:"),
+            h("div", { class: "inline-form" }, h("div", { class: "unit-input" }, h("span", {}, "#"), launchIn), h("button", { class: "btn primary", type: "submit" }, "Draft my pledge", icon("arrow", 15))),
+            h("p", { class: "muted fine" }, "It fills in your token, a release milestone from your repo and an even split. You review everything and sign from your own wallet. ", h("a", { href: link("/new") }, "Or start from scratch.")),
+          ),
+          60,
+        ),
+
+        sec("01", "How it works", "three steps"),
+        h(
+          "div",
+          { class: "tm-steps" },
+          step("1", "Lock", "Pick 1 to 8 milestones with deadlines, and how much of your token unlocks at each. The tokens move into the KEPT vault. Nobody can withdraw them, including KEPT."),
+          step("2", "Get checked", "At each milestone, ask the swarm. Nine IMD agents check the evidence and seven must agree. You get three tries per milestone, all before the deadline (a GitHub release can still be checked for 3 days after it)."),
+          step("3", "Unlock or burn", "Kept: the tranche goes to your wallet and the check is refunded by the Referee Fund when it can. Missed: the tranche goes to the dead address, for good."),
+        ),
+
+        sec("02", "Our own record", "we went first"),
+        h(
+          "div",
+          { class: "tm-proof" },
+          h("a", { href: shareLink(1), target: "_blank", rel: "noopener", class: "tm-card" }, h("img", { src: proof, alt: "KEPT team roadmap: live record card", width: 1200, height: 630, loading: "lazy" })),
+          h(
+            "div",
+            {},
+            h("p", {}, "Before asking anyone else, we locked 300M of our own KEPT behind three milestones. Two are kept, verified by the swarm. The third, 150M, is due Nov 30, and if we miss it, it burns in public like anyone else's."),
+            h("p", { class: "muted" }, "This card is live: it reads the chain every few minutes."),
+            h("div", { class: "chips" }, h("a", { class: "btn small", href: link("/pledge/1") }, "Our pledge"), h("a", { class: "btn small", href: link("/board") }, "Promise Board"), h("a", { class: "btn small", href: link("/graveyard") }, "Graveyard")),
+          ),
+        ),
+
+        sec("03", "What you get", "free with every pledge"),
+        ((items) => h("div", { class: "tm-gets", style: { "--n": items.length } }, items))([
+          get("check", "A KEPT score", "One number for your record, from 0 to 100. Any app can read it by your token address and show it next to your token."),
+          get("copy", "Badges and a widget", "A live badge for your README and a one-line card for your site, both read from the chain."),
+          get("arrow", "Cards ready to post", "Every verdict becomes a card you can post to X in one tap. Your pledge link shows your live record in the timeline."),
+          config.telegramBot ? get("pulse", "Alerts for your holders", "Holders can follow your pledge on Telegram: due dates, verdicts, releases.") : null,
+          get("fund", "Backers", "Anyone who believes in you can pay for your checks with IMD, so a check is never what stops you."),
+        ].filter(Boolean)),
+        h("div", { class: "tm-nothing" }, icon("lock", 16), h("span", {}, h("b", {}, "Nothing else to pay. "), "No KEPT token to buy, no fee on your tokens. A check costs at most 0.5 IMD, paid to the swarm.")),
+
+        sec("04", "What can be checked", "four kinds of milestone"),
+        h(
+          "div",
+          { class: "tm-kinds" },
+          ...[
+            ["GitHub release", "A tagged release appears on your repository, e.g. v1.0.0."],
+            ["Page contains", "A public page shows a sentence, e.g. your app's page says \"Staking is live\"."],
+            ["Contract deployed", "A contract address has code on a chain."],
+            ["Value at least", "An onchain number reaches a target, e.g. supply burned, fees earned, a balance."],
+          ].map(([t, b], i) => h("div", { class: "tm-kind" }, icon(TEMPLATE_ICON[i], 16), h("b", {}, t), h("span", { class: "muted" }, b))),
+        ),
+
+        sec("05", "Questions", ""),
+        h(
+          "div",
+          { class: "tm-qas" },
+          qa("What if the swarm gets it wrong?", "Each check goes to a panel of nine agents, and seven must agree. A \"not delivered\" answer before the deadline doesn't burn anything: fix what's missing and ask again, up to three times. Choose milestones with evidence anyone can see, like a release tag or a page."),
+          qa("Can KEPT take my tokens?", "No. Only two things move locked tokens: a kept verdict, which sends them to your beneficiary address, or a missed deadline, which burns them. The vault owner can't touch either."),
+          qa("What does it cost?", "Your own tokens, locked, plus at most 0.5 IMD per check. When a milestone is kept, the Referee Fund refunds that check when it has IMD. Unused check budget comes back to you when the pledge ends."),
+          qa("What if I'm late?", "Ship and ask the swarm before the deadline: checks close then. A GitHub release is the one exception, checkable for 3 days after its deadline, since the release date is on record. Three days after any deadline, anyone can settle an unproven milestone and the tranche burns. There is no extension button."),
+          qa("Which chains?", "Robinhood Chain today, any token. Ethereum is next."),
+        ),
+
+        reveal(
+          h(
+            "div",
+            { class: "summary tm-end" },
+            h("p", {}, h("b", {}, "Your score starts the day you pledge."), " Until then, your record says nothing."),
+            h("div", { class: "chips" }, h("button", { class: "btn primary", type: "button", onclick: () => (launchIn.focus(), launchIn.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" })) }, "Draft my pledge"), h("a", { class: "btn", href: link("/how") }, "Read how it works")),
+          ),
+        ),
+      ),
+    { quiet },
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -2256,6 +2369,7 @@ function route({ quiet = false } = {}) {
   if (path === "/new") return viewNew({ quiet });
   if (path === "/board") return viewBoard({ quiet });
   if (path === "/graveyard") return viewGraveyard({ quiet });
+  if (path === "/teams") return viewTeams({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
   return viewHome({ quiet });
