@@ -7,9 +7,10 @@
 // Reads every chain KEPT is live on. The score is the kept rate with one kept and one broken
 // promise added as a prior: (kept + 1) / (settled + 2). A team with one kept promise scores 67,
 // not 100, and the score only moves toward the extremes as settled promises pile up. No settled
-// promise yet means no score.
+// promise yet means no score. A partial delivery on KeptVault v2 counts as its share: 60% of a
+// milestone adds 0.6 to kept and 0.4 to broken.
 
-import { NETS, amount, pledgeCount, readPledge } from "./_lib/vault.mjs";
+import { NETS, amount, pledgeIds, readPledge, recordOf } from "./_lib/vault.mjs";
 
 const reply = (body, type, status, maxAge) =>
   new Response(body, {
@@ -22,32 +23,29 @@ const reply = (body, type, status, maxAge) =>
   });
 
 export async function allPledges(chainId, net) {
-  const n = await pledgeCount(net);
+  const all = await pledgeIds(net);
   const out = [];
   // a few at a time, to stay friendly with public RPCs
-  for (let i = 1; i <= n; i += 8) {
-    const ids = Array.from({ length: Math.min(8, n - i + 1) }, (_, k) => i + k);
-    out.push(...(await Promise.all(ids.map((id) => readPledge(net, id)))).filter(Boolean).map((p) => ({ ...p, chainId })));
+  for (let i = 0; i < all.length; i += 8) {
+    out.push(...(await Promise.all(all.slice(i, i + 8).map((id) => readPledge(net, id)))).filter(Boolean).map((p) => ({ ...p, chainId })));
   }
   return out;
 }
 
 export function scoreOf(pledges) {
-  const ms = pledges.flatMap((p) => p.milestones);
-  const kept = ms.filter((m) => m.outcome === 1).length;
-  const broken = ms.filter((m) => m.outcome === 2).length;
-  const settled = kept + broken;
+  const r = recordOf(pledges.flatMap((p) => p.milestones));
   return {
-    score: settled ? Math.round((100 * (kept + 1)) / (settled + 2)) : null,
-    kept,
-    broken,
-    open: ms.length - settled,
+    score: r.settled ? Math.round((100 * (r.credit + 1)) / (r.settled + 2)) : null,
+    kept: r.kept,
+    partial: r.partial,
+    broken: r.broken,
+    open: r.open,
   };
 }
 
 const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 function badge(s) {
-  const text = s.score === null ? (s.open ? "no record yet" : "no pledges") : `score ${s.score} · ${s.kept} kept${s.broken ? ` · ${s.broken} broken` : ""}`;
+  const text = s.score === null ? (s.open ? "no record yet" : "no pledges") : `score ${s.score} · ${s.kept} kept${s.partial ? ` · ${s.partial} partial` : ""}${s.broken ? ` · ${s.broken} broken` : ""}`;
   const col = s.score === null ? "#6b7580" : s.score >= 75 ? "#3ecf7a" : s.score >= 50 ? "#f0b429" : "#ff6b62";
   const left = 62;
   const right = Math.round(text.length * 6.6 + 20);
@@ -83,7 +81,7 @@ export async function GET(request) {
     const body = {
       query: isAddr(team) ? { team: team.toLowerCase() } : { token: token.toLowerCase() },
       ...s,
-      formula: "(kept + 1) / (kept + broken + 2), rounded; null until a promise settles",
+      formula: "(kept + 1) / (settled + 2), rounded, where a partial delivery counts as its share; null until a promise settles",
       pledges: mine.map((p) => ({
         chainId: p.chainId,
         id: p.id,
@@ -92,6 +90,7 @@ export async function GET(request) {
         token: p.token,
         symbol: p.symbol,
         locked: amount(p.locked, p.decimals),
+        vault: p.version,
         ...scoreOf([p]),
         url: `https://keptmd.vercel.app/${p.chainId === 1 ? "?net=ethereum" : ""}#/pledge/${p.id}`,
       })),
