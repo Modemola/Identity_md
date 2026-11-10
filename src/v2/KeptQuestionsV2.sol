@@ -8,7 +8,7 @@ import {QuestionsV2} from "./QuestionsV2.sol";
 /// and no tokens: it is the vault's sentence and date code, deployed beside it to keep the vault
 /// under the 24 KB contract size limit. The vault takes its address at deploy and never changes it.
 contract KeptQuestionsV2 {
-    function validate(QuestionsV2.Spec calldata s) external pure {
+    function validate(QuestionsV2.Spec calldata s) external view {
         QuestionsV2.validate(s);
     }
 

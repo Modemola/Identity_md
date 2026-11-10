@@ -149,6 +149,23 @@ contract TestnetKitTest is Test {
         assertEq(token.balanceOf(vault.BURN()), 60 ether);
     }
 
+    /// A team on the testnet can promise something about its own testnet token: the vault's own
+    /// chain is allowed in chain questions.
+    function test_questionsAboutTheVaultsOwnChain() public {
+        KeptVaultV2.MilestoneInput[] memory ms = new KeptVaultV2.MilestoneInput[](1);
+        ms[0].kind = QuestionsV2.Kind.ValueScaled;
+        ms[0].deadline = uint64(block.timestamp + 7 days);
+        ms[0].amount = 100 ether;
+        ms[0].title = "Supply holds";
+        ms[0].chainId = 46630;
+        ms[0].target = address(token);
+        ms[0].a = "totalSupply()";
+        ms[0].threshold = 1_000 ether;
+        vm.prank(team);
+        uint256 id = vault.createPledge(IERC20(address(token)), team, "own chain", ms, 0);
+        assertEq(id, 1001);
+    }
+
     function test_faucetOncePerDay() public {
         vm.startPrank(stranger);
         imd.faucet();
