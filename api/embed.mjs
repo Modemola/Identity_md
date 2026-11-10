@@ -8,7 +8,7 @@
 // Most sites use /embed.js, which builds the iframe from one <script> tag. The card is plain
 // HTML and CSS with no script, read from the chain and cached for five minutes.
 
-import { NETS, SITE, amount, readPledge } from "./_lib/vault.mjs";
+import { NETS, SITE, amount, readPledge, recordNets, netQuery, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -78,7 +78,7 @@ function card({ title, href, pledges, chainLabel }) {
 <div class="name">${esc(title)}</div>
 <div class="rec">${esc(record)}</div>
 <div class="lamps">${lamps}</div>
-<div class="foot"><span>${due}</span><span>verified by IMD swarm${chainLabel}</span></div>
+<div class="foot"><span>${due}</span><span>${pledges.some((p) => p.testOracle) ? "test oracle · testnet" : "verified by IMD swarm"}${chainLabel}</span></div>
 </a>`;
 }
 
@@ -90,17 +90,20 @@ export async function GET(request) {
   const pid = q.get("pledge");
   const fail = (msg, status) => page(`<a class="card" href="https://${SITE}" target="_blank" rel="noopener"><div class="brand">${SEAL}KEPT</div><div class="rec">${esc(msg)}</div></a>`, theme, status, 60);
   if (!isAddr(token) && !isAddr(team) && !/^\d{1,9}$/.test(pid || "")) return fail("Set data-token, data-team or data-pledge.", 400);
-  const live = Object.entries(NETS).filter(([, n]) => n.vault);
+  const chain = q.get("chain");
+  const live = recordNets(chain);
   try {
     if (pid) {
-      const p = await readPledge(NETS[4663], Number(pid));
+      const net = NETS[chain || "4663"];
+      if (!isLive(net)) return fail("KEPT isn't live on that chain.", 404);
+      const p = await readPledge(net, Number(pid));
       if (!p) return fail(`Pledge #${pid} not found.`, 404);
-      return page(card({ title: p.name, href: `https://${SITE}/#/pledge/${p.id}`, pledges: [p], chainLabel: "" }), theme);
+      return page(card({ title: p.name, href: `https://${SITE}/${netQuery(chain)}#/pledge/${p.id}`, pledges: [p], chainLabel: "" }), theme);
     }
     const every = (await Promise.all(live.map(([id, n]) => allPledges(Number(id), n)))).flat();
     const mine = every.filter((p) => (isAddr(token) ? p.token === token.toLowerCase() : p.beneficiary === team.toLowerCase()));
     const title = mine.length === 1 ? mine[0].name : mine.length ? `${mine[0].symbol} · ${mine.length} pledges` : isAddr(token) ? "This token" : "This team";
-    const href = mine.length === 1 ? `https://${SITE}/${mine[0].chainId === 1 ? "?net=ethereum" : ""}#/pledge/${mine[0].id}` : `https://${SITE}/#/board`;
+    const href = mine.length === 1 ? `https://${SITE}/${netQuery(mine[0].chainId)}#/pledge/${mine[0].id}` : `https://${SITE}/${netQuery(chain)}#/board`;
     return page(card({ title, href, pledges: mine, chainLabel: "" }), theme);
   } catch {
     return fail("Chain unreachable. Retrying shortly.", 503);

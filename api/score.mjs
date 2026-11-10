@@ -10,7 +10,7 @@
 // promise yet means no score. A partial delivery on KeptVault v2 counts as its share: 60% of a
 // milestone adds 0.6 to kept and 0.4 to broken.
 
-import { NETS, amount, pledgeIds, readPledge, recordOf } from "./_lib/vault.mjs";
+import { NETS, amount, pledgeIds, readPledge, recordOf, recordNets, netQuery } from "./_lib/vault.mjs";
 
 const reply = (body, type, status, maxAge) =>
   new Response(body, {
@@ -44,14 +44,14 @@ export function scoreOf(pledges) {
 }
 
 const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
-function badge(s) {
-  const text = s.score === null ? (s.open ? "no record yet" : "no pledges") : `score ${s.score} · ${s.kept} kept${s.partial ? ` · ${s.partial} partial` : ""}${s.broken ? ` · ${s.broken} broken` : ""}`;
+function badge(s, test = false) {
+  const text = (test ? "testnet · " : "") + (s.score === null ? (s.open ? "no record yet" : "no pledges") : `score ${s.score} · ${s.kept} kept${s.partial ? ` · ${s.partial} partial` : ""}${s.broken ? ` · ${s.broken} broken` : ""}`);
   const col = s.score === null ? "#6b7580" : s.score >= 75 ? "#3ecf7a" : s.score >= 50 ? "#f0b429" : "#ff6b62";
   const left = 62;
   const right = Math.round(text.length * 6.6 + 20);
   const w = left + right;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20" role="img" aria-label="KEPT ${text}">
-<title>KEPT ${text} · verified by the IMD swarm</title>
+<title>KEPT ${text} · verified by ${test ? "KEPT's test oracle" : "the IMD swarm"}</title>
 <rect width="${w}" height="20" rx="3" fill="#0b0d0c"/>
 <rect x="${left}" width="${right}" height="20" rx="3" fill="${col}"/>
 <rect x="${left}" width="4" height="20" fill="${col}"/>
@@ -71,13 +71,13 @@ export async function GET(request) {
     const msg = "use ?team=0x… or ?token=0x…";
     return svg ? reply(badge({ score: null, open: 0 }), "image/svg+xml; charset=utf-8", 400, 3600) : reply(JSON.stringify({ error: msg }), "application/json", 400, 3600);
   }
-  const live = Object.entries(NETS).filter(([, n]) => n.vault);
+  const live = recordNets(q.get("chain"));
   try {
     const every = (await Promise.all(live.map(([id, n]) => allPledges(Number(id), n)))).flat();
     const match = isAddr(team) ? (p) => p.beneficiary === team.toLowerCase() : (p) => p.token === token.toLowerCase();
     const mine = every.filter(match);
     const s = scoreOf(mine);
-    if (svg) return reply(badge(s), "image/svg+xml; charset=utf-8", 200, 300);
+    if (svg) return reply(badge(s, live.some(([, n]) => n.testOracle)), "image/svg+xml; charset=utf-8", 200, 300);
     const body = {
       query: isAddr(team) ? { team: team.toLowerCase() } : { token: token.toLowerCase() },
       ...s,
@@ -92,7 +92,7 @@ export async function GET(request) {
         locked: amount(p.locked, p.decimals),
         vault: p.version,
         ...scoreOf([p]),
-        url: `https://keptmd.vercel.app/${p.chainId === 1 ? "?net=ethereum" : ""}#/pledge/${p.id}`,
+        url: `https://keptmd.vercel.app/${netQuery(p.chainId)}#/pledge/${p.id}`,
       })),
       checked: live.map(([id]) => Number(id)),
     };

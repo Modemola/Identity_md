@@ -1,7 +1,7 @@
 // The verdict card: one milestone's outcome as a 1200x675 SVG, sized for an X post.
 // The endpoint serves it as SVG; the verdict bot renders the same SVG to PNG.
 
-import { SITE, amount, recordOf, recordText } from "./vault.mjs";
+import { SITE, amount, recordOf, recordText, signerOf } from "./vault.mjs";
 
 const SCALED = 4; // KeptVault v2's ValueScaled kind: a number read on chain at the deadline
 const pctOf = (m) => Math.round((m.shareBps ?? 0) / 100);
@@ -105,7 +105,7 @@ ${title.map((l, i) => `<text x="64" y="${226 + i * 62}" fill="${C.text}" font-fa
 ${panel}
 ${lamps}
 <text x="${W - 64}" y="522" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="18">${esc(record)}</text>
-<text x="64" y="620" fill="${C.muted}" font-family="${MONO}" font-size="20">verified onchain by the IMD swarm</text>
+<text x="64" y="620" fill="${C.muted}" font-family="${MONO}" font-size="20">verified onchain by ${signerOf(p)}</text>
 <text x="${W - 64}" y="620" text-anchor="end" fill="${C.text}" font-family="${MONO}" font-size="20">${SITE}</text>
 </svg>`;
 }
@@ -116,17 +116,17 @@ export function verdictPost(p, index, verdict, chainId = 4663) {
   const amt = `${amount(m.amount, p.decimals)} $${p.symbol}`;
   const record = recordText(recordOf(p.milestones), p.count).replace(/ · /g, ", ");
   // the /p/ share link: X shows this milestone's card under the post
-  const link = `https://${SITE}/p/${p.id}/${index + 1}${Number(chainId) === 1 ? "?chain=1" : ""}`;
+  const link = `https://${SITE}/p/${p.id}/${index + 1}${Number(chainId) === 4663 ? "" : `?chain=${Number(chainId)}`}`;
   if (m.outcome === 3) {
     const [paid, burned] = splitOf(m);
     return `PARTLY KEPT. "${m.title}" reached ${pctOf(m)}% of its target, measured on chain at the deadline.\n\n${amount(paid, p.decimals)} $${p.symbol} ${m.settled ? "unlocked" : "unlocks"} to the team behind "${p.name}". ${amount(burned, p.decimals)} $${p.symbol} burns.\n\nRecord: ${record}.\n${link}`;
   }
   if (m.outcome === 1) {
-    const panel = m.kind === SCALED ? "Measured on chain: 100% of the target. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents agreed. ` : "";
+    const panel = m.kind === SCALED ? "Measured on chain: 100% of the target. " : p.testOracle ? "Confirmed by KEPT's test oracle on the testnet. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents agreed. ` : "";
     return `KEPT. "${m.title}" was delivered.\n\n${panel}${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}".\n\nRecord: ${record}.\n${link}`;
   }
   if (m.outcome === 2) {
-    const why = m.kind === SCALED && verdict ? "Measured on chain at the deadline: nothing above the floor. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents said it was not delivered. ` : "Nobody proved it by the deadline. ";
+    const why = m.kind === SCALED && verdict ? "Measured on chain at the deadline: nothing above the floor. " : p.testOracle && verdict ? "KEPT's test oracle said it was not delivered. " : verdict ? `${verdict.agreed} of ${verdict.panelSize} agents said it was not delivered. ` : "Nobody proved it by the deadline. ";
     return `BURNED. "${m.title}" was not delivered.\n\n${why}${amt} from "${p.name}" is gone for good.\n\nRecord: ${record}.\n${link}`;
   }
   return `"${m.title}" is due. ${amt} from "${p.name}" is on the line.\n${link}`;
@@ -172,7 +172,7 @@ ${rows.join("\n")}
 ${more}
 <line x1="64" y1="540" x2="${W - 64}" y2="540" stroke="${C.line}" stroke-width="2"/>
 <text x="64" y="584" fill="${C.text}" font-family="${MONO}" font-size="22">${esc(record)}</text>
-<text x="${W - 64}" y="584" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="20">verified by the IMD swarm · ${SITE}</text>
+<text x="${W - 64}" y="584" text-anchor="end" fill="${C.muted}" font-family="${MONO}" font-size="20">verified by ${signerOf(p)} · ${SITE}</text>
 </svg>`;
 }
 

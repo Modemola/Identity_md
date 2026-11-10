@@ -25,6 +25,14 @@ It makes a fresh **test oracle key**, saved only on this computer in `.oracle-ke
 - **`deployment.json`:** commit it, or send it to wire the KEPT site to the testnet.
 - **`.oracle-key`:** never share it or commit it (it's gitignored). Whoever has it decides every test verdict.
 
+## Wire the site and the API
+
+With `deployment.json` in hand:
+- **Site:** fill `vault2` and `vault2From` under `vibevibe` in `web/src/config.js`. The network then shows up in the switch as **VibeVibe test**, with the test-oracle banner on every page.
+- **API:** set `KEPT_VAULT2_46630` and `KEPT_VAULT2_FROM_BLOCK_46630` in Vercel. Badges, embeds and cards then answer `&chain=46630`.
+
+Before that, any page can be tried with `?net=vibevibe&vault2=0x…&vault2From=…`.
+
 ## Answer checks: the test oracle desk
 
 ```sh

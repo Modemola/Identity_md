@@ -33,10 +33,31 @@ export const NETWORKS = {
     vault2: "",
     vault2From: 0,
   },
+  // vibe/vibe's chain. The IMD oracle isn't on it, so verdicts here come from KEPT's test oracle
+  // (scripts/testnet): fill in vault2 and vault2From from its deployment.json
+  vibevibe: {
+    name: "VibeVibe testnet",
+    short: "VibeVibe test",
+    chainId: 46630,
+    rpc: "https://rpc.testnet.chain.robinhood.com",
+    explorer: "https://explorer.testnet.chain.robinhood.com",
+    vault: "",
+    hook: "",
+    token: "",
+    fromBlock: 0,
+    markets: "",
+    marketsFrom: 0,
+    vault2: "",
+    vault2From: 0,
+    testOracle: true,
+    // vibe/vibe's launch factory and the block of its first launch: the quick start reads launches here
+    vibeFactory: "0xe794217880011f9ca6961340ed5c16ec9559fea0",
+    vibeFrom: 126079564,
+  },
 };
 
 const isAddr = (v) => /^0x[0-9a-fA-F]{40}$/.test(v || "");
-export const LIVE = Object.keys(NETWORKS).filter((k) => isAddr(NETWORKS[k].vault));
+export const LIVE = Object.keys(NETWORKS).filter((k) => isAddr(NETWORKS[k].vault) || isAddr(NETWORKS[k].vault2));
 
 const params = new URLSearchParams(location.search);
 const pick = (key, fallback) => params.get(key) || fallback;
@@ -48,7 +69,7 @@ const stored = (() => {
   }
 })();
 // a link names its network; otherwise the last one chosen; otherwise Robinhood Chain
-const wanted = [params.get("net"), stored].find((k) => k && NETWORKS[k] && (LIVE.includes(k) || params.get("vault")));
+const wanted = [params.get("net"), stored].find((k) => k && NETWORKS[k] && (LIVE.includes(k) || params.get("vault") || params.get("vault2")));
 const net = wanted || "robinhood";
 const n = NETWORKS[net];
 
@@ -67,6 +88,10 @@ export const config = {
   marketsFrom: BigInt(pick("marketsFrom", n.marketsFrom || n.fromBlock)),
   vault2: pick("vault2", n.vault2),
   vault2From: BigInt(pick("vault2From", n.vault2From || n.fromBlock)),
+  // verdicts are signed by KEPT's test key, not the IMD swarm: the site says so on every page
+  testOracle: Boolean(n.testOracle),
+  vibeFactory: n.vibeFactory || "",
+  vibeFrom: BigInt(n.vibeFrom || 0),
   // the KEPT alerts bot's username (scripts/alerts); a pledge page offers one-tap Telegram alerts once set
   telegramBot: "",
   imdApi: "https://api.imd.fun",
@@ -74,11 +99,15 @@ export const config = {
   repo: "https://github.com/modemola/identity_md",
 };
 
-export const deployed = isAddr(config.vault);
+/** KeptVault v1 is on this network. A new network (vibe/vibe's testnet) may have only v2. */
+export const v1Live = isAddr(config.vault);
+export const deployed = v1Live || isAddr(config.vault2);
 /** v2 numbers its pledges from here, so a number names its vault. */
 export const FIRST_V2 = 1001;
 /** KeptVault v2 is live on this network: new pledges are made there. */
-export const v2Live = deployed && isAddr(config.vault2);
+export const v2Live = isAddr(config.vault2);
+/** The vault for network-wide reads (constants, Referee Fund donations): v1 where it exists. */
+export const mainVault = v1Live ? config.vault : config.vault2;
 /** The vault that holds pledge `id`. */
 export const vaultOf = (id) => (Number(id) >= FIRST_V2 ? config.vault2 : config.vault);
 

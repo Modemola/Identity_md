@@ -1,9 +1,11 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v2Live } from "./config.js";
+import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v1Live, v2Live, mainVault } from "./config.js";
+
 import {
   client,
   vaultAbi,
+  mainVaultAbi,
   vaultCall,
   newPledgeVault,
   previewQuestionV2,
@@ -12,6 +14,7 @@ import {
   getMarket,
   getAllMarkets,
   tokenInfo,
+  vibeLaunch,
   getPledges,
   getPledge,
   getConstants,
@@ -39,6 +42,11 @@ import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, ti
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
+
+/** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
+/** Whose launch numbers the quick start reads: vibe/vibe's on its testnet, IMD's elsewhere. */
+const LAUNCHPAD = config.vibeFactory ? "vibe/vibe" : "IMD";
+const SWARM = config.testOracle ? "KEPT's test oracle" : "the IMD swarm";
 
 initTheme();
 
@@ -156,11 +164,11 @@ function shell() {
     h(
       "div",
       { class: "wrap" },
-      h("div", {}, h("b", {}, "KEPT"), " · promises the IMD swarm enforces"),
+      h("div", {}, h("b", {}, "KEPT"), config.testOracle ? " · test network: verdicts from KEPT's test oracle" : " · promises the IMD swarm enforces"),
       h(
         "div",
         { class: "foot-links" },
-        deployed ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
+        v1Live ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
         v2Live ? h("span", {}, "Vault v2 ", addrLink(config.vault2)) : null,
         config.hook ? h("span", {}, "Hook ", addrLink(config.hook)) : null,
         h("a", { href: config.repo, target: "_blank", rel: "noopener" }, "Source"),
@@ -168,7 +176,22 @@ function shell() {
       ),
     ),
   );
-  document.getElementById("app").replaceChildren(header, main, footer);
+  // on a testnet every page says who signs the verdicts, so nobody mistakes them for the swarm's
+  const testBanner = config.testOracle
+    ? h(
+        "div",
+        { class: "test-oracle", role: "note" },
+        h(
+          "div",
+          { class: "wrap" },
+          h("span", { class: "lamp caution" }),
+          h("b", {}, `${config.name}. `),
+          h("span", {}, "Verdicts here are signed by KEPT's test oracle key, not the IMD swarm. Tokens, pledges and outcomes are for trying KEPT out. "),
+          LIVE.includes("robinhood") ? h("a", { href: "#", onclick: (e) => (e.preventDefault(), setNetwork("robinhood")) }, "Go to KEPT on mainnet") : null,
+        ),
+      )
+    : null;
+  document.getElementById("app").replaceChildren(...[header, testBanner, main, footer].filter(Boolean));
   // widths change once the web font lands; keep the indicator glued to its link
   new ResizeObserver(() => activePath && setActive(activePath)).observe(navEl);
   document.fonts?.ready.then(() => {
@@ -283,7 +306,7 @@ function statusbar() {
     h("div", { class: "cell" }, h("span", { class: "lamp ok blink" }), `${config.short} `, bar.block),
     h("div", { class: "cell" }, bar.pledges, " pledges"),
     h("div", { class: "cell" }, bar.kept, " kept · ", bar.partialCell, bar.broken, " broken"),
-    h("div", { class: "cell" }, bar.oracle, " IMD oracle answers"),
+    config.testOracle ? h("div", { class: "cell" }, h("span", { class: "lamp caution" }), " test oracle") : h("div", { class: "cell" }, bar.oracle, " IMD oracle answers"),
     bar.end,
   );
   document.body.append(el);
@@ -296,7 +319,8 @@ function statusbar() {
   };
   const refresh = () => {
     client.getBlockNumber().then((b) => tick(bar.block, `#${b.toLocaleString("en-US")}`)).catch(() => {});
-    fetch(`${config.imdApi}/oracle/counts`)
+    if (!config.testOracle)
+      fetch(`${config.imdApi}/oracle/counts`)
       .then((r) => r.json())
       .then((d) => tick(bar.oracle, Number(d.byStatus?.attested ?? d.total).toLocaleString("en-US")))
       .catch(() => {});
@@ -383,7 +407,7 @@ function viewHome({ quiet }) {
           h(
             "div",
             { class: "hero-copy" },
-            h("span", { class: "eyebrow rise", style: { animationDelay: "60ms" } }, h("span", { class: "lamp ok blink" }), `IMD oracle · ${config.name}`),
+            h("span", { class: "eyebrow rise", style: { animationDelay: "60ms" } }, h("span", { class: "lamp ok blink" }), `${config.testOracle ? "Test oracle" : "IMD oracle"} · ${config.name}`),
             h("h1", {}, words("Promises the swarm enforces.", { delay: 140, accent: ["swarm"] })),
             h(
               "p",
@@ -639,7 +663,7 @@ function pledgeContent(p, c) {
     sec(p.open === 0 ? "02" : "03", "Badge and share", "live from the chain"),
     badgePanel(`pledge=${p.id}`, {
       href: shareLink(p.id),
-      post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by the IMD swarm on @keptonchainn.`,
+      post: `"${p.name}": ${p.milestones.filter((m) => m.outcome === 1).length}/${p.count} promises kept, verified onchain by ${SWARM} on @keptonchainn.`,
     }),
   );
 }
@@ -750,7 +774,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
             {
               class: "btn primary small",
               onclick: async (e) => {
-                if (await onchain(e.currentTarget, "Ask the swarm", [{ label: `Send milestone ${m.index + 1} to the IMD oracle · at most 0.5 IMD`, run: (ph) => send(call("check"), ph) }], keys))
+                if (await onchain(e.currentTarget, "Ask the swarm", [{ label: `Send milestone ${m.index + 1} to the ${config.testOracle ? "test oracle" : "IMD oracle"} · at most 0.5 IMD`, run: (ph) => send(call("check"), ph) }], keys))
                   toast("The swarm is on it. The verdict lands here on its own, usually within minutes.", "ok");
               },
             },
@@ -881,11 +905,12 @@ function renderHistory(el, index, hist, kind = 0) {
         h("span", { class: `chip ${kept ? "kept" : "broken"}` }, h("span", { class: `lamp ${kept ? "kept" : "broken"}` }), kept ? "swarm: delivered" : "swarm: not delivered"),
         h("span", { class: "agree", title: `${log.args.agreed} of ${log.args.panelSize}` }, Array.from({ length: Number(log.args.panelSize) }, (_, i) => h("i", { class: i < Number(log.args.agreed) ? (kept ? "kept" : "broken") : "" }))),
         `${log.args.agreed} of ${log.args.panelSize} agreed (quorum ${log.args.quorum}) · `,
-        h("a", { href: `${config.imdApi}/oracle/requests/${uuid}/attestation`, target: "_blank", rel: "noopener" }, "signed verdict"),
+        config.testOracle ? h("span", { class: "chip caution", title: "Signed by KEPT's test oracle key, not the IMD swarm" }, "test oracle") : h("a", { href: `${config.imdApi}/oracle/requests/${uuid}/attestation`, target: "_blank", rel: "noopener" }, "signed verdict"),
         jobLink,
       ),
     });
-    oracleRequest(uuid)
+    if (!config.testOracle)
+      oracleRequest(uuid)
       .then((r) => r.jobId && jobLink.replaceChildren(" · ", h("a", { href: `${config.imdExplorer}/jobs/${r.jobId}`, target: "_blank", rel: "noopener" }, "panel on IMD explorer")))
       .catch(() => {});
   }
@@ -973,7 +998,7 @@ function budgetBox(p, c, backersEl) {
                   keys,
                 );
                 if (ok) {
-                  const post = `I just backed "${p.name}" on @keptonchainn with ${fmt(amount, IMD_DECIMALS)} IMD so the IMD swarm can check their promises. Kept, they unlock. Missed, they burn.`;
+                  const post = `I just backed "${p.name}" on @keptonchainn with ${fmt(amount, IMD_DECIMALS)} IMD so ${SWARM} can check their promises. Kept, they unlock. Missed, they burn.`;
                   toast("Thanks for backing it.", "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id))}`, text: "Tell X" } });
                 }
               },
@@ -982,7 +1007,7 @@ function budgetBox(p, c, backersEl) {
             "Back it",
           ),
           gap
-            ? h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(`"${p.name}" needs ${fmt(gap, IMD_DECIMALS)} IMD so the IMD swarm can check its promises. Back it on @keptonchainn:`)}&url=${encodeURIComponent(shareLink(p.id))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Ask for backers")
+            ? h("a", { class: "btn small", href: `https://x.com/intent/post?text=${encodeURIComponent(`"${p.name}" needs ${fmt(gap, IMD_DECIMALS)} IMD so ${SWARM} can check its promises. Back it on @keptonchainn:`)}&url=${encodeURIComponent(shareLink(p.id))}`, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Ask for backers")
             : null,
         ),
         backersEl,
@@ -1130,7 +1155,7 @@ function betForm(p, m, mk, keys) {
       keys,
     );
     if (ok) {
-      const post = `I bet ${side} on "${m.title}" from "${p.name}". The IMD swarm decides, the market pays. Will they ship?`;
+      const post = `I bet ${side} on "${m.title}" from "${p.name}". ${SWARM[0].toUpperCase() + SWARM.slice(1)} decides, the market pays. Will they ship?`;
       toast(`Bet placed on ${side}.`, "ok", { ms: 9000, link: { href: `https://x.com/intent/post?text=${encodeURIComponent(post)}&url=${encodeURIComponent(shareLink(p.id))}`, text: "Tell X" } });
     }
   };
@@ -1153,7 +1178,7 @@ function verdictShare(p, m) {
     m.outcome === 3
       ? `PARTLY KEPT. "${m.title}" reached ${sharePct(m)}% of its target, measured on chain. ${fmt(splitOf(m)[0], p.tokenInfo.decimals)} $${p.tokenInfo.symbol} unlocks to the team behind "${p.name}"; the rest burns. Record: ${record}.`
       : m.outcome === 1
-      ? `KEPT. "${m.title}" was delivered, verified by the IMD swarm. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
+      ? `KEPT. "${m.title}" was delivered, verified by ${SWARM}. ${amt} ${m.settled ? "released" : "unlocks"} to the team behind "${p.name}". Record: ${record}.`
       : `BURNED. "${m.title}" was not delivered. ${amt} from "${p.name}" is gone for good. Record: ${record}.`;
   const card = `${BADGE_HOST}/api/verdict?pledge=${p.id}&m=${m.index}${config.net === "robinhood" ? "" : `&chain=${config.chainId}`}`;
   const url = shareLink(p.id, m.index + 1);
@@ -1234,6 +1259,8 @@ function shareCardButton(card, name, text, intent) {
 // ------------------------------------------------------------------ make a pledge
 
 const CHAINS = [[4663, "Robinhood Chain"], [1, "Ethereum"], [8453, "Base"], [42161, "Arbitrum One"], [56, "BNB Chain"]];
+// a vault can also ask about its own chain (vibe/vibe's testnet included): offered first there
+if (!CHAINS.some(([id]) => id === config.chainId)) CHAINS.unshift([config.chainId, config.name]);
 
 let fieldSeq = 0;
 /** A labelled control: the label points at the input (or the first control inside a wrapper). */
@@ -1338,7 +1365,7 @@ function viewNew({ quiet }) {
 
   // the quick start: an IMD launch number, optionally a repo and a roadmap, becomes a draft pledge
   const qs = {
-    launch: h("input", { placeholder: "e.g. 2185", inputmode: "numeric" }),
+    launch: h("input", { placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 2185", inputmode: "numeric" }),
     repo: h("input", { placeholder: "owner/repo of your product (optional)", spellcheck: "false" }),
     roadmap: h("textarea", { rows: "4", placeholder: "Your roadmap, one promise per line (optional)\nMobile app\nMainnet\nPartnerships page" }),
     total: h("input", { type: "number", min: "0", step: "any", placeholder: "e.g. 100000000" }),
@@ -1348,10 +1375,10 @@ function viewNew({ quiet }) {
   const draftBtn = h("button", { class: "btn primary", onclick: (e) => quickStart(e.currentTarget) }, "Draft my pledge", icon("arrow", 16));
   async function quickStart(button) {
     const n = Number(qs.launch.value.trim());
-    if (!Number.isInteger(n) || n <= 0) return toast("Enter your IMD launch number.", "alarm");
+    if (!Number.isInteger(n) || n <= 0) return toast(`Enter your ${LAUNCHPAD} launch number.`, "alarm");
     button.disabled = true;
     qs.note.className = "hint qs-note";
-    qs.note.textContent = `Reading IMD launch #${n}…`;
+    qs.note.textContent = `Reading ${LAUNCHPAD} launch #${n}…`;
     try {
       const draft = await draftFromLaunch(n, { repo: qs.repo.value.trim(), roadmap: qs.roadmap.value, total: qs.total.value.trim(), months: Number(qs.months.value) || 3 });
       tokenIn.value = draft.token;
@@ -1371,10 +1398,12 @@ function viewNew({ quiet }) {
     } catch (e) {
       qs.note.className = "hint qs-note bad";
       qs.note.replaceChildren(
-        reason(e),
-        e.switchTo
+        ...[
+          reason(e),
+          e.switchTo
           ? h("button", { class: "btn small", type: "button", style: { marginLeft: "12px" }, onclick: () => setNetwork(e.switchTo, { hash: "#/new", extra: { launch: String(n) } }) }, `Switch to ${NETWORKS[e.switchTo].short}`, icon("arrow", 14))
-          : null,
+            : null,
+        ].filter(Boolean),
       );
     } finally {
       button.disabled = false;
@@ -1454,8 +1483,8 @@ function viewNew({ quiet }) {
             h(
               "div",
               { class: "quickstart rise", style: { animationDelay: "300ms" } },
-              h("div", { class: "qs-head" }, h("span", { class: "lamp ok blink" }), h("b", {}, "Launched on IMD? Draft your pledge in one step")),
-              h("div", { class: "row2" }, field("IMD launch number", qs.launch), field("Product repository", qs.repo)),
+              h("div", { class: "qs-head" }, h("span", { class: "lamp ok blink" }), h("b", {}, `Launched on ${LAUNCHPAD}? Draft your pledge in one step`)),
+              h("div", { class: "row2" }, field(`${LAUNCHPAD} launch number`, qs.launch), field("Product repository", qs.repo)),
               field("Roadmap", qs.roadmap),
               h("div", { class: "row2" }, field("Tokens to lock in total", qs.total, "Split evenly across the milestones."), field("Over how many months", qs.months, "Deadlines are spread across this period.")),
               qs.note,
@@ -1515,7 +1544,12 @@ const nextTag = (tag) => {
  * A draft pledge from an IMD launch: its token, a release milestone from the product repo, and a
  * page milestone per roadmap line, deadlines spread over `months` and tokens split evenly.
  */
-async function draftFromLaunch(n, { repo, roadmap, total, months }) {
+async function draftFromLaunch(n, opts) {
+  if (config.vibeFactory) {
+    const v = await vibeLaunch(n);
+    if (!v.graduated) throw new Error(`vibe/vibe launch #${n} hasn't graduated yet. vibe/vibe locks its token until then, so the vault can't take it. Draft it again once it graduates.`);
+    return draftFrom(n, getAddress(v.token), opts);
+  }
   const l = await imdLaunch(n);
   if (l.chainId !== config.chainId) {
     const other = networkFor(l.chainId);
@@ -1526,7 +1560,12 @@ async function draftFromLaunch(n, { repo, roadmap, total, months }) {
   }
   const tok = l.artifacts.find((a) => a.role === "token");
   if (!tok) throw new Error(`Launch #${n} has no token to lock.`);
-  const info = await tokenInfo(getAddress(tok.address));
+  return draftFrom(n, getAddress(tok.address), opts);
+}
+
+/** The draft itself, once the launch has given its token. */
+async function draftFrom(n, tokenAddress, { repo, roadmap, total, months }) {
+  const info = await tokenInfo(tokenAddress);
   const notes = [];
   const promises = [];
   let site = "";
@@ -1566,7 +1605,7 @@ async function draftFromLaunch(n, { repo, roadmap, total, months }) {
     return d;
   };
   return {
-    token: getAddress(tok.address),
+    token: tokenAddress,
     symbol: info.symbol,
     name: `${info.symbol} roadmap`.slice(0, 64),
     notes,
@@ -1824,8 +1863,8 @@ function viewReferee({ quiet }) {
                   if (!amount) return toast("Enter an amount of IMD.", "alarm");
                   const { imd } = await getConstants({ maxAge: 300_000 });
                   onchain(e.currentTarget, "Donate to the Referee Fund", [
-                    { label: "Allow the vault to take the IMD", run: async (ph) => ((await needsAllowance(imd, config.vault, amount)) ? ensureAllowance(imd, config.vault, amount, ph) : null) },
-                    { label: `Donate ${fmt(amount, IMD_DECIMALS)} IMD`, run: (ph) => send({ address: config.vault, abi: vaultAbi, functionName: "fundReferee", args: [amount] }, ph) },
+                    { label: "Allow the vault to take the IMD", run: async (ph) => ((await needsAllowance(imd, mainVault, amount)) ? ensureAllowance(imd, mainVault, amount, ph) : null) },
+                    { label: `Donate ${fmt(amount, IMD_DECIMALS)} IMD`, run: (ph) => send({ address: mainVault, abi: mainVaultAbi, functionName: "fundReferee", args: [amount] }, ph) },
                   ]);
                 },
               },
@@ -2079,7 +2118,7 @@ function viewBoard({ quiet }) {
       top
         ? badgePanel(`team=${top.beneficiary}`, {
             href: siteLink("/board"),
-            post: `${top.kept}/${top.kept + top.broken + top.open} promises kept, every one verified onchain by the IMD swarm. The KEPT Promise Board:`,
+            post: `${top.kept}/${top.kept + top.broken + top.open} promises kept, every one verified onchain by ${SWARM}. The KEPT Promise Board:`,
           })
         : h("div", { class: "empty" }, "Badges appear once a team has a pledge."),
     );
@@ -2350,11 +2389,11 @@ function graveRow(m, p, hist, pending = false) {
 
 /** The page linked from every outreach DM: what KEPT does for a team, our own record as proof, one step to start. */
 function viewTeams({ quiet }) {
-  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: "e.g. 1033", "aria-label": "Your IMD launch number", id: "teams-launch" });
+  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 1033", "aria-label": `Your ${LAUNCHPAD} launch number`, id: "teams-launch" });
   const start = (e) => {
     e?.preventDefault();
     const n = launchIn.value.trim();
-    if (!/^\d{1,7}$/.test(n)) return toast("Enter your IMD launch number, the N in launch #N.", "alarm");
+    if (!/^\d{1,7}$/.test(n)) return toast(`Enter your ${LAUNCHPAD} launch number, the N in launch #N.`, "alarm");
     // the quick start reads ?launch= and drafts the pledge from that launch
     location.href = `${location.pathname}?${new URLSearchParams({ ...(config.net === "robinhood" ? {} : { net: config.net }), launch: n })}#/new`;
   };
@@ -2380,7 +2419,7 @@ function viewTeams({ quiet }) {
           h(
             "form",
             { class: "tm-start", onsubmit: start },
-            h("label", { for: "teams-launch" }, "Launched on IMD? Draft your pledge from your launch number:"),
+            h("label", { for: "teams-launch" }, `Launched on ${LAUNCHPAD}? Draft your pledge from your launch number:`),
             h("div", { class: "inline-form" }, h("div", { class: "unit-input" }, h("span", {}, "#"), launchIn), h("button", { class: "btn primary", type: "submit" }, "Draft my pledge", icon("arrow", 15))),
             h("p", { class: "muted fine" }, "It fills in your token, a release milestone from your repo and an even split. You review everything and sign from your own wallet. ", h("a", { href: link("/new") }, "Or start from scratch.")),
           ),
