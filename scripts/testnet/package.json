@@ -1,0 +1,7 @@
+{
+  "name": "kept-testnet",
+  "private": true,
+  "type": "module",
+  "description": "KEPT on vibe/vibe's chain (Robinhood Chain testnet): deploy the kit, then answer checks as the test oracle.",
+  "dependencies": { "viem": "2.56.8" }
+}

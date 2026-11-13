@@ -51,7 +51,7 @@ library QuestionsV2 {
     }
 
     /// @notice Reverts unless the spec can produce a well-formed, unambiguous question.
-    function validate(Spec memory s) internal pure {
+    function validate(Spec memory s) internal view {
         if (s.kind == Kind.GithubRelease) {
             if (!_isRepo(bytes(s.a))) revert BadParameter(0);
             if (!_isToken(bytes(s.b), 1, 64)) revert BadParameter(1);
@@ -198,7 +198,11 @@ library QuestionsV2 {
         while (bytes(out).length < width) out = string.concat("0", out);
     }
 
-    function _chain(uint64 id) private pure {
+    /// @dev The chains IMD answers chain questions about, plus the vault's own chain: on a mainnet that
+    /// changes nothing (Robinhood Chain and Ethereum are listed), and on a testnet kit such as
+    /// vibe/vibe's (46630) a team can promise something about its own testnet token.
+    function _chain(uint64 id) private view {
+        if (id == block.chainid) return;
         if (id != 1 && id != 56 && id != 4663 && id != 8453 && id != 42161) revert UnsupportedChain(id);
     }
 

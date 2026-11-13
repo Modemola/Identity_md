@@ -3,7 +3,7 @@ import { createClient, custom, defineChain, erc20Abi, http, getAddress } from "v
 // every action viem has (signature verification, ENS, EIP-6492...) and pull ~100 KB of curves and
 // helpers into the bundle that KEPT never calls.
 import { readContract, getBlockNumber, getContractEvents, simulateContract, waitForTransactionReceipt, writeContract } from "viem/actions";
-import { config, FIRST_V2, v2Live, vaultOf } from "./config.js";
+import { config, FIRST_V2, v1Live, v2Live, vaultOf, mainVault } from "./config.js";
 import { load, put, peek, epoch } from "./store.js";
 import vaultAbi from "./abi/KeptVault.json";
 import hookAbi from "./abi/KeptHook.json";
@@ -40,8 +40,10 @@ export const client = {
 export const Outcome = ["Open", "Kept", "Broken"];
 export const Kind = ["GithubRelease", "PageContains", "ContractDeployed", "ValueAtLeast"];
 
+/** The ABI of the network's main vault: v1, or v2 where v1 was never deployed. */
+export const mainVaultAbi = v1Live ? vaultAbi : vault2Abi;
 const read = (functionName, args = []) =>
-  client.readContract({ address: config.vault, abi: vaultAbi, functionName, args });
+  client.readContract({ address: mainVault, abi: mainVaultAbi, functionName, args });
 /** A read on the vault that holds pledge `id`. */
 const readOf = (id, functionName, args = []) => client.readContract({ ...vaultCall(id), functionName, args });
 
@@ -151,7 +153,7 @@ export async function loadMilestone(id, index) {
 }
 
 export async function loadAllPledges() {
-  const count = Number(await read("pledgeCount"));
+  const count = v1Live ? Number(await client.readContract({ address: config.vault, abi: vaultAbi, functionName: "pledgeCount" })) : 0;
   const ids = Array.from({ length: count }, (_, i) => count - i);
   // v2's pledge count is its last number (it starts at 1000); newest first, v2 before v1
   if (v2Live) {
@@ -212,6 +214,40 @@ export function prefetchPledge(id) {
 
 export async function previewQuestion(input) {
   return read("previewQuestion", [input]);
+}
+
+// ------------------------------------------------------------------ vibe/vibe launches
+
+const VV_LAUNCHED = "0xa7e8032bfd07a9fbcde50eabe91eb2901faee6dbddd9cced579491d9b07ef5c8";
+const VV_GRADUATED = "0xab164bba6f9a29b6722f18be5ea821368fedba444c4f8733118f3557d77ab2ae";
+const word = (n) => `0x${BigInt(n).toString(16).padStart(64, "0")}`;
+const topicAddr = (t) => getAddress(`0x${t.slice(26)}`);
+
+/** eth_getLogs over [from, latest] in ten-million-block steps: the testnet RPC serves those when a topic or address pins the query. */
+async function rawLogs(filter, from, { first = false } = {}) {
+  const latest = await client.getBlockNumber();
+  const out = [];
+  for (let at = from; at <= latest; at += 10_000_000n) {
+    const to = at + 9_999_999n > latest ? latest : at + 9_999_999n;
+    const logs = await base.request({ method: "eth_getLogs", params: [{ ...filter, fromBlock: `0x${at.toString(16)}`, toBlock: `0x${to.toString(16)}` }] });
+    out.push(...logs);
+    if (first && out.length) break;
+  }
+  return out;
+}
+
+/**
+ * One vibe/vibe launch by number, from its factory's `Launched(uint256 indexed id, address indexed
+ * creator, address indexed token, ...)` log: the token, its bonding pool (the first data word) and
+ * whether the pool has graduated. vibe/vibe locks a token's transfers until it graduates.
+ */
+export async function vibeLaunch(n) {
+  if (!config.vibeFactory) throw new Error("vibe/vibe isn't on this network.");
+  const [l] = await rawLogs({ address: config.vibeFactory, topics: [VV_LAUNCHED, word(n)] }, config.vibeFrom, { first: true });
+  if (!l) throw new Error(`vibe/vibe launch #${n} not found.`);
+  const pool = getAddress(`0x${l.data.slice(26, 66)}`);
+  const grad = await rawLogs({ address: pool, topics: [VV_GRADUATED] }, BigInt(l.blockNumber), { first: true });
+  return { id: n, creator: topicAddr(l.topics[2]), token: topicAddr(l.topics[3]), pool, graduated: grad.length > 0 };
 }
 
 // ------------------------------------------------------------------ events

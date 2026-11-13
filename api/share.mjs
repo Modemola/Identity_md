@@ -2,7 +2,7 @@
 // vercel.json. Link previews (X, Telegram, Discord) read the Open Graph tags and show the live
 // card from /api/og; people are sent straight on to the pledge page.
 
-import { NETS, SITE, amount, readPledge } from "./_lib/vault.mjs";
+import { NETS, SITE, amount, readPledge, isLive, netQuery, signerOf } from "./_lib/vault.mjs";
 import { scoreOf } from "./score.mjs";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -10,12 +10,12 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 export async function GET(request) {
   const u = new URL(request.url);
   const q = u.searchParams;
-  const chain = q.get("chain") === "1" ? "1" : "4663";
+  const chain = ["1", "46630"].includes(q.get("chain")) ? q.get("chain") : "4663";
   const net = NETS[chain];
   const id = Number(q.get("pledge"));
   const m = q.get("m") ? Number(q.get("m")) : 0;
   const origin = `https://${SITE}`;
-  const net_q = chain === "1" ? "?net=ethereum" : "";
+  const net_q = netQuery(chain);
   const target = q.get("page") === "teams" ? `${origin}/#/teams` : `${origin}/${net_q}#/pledge/${Number.isInteger(id) && id > 0 ? id : ""}`;
 
   let title = "KEPT: promises the swarm enforces";
@@ -30,10 +30,11 @@ export async function GET(request) {
       image = `${origin}/api/og?pledge=1`;
       throw new Error("page"); // nothing pledge-specific to read
     }
-    if (!net?.vault || !Number.isInteger(id) || id < 1) throw new Error("bad");
+    if (!isLive(net) || !Number.isInteger(id) || id < 1) throw new Error("bad");
     const p = await readPledge(net, id);
     if (!p) throw new Error("missing");
-    const c = chain === "1" ? "&chain=1" : "";
+    const c = chain === "4663" ? "" : `&chain=${chain}`;
+    const Signer = signerOf(p)[0].toUpperCase() + signerOf(p).slice(1);
     const s = scoreOf([p]);
     if (m && m <= p.count) {
       const ms = p.milestones[m - 1];
@@ -44,15 +45,15 @@ export async function GET(request) {
         ms.outcome === 3
           ? `Reached ${pct}% of its target, measured on chain at the deadline. ${pct}% of ${amount(ms.amount, p.decimals)} $${p.symbol} unlocks to the team; the rest burns.`
           : ms.outcome === 1
-          ? `The IMD swarm confirmed it. ${amount(ms.amount, p.decimals)} $${p.symbol} ${ms.settled ? "released" : "unlocks"} to the team.`
+          ? `${Signer} confirmed it. ${amount(ms.amount, p.decimals)} $${p.symbol} ${ms.settled ? "released" : "unlocks"} to the team.`
           : ms.outcome === 2
             ? `Not proven in time. ${amount(ms.amount, p.decimals)} $${p.symbol} burned for good.`
-            : `${amount(ms.amount, p.decimals)} $${p.symbol} on the line. It unlocks if the IMD swarm confirms it; otherwise it burns.`;
+            : `${amount(ms.amount, p.decimals)} $${p.symbol} on the line. It unlocks if ${signerOf(p)} confirms it; otherwise it burns.`;
       image = `${origin}/api/og?pledge=${id}&m=${m}${c}`;
       if (ms.settled) maxAge = 3600;
     } else {
       title = `${p.name} · KEPT score ${s.score ?? "pending"}`;
-      desc = `${s.kept} kept, ${s.partial ? `${s.partial} partial, ` : ""}${s.broken} broken, ${s.open} open. $${p.symbol} locked behind milestones the IMD swarm checks. Missed ones burn.`;
+      desc = `${s.kept} kept, ${s.partial ? `${s.partial} partial, ` : ""}${s.broken} broken, ${s.open} open. $${p.symbol} locked behind milestones ${signerOf(p)} checks. Missed ones burn.`;
       image = `${origin}/api/og?pledge=${id}${c}`;
     }
   } catch {

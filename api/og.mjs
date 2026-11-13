@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 import { ogFrame, recordCard, verdictCard } from "./_lib/cards.mjs";
-import { NETS, lastVerdict, readPledge } from "./_lib/vault.mjs";
+import { NETS, lastVerdict, readPledge, isLive } from "./_lib/vault.mjs";
 import { scoreOf } from "./score.mjs";
 
 // fonts ship with the function (vercel.json includeFiles); the path is relative to the project root
@@ -37,7 +37,7 @@ export async function GET(request) {
   const net = NETS[q.get("chain") || "4663"];
   const id = q.get("pledge");
   const m = q.get("m");
-  if (!net?.vault || !/^\d{1,9}$/.test(id || "") || (m && !/^\d{1,3}$/.test(m))) return new Response("use ?pledge=1 or ?pledge=1&m=1", { status: 400 });
+  if (!isLive(net) || !/^\d{1,9}$/.test(id || "") || (m && !/^\d{1,3}$/.test(m))) return new Response("use ?pledge=1 or ?pledge=1&m=1", { status: 400 });
   try {
     const r = await previewSvg(net, Number(id), m ? Number(m) : 0);
     if (!r) return new Response("not found", { status: 404 });

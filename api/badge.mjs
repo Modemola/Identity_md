@@ -10,7 +10,7 @@
 
 // Reads every vault on the chain (v1, and v2 once live) through the shared reader, so a team's
 // badge counts all of its pledges and a v2 partial delivery counts as one.
-import { NETS, SITE, pledgeIds, readPledge, recordOf, recordText } from "./_lib/vault.mjs";
+import { NETS, SITE, pledgeIds, readPledge, recordOf, recordText, isLive } from "./_lib/vault.mjs";
 
 async function teamPledges(net, team) {
   const ids = await pledgeIds(net);
@@ -41,7 +41,7 @@ function flat(r) {
   const right = Math.round(r.text.length * cw + 20);
   const w = left + right;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20" role="img" aria-label="KEPT: ${esc(r.text)}">
-<title>KEPT: ${esc(r.text)} · verified by the IMD swarm</title>
+<title>KEPT: ${esc(r.text)} · verified by ${esc(r.signer || "the IMD swarm")}</title>
 <rect width="${w}" height="20" rx="3" fill="${COLOR.ink}"/>
 <rect x="${left}" width="${right}" height="20" rx="3" fill="${COLOR[r.tone]}"/>
 <rect x="${left}" width="4" height="20" fill="${COLOR[r.tone]}"/>
@@ -65,7 +65,7 @@ function card(r, title, milestones) {
   const big = r.total ? `${r.kept}/${r.total}` : "0";
   const t = title.length > 30 ? `${title.slice(0, 29)}…` : title;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="KEPT: ${esc(r.text)}">
-<title>${esc(title)} · ${esc(r.text)} · verified by the IMD swarm</title>
+<title>${esc(title)} · ${esc(r.text)} · verified by ${esc(r.signer || "the IMD swarm")}</title>
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#11161a"/><stop offset="1" stop-color="#060807"/></linearGradient></defs>
 <rect x="0.75" y="0.75" width="${w - 1.5}" height="${h - 1.5}" rx="14" fill="url(#g)" stroke="${COLOR[r.tone]}" stroke-opacity="0.7" stroke-width="1.5"/>
 ${seal(22, 18, 22)}
@@ -74,7 +74,7 @@ ${seal(22, 18, 22)}
 <text x="${w - 24}" y="50" text-anchor="end" fill="${COLOR[r.tone]}" font-family="${MONO}" font-size="34" font-weight="600">${big}</text>
 <text x="${w - 24}" y="70" text-anchor="end" fill="#cfd6d2" font-family="${MONO}" font-size="11" letter-spacing="1.5">${r.broken ? `${r.broken} BROKEN` : r.partial ? `${r.partial} PARTIAL` : "PROMISES KEPT"}</text>
 ${lamps.join("")}
-<text x="${w - 24}" y="98" text-anchor="end" fill="#6b7580" font-family="${MONO}" font-size="10">verified by the IMD swarm · ${SITE}</text>
+<text x="${w - 24}" y="98" text-anchor="end" fill="#6b7580" font-family="${MONO}" font-size="10">verified by ${esc(r.signer || "the IMD swarm")} · ${SITE}</text>
 </svg>`;
 }
 
@@ -94,7 +94,7 @@ export async function GET(request) {
   const pid = q.get("pledge");
   const team = q.get("team");
   const net = NETS[q.get("chain") || "4663"];
-  if (!net || !net.vault) return svg(flat({ text: "not live on that chain", tone: "none" }), 404, 300);
+  if (!isLive(net)) return svg(flat({ text: "not live on that chain", tone: "none" }), 404, 300);
   try {
     let milestones = [];
     let title = "";
@@ -111,6 +111,9 @@ export async function GET(request) {
       return svg(flat({ text: "?pledge=1 or ?team=0x…", tone: "none" }), 400, 3600);
     }
     const r = record(milestones);
+    // a testnet record is signed by KEPT's test oracle: the badge says so where people look
+    if (net.testOracle) r.text = `testnet · ${r.text}`;
+    r.signer = net.testOracle ? "KEPT's test oracle" : "the IMD swarm";
     return svg(style === "card" ? card(r, title, milestones) : flat(r));
   } catch {
     return svg(flat({ text: "chain unreachable", tone: "none" }), 503, 30);

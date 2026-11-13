@@ -94,6 +94,15 @@ contract KeptVaultV2FeaturesTest is VaultFixture {
         vm.stopPrank();
     }
 
+    /// On a mainnet vault, a question about a chain IMD doesn't serve (a testnet) is still refused.
+    function test_mainnetVaultRefusesTestnetChainQuestions() public {
+        KeptVault.MilestoneInput memory m = _scaled(0, 5 ether);
+        m.chainId = 46630;
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(Questions.UnsupportedChain.selector, uint64(46630)));
+        vault.createPledge(IERC20(address(team)), beneficiary, "x", _one(m), 0);
+    }
+
     function test_scaledIsReadOnceAfterTheDeadline() public {
         uint256 id = _create(_one(_scaled(0, 5 ether)), 10 ether);
         (bool open,) = vault.checkOpen(id, 0);

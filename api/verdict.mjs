@@ -7,7 +7,7 @@
 // The verdict bot (scripts/verdict-bot) renders this same card to PNG and posts it.
 
 import { verdictCard, verdictPost } from "./_lib/cards.mjs";
-import { NETS, lastVerdict, readPledge } from "./_lib/vault.mjs";
+import { NETS, lastVerdict, readPledge, isLive } from "./_lib/vault.mjs";
 
 const reply = (body, type, status, maxAge) =>
   new Response(body, {
@@ -25,7 +25,7 @@ export async function GET(request) {
   const net = NETS[chain];
   const json = q.get("format") === "json";
   const fail = (status, error) => (json ? reply(JSON.stringify({ error }), "application/json", status, 60) : reply(error, "text/plain; charset=utf-8", status, 60));
-  if (!net || !net.vault) return fail(404, "KEPT is not live on that chain");
+  if (!isLive(net)) return fail(404, "KEPT is not live on that chain");
   const id = q.get("pledge");
   const m = q.get("m") ?? "0";
   if (!/^\d{1,9}$/.test(id || "") || !/^\d{1,3}$/.test(m)) return fail(400, "use ?pledge=1&m=0");

@@ -1,4 +1,5 @@
 import { h } from "./dom.js";
+import { config } from "./config.js";
 import { sevenSeg, liveInterval, reduced, finePointer } from "./fx.js";
 
 // The Swarm Scope: KEPT's piece of IMD's instrument wall. A bezel around a dark screen where the
@@ -46,9 +47,9 @@ export function verdictUnit({ live }) {
     h(
       "div",
       { class: "vu-foot" },
-      h("span", {}, "IMD ORACLE"),
+      h("span", {}, config.testOracle ? "TEST ORACLE" : "IMD ORACLE"),
       h("span", { class: "vu-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i")),
-      h("span", {}, "ROBINHOOD 4663"),
+      h("span", {}, `${config.short.toUpperCase()} ${config.chainId}`),
     ),
   );
 

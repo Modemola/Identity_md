@@ -4,7 +4,8 @@
  *
  * Use data-token (a project's token), data-team (its beneficiary address) or data-pledge (a pledge
  * number). Optional: data-theme="light" or "dark" (default: the viewer's system setting) and
- * data-width (default 380). The card is an iframe, so it never touches the host page's styles.
+ * data-width (default 380). data-chain picks a network other than Robinhood Chain, such as 46630
+ * for vibe/vibe's testnet. The card is an iframe, so it never touches the host page's styles.
  */
 (function () {
   var ORIGIN = "https://keptmd.vercel.app";
@@ -19,6 +20,8 @@
     if (token) q.push("token=" + encodeURIComponent(token));
     else if (team) q.push("team=" + encodeURIComponent(team));
     else if (pledge) q.push("pledge=" + encodeURIComponent(pledge));
+    var chain = s.getAttribute("data-chain");
+    if (chain) q.push("chain=" + encodeURIComponent(chain));
     var theme = s.getAttribute("data-theme");
     if (theme) q.push("theme=" + encodeURIComponent(theme));
     var width = parseInt(s.getAttribute("data-width") || "380", 10) || 380;

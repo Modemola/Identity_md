@@ -63,6 +63,7 @@ This drops a 380x128 card with the KEPT score, kept, broken and open counts, a l
 - `data-token`, `data-team` or `data-pledge` picks the record.
 - `data-theme="light"` or `"dark"` sets the theme. By default it follows the viewer's system setting.
 - `data-width` sets the width (default 380).
+- `data-chain` picks a network other than Robinhood Chain, such as `46630` for vibe/vibe's testnet.
 
 The card is a sandboxed iframe with no scripts, so it can't affect the host page. Without the script, use the iframe directly:
 
@@ -94,3 +95,5 @@ KEPT's second vault, v2, numbers its pledges from **#1001**, so a number always 
 ## Chains
 
 Robinhood Chain (4663) is the default. Once KEPT's Ethereum vault is live, `/api/score` includes it automatically, and `&chain=1` selects it on `/api/badge` and `/api/verdict`.
+
+**vibe/vibe's testnet (46630).** Verdicts there come from KEPT's test oracle, not the IMD swarm, so it is read only when asked for: `&chain=46630` on any endpoint, and `data-chain="46630"` on the embed. Its badges and cards say "testnet", and its records never count toward a mainnet score. See [VIBEVIBE.md](VIBEVIBE.md).

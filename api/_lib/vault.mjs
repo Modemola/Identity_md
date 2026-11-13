@@ -24,6 +24,19 @@ export const NETS = {
     vault2From: Number(process.env.KEPT_VAULT2_FROM_BLOCK_1 || 0),
     explorer: "https://etherscan.io",
   },
+  // vibe/vibe's chain, Robinhood Chain testnet. Only KeptVault v2 runs there, with verdicts from
+  // KEPT's test oracle (scripts/testnet), so its records never count toward a mainnet score:
+  // endpoints read it only when asked with ?chain=46630
+  46630: {
+    name: "VibeVibe testnet",
+    rpc: process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com",
+    vault: "",
+    fromBlock: 0,
+    vault2: process.env.KEPT_VAULT2_46630 || "",
+    vault2From: Number(process.env.KEPT_VAULT2_FROM_BLOCK_46630 || 0),
+    explorer: "https://explorer.testnet.chain.robinhood.com",
+    testOracle: true,
+  },
 };
 
 export const SITE = "keptmd.vercel.app";
@@ -33,6 +46,19 @@ export const FIRST_V2 = 1001;
 /** The vault that holds pledge `id`, and the block its history starts at. */
 export const vaultOf = (net, id) => (id >= FIRST_V2 ? net.vault2 : net.vault);
 export const fromOf = (net, id) => (id >= FIRST_V2 ? net.vault2From : net.fromBlock);
+/** KEPT has a vault (v1 or v2) on this network. */
+export const isLive = (net) => Boolean(net && (net.vault || net.vault2));
+/**
+ * The networks a record is read from: the one named by `?chain=`, or else every mainnet. A
+ * testnet's verdicts come from a test key, so they are never mixed into a mainnet record.
+ */
+export const recordNets = (chain) =>
+  chain ? (isLive(NETS[chain]) ? [[chain, NETS[chain]]] : []) : Object.entries(NETS).filter(([, n]) => isLive(n) && !n.testOracle);
+/** The site's `?net=` for a chain, so links open the right network. */
+export const netQuery = (chainId) => ({ 1: "?net=ethereum", 46630: "?net=vibevibe" })[Number(chainId)] || "";
+/** Who signs this network's verdicts, for cards and posts. */
+export const signerOf = (p) => (p?.testOracle ? "KEPT's test oracle" : "the IMD swarm");
+
 /** The vaults live on a chain: [address, first block, first pledge number]. */
 export const vaults = (net) => [[net.vault, net.fromBlock, 1], [net.vault2, net.vault2From, FIRST_V2]].filter(([v]) => v);
 
@@ -136,6 +162,7 @@ export async function readPledge(net, id) {
   const extra = rest.slice(count);
   return {
     version: v2 ? 2 : 1,
+    testOracle: Boolean(net.testOracle),
     vault,
     id,
     creator: addr(p, 0),
