@@ -187,6 +187,7 @@ function shell() {
           h("span", { class: "lamp caution" }),
           h("b", {}, `${config.name}. `),
           h("span", {}, "Verdicts here are signed by KEPT's test oracle key, not the IMD swarm. Tokens, pledges and outcomes are for trying KEPT out. "),
+          h("button", { class: "btn small", type: "button", onclick: (e) => testFaucet(e.currentTarget) }, "Get 100 test IMD"),
           LIVE.includes("robinhood") ? h("a", { href: "#", onclick: (e) => (e.preventDefault(), setNetwork("robinhood")) }, "Go to KEPT on mainnet") : null,
         ),
       )
@@ -272,6 +273,30 @@ function pendingBanner(c) {
       `. It cannot take effect before ${when(p.readyAt)}. Every change waits seven days in public.`,
     ),
   );
+}
+
+// the test IMD faucet: 100 a day per wallet, so a team can pay for checks on a testnet
+const FAUCET_ABI = [
+  { type: "function", name: "faucet", inputs: [], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "lastDrip", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "error", name: "TooSoon", inputs: [{ type: "uint256", name: "nextAt" }] },
+];
+
+async function testFaucet(button) {
+  let imd, who;
+  try {
+    who = currentAccount() || (await connect());
+    ({ imd } = await getConstants({ maxAge: 300_000 }));
+    const last = await client.readContract({ address: imd, abi: FAUCET_ABI, functionName: "lastDrip", args: [who] });
+    const nextAt = last ? last + 86_400n : 0n;
+    if (nextAt > now()) return toast(`You got test IMD in the last day. Come back ${when(nextAt)}.`, "alarm");
+  } catch (e) {
+    return toast(reason(e), "alarm");
+  }
+  const ok = await runSteps("Get test IMD", [{ label: "Take 100 test IMD from the faucet", run: (ph) => send({ address: imd, abi: FAUCET_ABI, functionName: "faucet" }, ph) }], { button });
+  if (!ok) return;
+  const bal = await balanceOf(imd, who).catch(() => null);
+  toast(bal === null ? "100 test IMD sent to your wallet." : `100 test IMD sent. You hold ${fmt(bal, IMD_DECIMALS)} test IMD.`, "ok");
 }
 
 /** Runs on-chain steps with the live sheet, then marks `keys` stale and repaints the page quietly. */
