@@ -41,9 +41,21 @@ export function ask(question, hidden = false) {
 
 /** The deployer and operator: KEPT_TESTNET_KEY, or typed in hidden. A throwaway testnet key only. */
 export async function operatorWallet() {
-  let key = process.env.KEPT_TESTNET_KEY || (await ask("Testnet private key (hidden, never saved): ", true));
-  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) key = `0x${key}`;
-  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) die("that is not a private key");
+  const raw = process.env.KEPT_TESTNET_KEY || (await ask("Testnet private key (hidden, never saved): ", true));
+  // a pasted key often carries spaces, a line break or quotes (Windows terminals especially)
+  let key = String(raw).replace(/[\s"'`]/g, "");
+  if (/^[0-9a-fA-F]{64}$/.test(key)) key = `0x${key}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    // say what is wrong without echoing any of the key
+    const why = !key
+      ? "nothing was received. If pasting doesn't work in this window, set it first: $env:KEPT_TESTNET_KEY=\"0x...\" (PowerShell)"
+      : /^0x/i.test(key) && key.length !== 66
+        ? `it has ${key.length - 2} characters after 0x; a private key has 64`
+        : !/^(0x)?[0-9a-fA-F]+$/.test(key)
+          ? "it contains characters other than 0-9 and a-f. Copy the private key itself, not the address or the recovery phrase"
+          : `it has ${key.replace(/^0x/i, "").length} characters; a private key has 64`;
+    die(`that is not a private key: ${why}`);
+  }
   const account = privateKeyToAccount(key);
   return { account, wallet: createWalletClient({ account, chain, transport: http(RPC) }) };
 }
