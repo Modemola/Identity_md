@@ -16,6 +16,16 @@ vibe/vibe runs on Robinhood Chain testnet (46630). The IMD oracle isn't on that 
 
 On the site, pick **VibeVibe test** in the network switch, or open `https://keptmd.vercel.app/?net=vibevibe`.
 
+Deployed on Robinhood Chain testnet:
+
+| contract | address |
+| --- | --- |
+| KeptVaultV2 | `0x2e46f4bdddc8664982b2266462d70c056cdf7ee2` (block 152,827,842) |
+| KeptQuestionsV2 | `0xf316b944e57ab61d369bdbbab8ad00af162c5733` |
+| TestIntake | `0xd62cf7ab156aed369ae853312905d33f8b1b1c9e` |
+| TestIMD (faucet) | `0xd55fb61724a30c9f97a37fb29cdf774d4bf90b98` |
+| test oracle signer | `0x42CB35cE774960fd852F186782Fe932CCdA0654E` |
+
 ## What KEPT reads from vibe/vibe
 
 Only public event logs; no vibe/vibe contract is called and nothing needs to change on your side.
