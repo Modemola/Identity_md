@@ -47,8 +47,8 @@ export const NETWORKS = {
     fromBlock: 0,
     markets: "",
     marketsFrom: 0,
-    vault2: "",
-    vault2From: 0,
+    vault2: "0x2e46f4bdddc8664982b2266462d70c056cdf7ee2", // KeptVaultV2 with the test kit (scripts/testnet)
+    vault2From: 152827842,
     testOracle: true,
     // vibe/vibe's launch factory and the block of its first launch: the quick start reads launches here
     vibeFactory: "0xe794217880011f9ca6961340ed5c16ec9559fea0",
