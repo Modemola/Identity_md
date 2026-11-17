@@ -38,7 +38,8 @@ contract RobinhoodForkTest is Test {
     address team = makeAddr("team");
 
     function setUp() public {
-        if (block.chainid != 4663) {
+        // forge runs offline tests as chain 4663 too (foundry.toml), so also skip without the live Intake
+        if (block.chainid != 4663 || INTAKE.code.length == 0) {
             vm.skip(true);
             return;
         }

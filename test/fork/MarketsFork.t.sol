@@ -18,7 +18,11 @@ contract MarketsForkTest is Test {
     address internal bob = makeAddr("bob");
 
     function setUp() public {
-        assertGt(address(VAULT).code.length, 0, "live vault code");
+        // opt in: run with --fork-url https://rpc.mainnet.chain.robinhood.com; skipped offline
+        if (address(VAULT).code.length == 0) {
+            vm.skip(true);
+            return;
+        }
         markets = new KeptMarkets(address(VAULT), OWNER, 1_000 ether);
         imd = IERC20(VAULT.imd());
         deal(address(imd), alice, 100 ether);
