@@ -41,7 +41,7 @@ import { h, fill, link, short, addrLink, now, fmt, when, span, IMD_DECIMALS } fr
 import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, tilt, liveInterval, setInstant, canTransition, reduced } from "./fx.js";
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
-import { checkHome, checkPage } from "./check.js";
+import { checkHome, checkPage, liveFeed } from "./check.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
 
 /** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
@@ -2529,7 +2529,9 @@ function viewCheckHome({ quiet }) {
     { q: "0x0a272E5eE3F48c668ccF30E65E7738099AE0a1DE", label: "$SCOUT" },
     { q: "7836", label: "launch #7836" },
   ];
-  paint("/", () => h("section", { class: "wrap" }, checkHome({ examples }), pledgeTeaser()), { quiet });
+  const feed = liveFeed();
+  whileHere(feed.stop);
+  paint("/", () => h("section", { class: "wrap" }, checkHome({ examples, feed: feed.el }), pledgeTeaser()), { quiet });
 }
 
 function viewCheck(q, { quiet }) {

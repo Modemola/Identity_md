@@ -1027,3 +1027,29 @@ a.exit-row:hover { background: var(--hover); }
   .acct { min-width: 0; width: var(--pill-h); padding: 0; justify-content: center; }
   .acct span { display: none; }
 }
+
+/* ---------------------------------------------------------------- live feed */
+.feed-sec { margin-bottom: 64px; }
+.feed-sec h2 .lamp { width: 12px; height: 12px; vertical-align: 0.32em; }
+.feed { border-top: var(--rule); }
+.feed-row { display: grid; grid-template-columns: 70px 1.4fr 0.9fr 0.9fr 1.6fr; gap: 12px; align-items: center; padding: 12px 4px; border-bottom: var(--hair); text-decoration: none; transition: background-color 0.3s; }
+a.feed-row:hover { background: var(--hover); }
+.feed-row.flag { background: color-mix(in srgb, var(--alarm) 9%, transparent); box-shadow: inset 4px 0 0 var(--alarm); }
+.feed-row.new { animation: feed-in 0.8s var(--ease) both; }
+@keyframes feed-in { from { opacity: 0; transform: translateY(-8px); background: color-mix(in srgb, var(--ink) 8%, transparent); } }
+.feed-row.sk { height: 50px; background: linear-gradient(90deg, var(--hover), var(--raise), var(--hover)); background-size: 200% 100%; animation: sk 1.4s linear infinite; }
+.feed-row .tok { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-row .tok b { font-family: var(--display); font-stretch: 72%; font-weight: 800; font-size: 20px; }
+.rec-chip { font-size: 12px; color: var(--dim); justify-self: start; border: var(--hair); padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rec-chip b { font-weight: 600; text-transform: uppercase; letter-spacing: var(--track); font-size: 11px; }
+.rec-chip.t-exits { color: var(--alarm); border-color: var(--alarm); }
+.rec-chip.t-sold { color: var(--caution); border-color: var(--caution); }
+.rec-chip.t-clean { color: var(--ok); border-color: var(--ok); }
+@media (max-width: 640px) {
+  .feed-row { grid-template-columns: 52px 1fr; }
+  .feed-row .hide-s { display: none; }
+  .feed-row .rec-chip { grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .feed-row.new { animation: none; } }
+.feed-row .who { display: grid; line-height: 1.3; }
+.feed-row .repeat { font-size: 11px; }

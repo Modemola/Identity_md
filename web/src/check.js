@@ -2,7 +2,7 @@
 // Reads /api/record, which serves the launcher index (scripts/records/indexer.mjs).
 
 import { h, link, short, when } from "./dom.js";
-import { reveal, words, countUp, magnetic, reduced } from "./fx.js";
+import { reveal, words, countUp, magnetic, reduced, liveInterval } from "./fx.js";
 import { icon } from "./icons.js";
 import { load } from "./store.js";
 
@@ -61,9 +61,136 @@ export function searchBox({ value = "", big = false } = {}) {
   return h("form", { class: `check-search${big ? " big" : ""}`, role: "search", onsubmit: go }, icon("search", big ? 22 : 18), input, h("button", { class: "btn primary", type: "submit" }, "Check", icon("arrow", 16)));
 }
 
+// ------------------------------------------------------------------ live feed
+
+const RPC = "https://rpc.testnet.chain.robinhood.com";
+const FACTORIES = ["0xac135da186de8325047ef2afd1d16d5971f731f7", "0xe794217880011f9ca6961340ed5c16ec9559fea0"];
+const LAUNCHED = "0xa7e8032bfd07a9fbcde50eabe91eb2901faee6dbddd9cced579491d9b07ef5c8";
+const SECONDS_PER_BLOCK = 0.19;
+
+async function rpc(method, params) {
+  const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+function abiString(data, offset) {
+  try {
+    const at = 2 + Number(offset) * 2;
+    const len = Math.min(64, parseInt(data.slice(at, at + 64), 16));
+    const hex = data.slice(at + 64, at + 64 + len * 2);
+    return new TextDecoder().decode(Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16))).replace(/[\u0000-\u001f]/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+function decodeLaunch(l) {
+  const w = (i) => BigInt(`0x${l.data.slice(2 + i * 64, 66 + i * 64)}`);
+  return {
+    id: Number(BigInt(l.topics[1])),
+    creator: `0x${l.topics[2].slice(26)}`,
+    token: `0x${l.topics[3].slice(26)}`,
+    block: Number(BigInt(l.blockNumber)),
+    name: abiString(l.data, w(1)),
+    symbol: abiString(l.data, w(2)),
+    oldFactory: l.address.toLowerCase() === FACTORIES[1],
+  };
+}
+
+const TONE_SHORT = { exits: "quick exits", sold: "has sold", clean: "no sells", new: "first launch" };
+
+/**
+ * New vibe/vibe launches as they land, each with its launcher's record. Reads the chain from the
+ * browser every few seconds while the feed is on screen; records come from /api/record.
+ */
+export function liveFeed() {
+  const list = h("div", { class: "feed" }, ...Array.from({ length: 5 }, () => h("div", { class: "feed-row sk" })));
+  const status = h("span", { class: "faint" }, "Connecting to vibe/vibe…");
+  const seen = new Set();
+  const rows = [];
+  let last = 0;
+  let head = 0;
+  let busy = false;
+
+  // launches per wallet within the feed's own window, which is newer than the hourly record
+  const recent = new Map();
+  const recordChip = (l) => {
+    const chip = h("span", { class: "rec-chip" }, "reading record…");
+    getRecord(l.creator)
+      .then((r) => {
+        const L = r.launcher;
+        if (!L) return chip.replaceChildren("no record yet");
+        const s = L.summary;
+        chip.className = `rec-chip t-${L.tone}`;
+        chip.replaceChildren(h("b", {}, TONE_SHORT[L.tone]), L.tone === "exits" || L.tone === "sold" ? ` · ${s.fastExits}/${s.launches} sold within an hour` : s.launches > 1 ? ` · ${s.launches} launches` : "");
+        if (L.tone === "exits") chip.closest(".feed-row")?.classList.add("flag");
+      })
+      .catch(() => chip.replaceChildren("record unavailable"));
+    return chip;
+  };
+  const age = (b) => {
+    const s = Math.max(0, (head - b) * SECONDS_PER_BLOCK);
+    return s < 60 ? `${Math.round(s)}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+  };
+  const row = (l) =>
+    h(
+      "a",
+      { class: "feed-row", href: link(`/check/${l.token}`), "data-block": l.block, "data-creator": l.creator },
+      h("span", { class: "when faint tnum" }, age(l.block)),
+      h("span", { class: "tok" }, h("b", {}, `$${l.symbol || "?"}`), h("span", { class: "faint" }, ` ${l.name}`)),
+      h("span", { class: "faint hide-s tnum" }, `#${l.id}${l.oldFactory ? " (first factory)" : ""}`),
+      h("span", { class: "hide-s who" }, h("span", { class: "addr" }, short(l.creator)), h("small", { class: "repeat caution" })),
+      recordChip(l),
+    );
+
+  async function poll(initial = false) {
+    if (busy) return;
+    busy = true;
+    try {
+      head = parseInt(await rpc("eth_blockNumber", []), 16);
+      const from = initial ? head - 20_000 : last + 1;
+      if (from > head) return;
+      const got = (await Promise.all(FACTORIES.map((a) => rpc("eth_getLogs", [{ address: a, topics: [LAUNCHED], fromBlock: `0x${from.toString(16)}`, toBlock: `0x${head.toString(16)}` }])))).flat();
+      last = head;
+      const fresh = got.map(decodeLaunch).filter((l) => !seen.has(l.token)).sort((a, b) => a.block - b.block);
+      for (const l of fresh) {
+        seen.add(l.token);
+        recent.set(l.creator, (recent.get(l.creator) || 0) + 1);
+        const el = row(l);
+        if (!initial) el.classList.add("new");
+        rows.unshift(el);
+      }
+      rows.splice(14).forEach((el) => el.remove());
+      if (initial) list.replaceChildren(...rows);
+      else if (fresh.length) list.prepend(...rows.slice(0, fresh.length));
+      for (const el of rows) {
+        el.querySelector(".when").textContent = age(Number(el.dataset.block));
+        const n = recent.get(el.dataset.creator) || 0;
+        const rep = el.querySelector(".repeat");
+        if (n > 1) (rep.textContent = `${n} launches in this feed`), el.classList.add("repeat-on");
+      }
+      status.textContent = `Live · block ${head.toLocaleString("en-US")}`;
+    } catch {
+      status.textContent = "Reconnecting…";
+    } finally {
+      busy = false;
+    }
+  }
+
+  const el = h(
+    "section",
+    { class: "feed-sec" },
+    h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, h("span", { class: "lamp alarm blink" }), " New launches, checked"), h("p", { class: "muted" }, "Every vibe/vibe launch as it lands, next to its launcher's record. A red row is a launcher that has sold into its own launches within an hour, again and again. Records update hourly."), status),
+    list,
+  );
+  poll(true);
+  const stop = liveInterval(el, () => poll(false), 6000);
+  return { el, stop };
+}
+
 // ------------------------------------------------------------------ home
 
-export function checkHome({ examples }) {
+export function checkHome({ examples, feed }) {
   const stats = { launches: h("b", { class: "tnum" }, "…"), exiters: h("b", { class: "tnum" }, "…"), out: h("b", { class: "tnum" }, "…"), graduated: h("b", { class: "tnum" }, "…") };
   const board = h("div", { class: "exit-board" }, ...Array.from({ length: 6 }, () => h("div", { class: "exit-row sk" })));
   const updated = h("span", { class: "faint" });
@@ -120,6 +247,7 @@ export function checkHome({ examples }) {
         h("div", {}, stats.graduated, h("span", {}, "of launches ever graduated")),
       ),
     ),
+    feed,
     reveal(
       h(
         "section",
