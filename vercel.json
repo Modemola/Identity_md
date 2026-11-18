@@ -49,5 +49,10 @@
     "api/og.mjs": {
       "includeFiles": "api/_lib/fonts/**"
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "data": false
+    }
   }
 }

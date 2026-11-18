@@ -32,8 +32,9 @@ export const NETS = {
     rpc: process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com",
     vault: "",
     fromBlock: 0,
-    vault2: process.env.KEPT_VAULT2_46630 || "",
-    vault2From: Number(process.env.KEPT_VAULT2_FROM_BLOCK_46630 || 0),
+    // KeptVaultV2 with the test kit (scripts/testnet), deployed at block 152,827,842
+    vault2: process.env.KEPT_VAULT2_46630 || "0x2e46f4bdddc8664982b2266462d70c056cdf7ee2",
+    vault2From: Number(process.env.KEPT_VAULT2_FROM_BLOCK_46630 || 152827842),
     explorer: "https://explorer.testnet.chain.robinhood.com",
     testOracle: true,
   },

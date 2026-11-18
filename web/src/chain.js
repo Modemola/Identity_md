@@ -242,12 +242,15 @@ async function rawLogs(filter, from, { first = false } = {}) {
  * whether the pool has graduated. vibe/vibe locks a token's transfers until it graduates.
  */
 export async function vibeLaunch(n) {
-  if (!config.vibeFactory) throw new Error("vibe/vibe isn't on this network.");
-  const [l] = await rawLogs({ address: config.vibeFactory, topics: [VV_LAUNCHED, word(n)] }, config.vibeFrom, { first: true });
-  if (!l) throw new Error(`vibe/vibe launch #${n} not found.`);
-  const pool = getAddress(`0x${l.data.slice(26, 66)}`);
-  const grad = await rawLogs({ address: pool, topics: [VV_GRADUATED] }, BigInt(l.blockNumber), { first: true });
-  return { id: n, creator: topicAddr(l.topics[2]), token: topicAddr(l.topics[3]), pool, graduated: grad.length > 0 };
+  if (!config.vibeFactories.length) throw new Error("vibe/vibe isn't on this network.");
+  for (const [i, f] of config.vibeFactories.entries()) {
+    const [l] = await rawLogs({ address: f.address, topics: [VV_LAUNCHED, word(n)] }, f.from, { first: true });
+    if (!l) continue;
+    const pool = getAddress(`0x${l.data.slice(26, 66)}`);
+    const grad = await rawLogs({ address: pool, topics: [VV_GRADUATED] }, BigInt(l.blockNumber), { first: true });
+    return { id: n, creator: topicAddr(l.topics[2]), token: topicAddr(l.topics[3]), pool, graduated: grad.length > 0, oldFactory: i > 0 };
+  }
+  throw new Error(`vibe/vibe launch #${n} not found.`);
 }
 
 // ------------------------------------------------------------------ events

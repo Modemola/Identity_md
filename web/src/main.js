@@ -41,11 +41,12 @@ import { h, fill, link, short, addrLink, now, fmt, when, span, IMD_DECIMALS } fr
 import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, tilt, liveInterval, setInstant, canTransition, reduced } from "./fx.js";
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
+import { checkHome, checkPage } from "./check.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
 
 /** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
 /** Whose launch numbers the quick start reads: vibe/vibe's on its testnet, IMD's elsewhere. */
-const LAUNCHPAD = config.vibeFactory ? "vibe/vibe" : "IMD";
+const LAUNCHPAD = config.vibeFactories.length ? "vibe/vibe" : "IMD";
 const SWARM = config.testOracle ? "KEPT's test oracle" : "the IMD swarm";
 
 initTheme();
@@ -94,12 +95,11 @@ const tally = (pledges) => {
 // ------------------------------------------------------------------ the shell (built once, never re-rendered)
 
 const NAV = [
-  ["/", "Pledges"],
+  ["/", "Check"],
+  ["/pledges", "Pledges"],
   ["/board", "Board"],
-  ["/new", "Make a pledge"],
-  ["/referee", "Referee Fund"],
-  ["/how", "How it works"],
   ["/teams", "For teams"],
+  ["/how", "How it works"],
 ];
 const navLinks = NAV.map(([p, l]) => h("a", { href: link(p), "data-p": p }, l));
 const navInd = h("span", { class: "nav-ind", "aria-hidden": "true" });
@@ -129,7 +129,7 @@ function renderAccount(acct) {
 }
 
 const palette = commandPalette(() => [
-  ...NAV.map(([p, l]) => ({ path: p, label: l, hint: "page" })),
+  ...[...NAV, ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
   ...(cachedPledges() || []).map((p) => {
     const t = tally([p]);
     return { path: `/pledge/${p.id}`, label: p.name, hint: `#${p.id} · ${t.kept}/${p.count} kept`, tone: t.broken ? "broken" : t.kept === p.count ? "kept" : "open" };
@@ -171,6 +171,8 @@ function shell() {
         v1Live ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
         v2Live ? h("span", {}, "Vault v2 ", addrLink(config.vault2)) : null,
         config.hook ? h("span", {}, "Hook ", addrLink(config.hook)) : null,
+        h("a", { href: link("/referee") }, "Referee Fund"),
+        h("a", { href: link("/new") }, "Make a pledge"),
         h("a", { href: config.repo, target: "_blank", rel: "noopener" }, "Source"),
         h("a", { href: "https://imd.fun", target: "_blank", rel: "noopener" }, "IMD"),
       ),
@@ -421,7 +423,7 @@ function viewHome({ quiet }) {
   };
 
   paint(
-    "/",
+    "/pledges",
     () =>
       h(
         "section",
@@ -579,7 +581,7 @@ const step = (n, ic, t, p) => tilt(spotlight(h("div", { class: "step" }, h("div"
 
 function viewPledge(id, { quiet }) {
   const token = navToken;
-  if (!deployed) return paint("/", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/") }, "← All pledges"), notLive()), { quiet });
+  if (!deployed) return paint("/pledges", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/pledges") }, "← All pledges"), notLive()), { quiet });
 
   let lastSig = null;
   let skeleton = false;
@@ -587,7 +589,7 @@ function viewPledge(id, { quiet }) {
     const s = sig([p, c, currentAccount()]);
     if (s === lastSig) return;
     lastSig = s;
-    paint("/", () => pledgeContent(p, c), { quiet: quietDraw });
+    paint("/pledges", () => pledgeContent(p, c), { quiet: quietDraw });
     const hist = cachedHistory(id);
     if (hist) fillHistory(hist);
   };
@@ -595,7 +597,7 @@ function viewPledge(id, { quiet }) {
   const p0 = cachedPledge(id);
   const c0 = cachedConstants();
   if (p0 && c0) draw(p0, c0, quiet);
-  else (skeleton = true), paint("/", () => pledgeSkeleton(id), { quiet });
+  else (skeleton = true), paint("/pledges", () => pledgeSkeleton(id), { quiet });
 
   const refresh = (maxAge) =>
     Promise.all([getPledge(id, { maxAge }), getConstants({ maxAge: Math.max(maxAge, 30_000) })])
@@ -603,7 +605,7 @@ function viewPledge(id, { quiet }) {
       .then(([p, c]) => token === navToken && draw(p, c, lastSig !== null || (quiet && !skeleton)))
       .catch(() => {
         if (token !== navToken || lastSig) return;
-        paint("/", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/") }, "← All pledges"), h("div", { class: "empty" }, `Pledge #${id} not found.`)), { quiet: true });
+        paint("/pledges", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/pledges") }, "← All pledges"), h("div", { class: "empty" }, `Pledge #${id} not found.`)), { quiet: true });
       });
   const history = (maxAge) =>
     getHistory(id, { maxAge })
@@ -619,7 +621,7 @@ function pledgeSkeleton(id) {
   return h(
     "section",
     { class: "wrap" },
-    h("a", { class: "back", href: link("/") }, "← All pledges"),
+    h("a", { class: "back", href: link("/pledges") }, "← All pledges"),
     h("div", { class: "label", style: { marginTop: "22px" } }, `Pledge #${id}`),
     h("div", { class: "sk sk-title" }),
     h("div", { class: "sk sk-line w40" }),
@@ -655,7 +657,7 @@ function pledgeContent(p, c) {
   return h(
     "section",
     { class: "wrap" },
-    h("a", { class: "back", href: link("/") }, "← All pledges"),
+    h("a", { class: "back", href: link("/pledges") }, "← All pledges"),
     h("div", { class: "label", style: { marginTop: "22px" } }, `Pledge #${p.id} · locks ${p.tokenInfo.symbol}`),
     title,
     h("div", { class: "muted meta-line" }, "Token ", addrLink(p.token), " · created ", when(p.createdAt), " by ", addrLink(p.creator), " · beneficiary ", addrLink(p.beneficiary)),
@@ -1390,7 +1392,7 @@ function viewNew({ quiet }) {
 
   // the quick start: an IMD launch number, optionally a repo and a roadmap, becomes a draft pledge
   const qs = {
-    launch: h("input", { placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 2185", inputmode: "numeric" }),
+    launch: h("input", { placeholder: config.vibeFactories.length ? "e.g. 7836" : "e.g. 2185", inputmode: "numeric" }),
     repo: h("input", { placeholder: "owner/repo of your product (optional)", spellcheck: "false" }),
     roadmap: h("textarea", { rows: "4", placeholder: "Your roadmap, one promise per line (optional)\nMobile app\nMainnet\nPartnerships page" }),
     total: h("input", { type: "number", min: "0", step: "any", placeholder: "e.g. 100000000" }),
@@ -1570,7 +1572,7 @@ const nextTag = (tag) => {
  * page milestone per roadmap line, deadlines spread over `months` and tokens split evenly.
  */
 async function draftFromLaunch(n, opts) {
-  if (config.vibeFactory) {
+  if (config.vibeFactories.length) {
     const v = await vibeLaunch(n);
     if (!v.graduated) throw new Error(`vibe/vibe launch #${n} hasn't graduated yet. vibe/vibe locks its token until then, so the vault can't take it. Draft it again once it graduates.`);
     return draftFrom(n, getAddress(v.token), opts);
@@ -2414,7 +2416,7 @@ function graveRow(m, p, hist, pending = false) {
 
 /** The page linked from every outreach DM: what KEPT does for a team, our own record as proof, one step to start. */
 function viewTeams({ quiet }) {
-  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 1033", "aria-label": `Your ${LAUNCHPAD} launch number`, id: "teams-launch" });
+  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: config.vibeFactories.length ? "e.g. 7836" : "e.g. 1033", "aria-label": `Your ${LAUNCHPAD} launch number`, id: "teams-launch" });
   const start = (e) => {
     e?.preventDefault();
     const n = launchIn.value.trim();
@@ -2520,6 +2522,36 @@ function viewTeams({ quiet }) {
   );
 }
 
+// ------------------------------------------------------------------ the record (check.js)
+
+function viewCheckHome({ quiet }) {
+  const examples = [
+    { q: "0x0a272E5eE3F48c668ccF30E65E7738099AE0a1DE", label: "$SCOUT" },
+    { q: "7836", label: "launch #7836" },
+  ];
+  paint("/", () => h("section", { class: "wrap" }, checkHome({ examples }), pledgeTeaser()), { quiet });
+}
+
+function viewCheck(q, { quiet }) {
+  const token = navToken;
+  checkPage(q, (content, done) => {
+    if (token !== navToken) return;
+    paint("/", () => h("section", { class: "wrap" }, content), { quiet: quiet || done });
+  });
+}
+
+/** Below the record: the other half of KEPT, teams that lock their own tokens. */
+function pledgeTeaser() {
+  return reveal(
+    h(
+      "section",
+      { class: "teaser" },
+      h("div", {}, h("span", { class: "eyebrow" }, h("span", { class: "lamp ok" }), "For teams with nothing to hide"), h("h2", { class: "display-s" }, "Put your tokens where your roadmap is."), h("p", { class: "muted" }, "Lock part of your supply behind public milestones. The IMD swarm checks each one at its deadline. Kept, it unlocks to you. Missed, it burns. Your record follows your wallet.")),
+      h("div", { class: "chips" }, magnetic(h("a", { class: "btn primary", href: link("/new") }, "Make a pledge", icon("arrow", 16))), h("a", { class: "btn", href: link("/pledges") }, "See every pledge")),
+    ),
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -2539,7 +2571,10 @@ function route({ quiet = false } = {}) {
   if (path === "/teams") return viewTeams({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
-  return viewHome({ quiet });
+  if (path === "/pledges") return viewHome({ quiet });
+  const c = path.match(/^\/check\/(.+)$/);
+  if (c) return viewCheck(decodeURIComponent(c[1]), { quiet });
+  return viewCheckHome({ quiet });
 }
 
 shell();

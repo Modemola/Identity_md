@@ -1,0 +1,70 @@
+# KEPT records: who is behind a token
+
+Bad actors never lock tokens behind promises. So KEPT also keeps a record of every launcher, whether they opt in or not: what the wallet behind a token did with every launch before this one.
+
+Today the record covers **every vibe/vibe launch** on Robinhood Chain testnet, on both of vibe/vibe's factories. Open https://keptmd.vercel.app, paste a token, a wallet or a launch number, and press Check.
+
+## What the record shows
+
+Facts read from vibe/vibe's public event logs, per launch:
+
+| fact | from |
+| --- | --- |
+| who launched it | the factory's `Launched` event (`creator`) |
+| whether it graduated | the pool's `Graduated` event |
+| how many buys and how much buyers put in | the pool's `LaunchBuy` and `Buy` events, excluding the launcher |
+| what the launcher bought and sold on its own curve | the same events where the buyer or seller is the launcher |
+| how soon after launch the launcher first sold | the launcher's first `Sell`, timed from the launch block |
+
+Per launcher, these add up to:
+- launches and how many graduated
+- how many launches it sold into, and how many within an hour of launching
+- ETH in and ETH out on its own launches, and what buyers put in
+
+Amounts are summed for ETH-paired launches only. Launches paired with another token are counted, but their amounts aren't added to ETH.
+
+## The colour of a record
+
+The colour is a rule, not an opinion. Anyone can check it against the numbers on the page:
+
+| colour | rule |
+| --- | --- |
+| **red**: "Sells into its own launches fast" | the launcher sold into its own launch within 60 minutes of launching, on at least 2 launches or at least a quarter of them (or its only launch) |
+| **amber**: "Has sold into its own launches" | it sold into at least one of its own launches, but not that fast that often |
+| **green**: "No sells into its own launches" | it never sold into its own launches, across two launches or more |
+| **grey**: "First launch, no sells yet" | its only launch, with no sells so far: no history to go on yet |
+
+KEPT doesn't call anyone a scammer. The record states what the chain shows, and the page says so.
+
+**A green record isn't a promise.** A launcher can use a fresh wallet. Teams that want to prove themselves lock tokens behind milestones on KEPT, and those pledges show on their record.
+
+## For launch pages and apps
+
+**Badge**, 20 px, in the record's colour:
+```html
+<img src="https://keptmd.vercel.app/api/record?q=0x…&format=svg" alt="KEPT record">
+```
+
+**JSON**, at `https://keptmd.vercel.app/api/record?q=…`. The `q` can be a token, a wallet or a vibe/vibe launch number. The response includes:
+- `launcher`: the summary, the facts as sentences, the colour, and the newest 50 launches in full
+- `matches`: the launches the query named. A launch number can exist on both factories; the current factory comes first.
+- `kept`: the wallet's KEPT pledges and score, on every network
+- `rule`: the colour rule, in words
+
+**Totals and the fastest exits**: `https://keptmd.vercel.app/api/record?view=top`.
+
+## How it stays current
+
+`scripts/records/indexer.mjs` reads new launches, trades and graduations from both factories, in as few RPC calls as the testnet allows. A GitHub Action (`.github/workflows/records.yml`) runs it every hour and publishes small JSON files to the repo's `data` branch:
+- `creators/xx.json`: launcher records, split by address
+- `tokens/xx.json`: token to launch
+- `ids/f-n.json`: launch number to token
+- `meta.json`: totals, block times and the ranking
+
+The API reads one small file per lookup. Vercel ignores the `data` branch, so the hourly update never triggers a deploy.
+
+To run it yourself:
+```sh
+node scripts/records/indexer.mjs ./records-data
+```
+The first run reads every launch since vibe/vibe began and takes about half an hour. Later runs read only the new blocks.
