@@ -49,6 +49,7 @@ export const NETWORKS = {
     marketsFrom: 0,
     vault2: "0x2e46f4bdddc8664982b2266462d70c056cdf7ee2", // KeptVaultV2 with the test kit (scripts/testnet)
     vault2From: 152827842,
+    bond: "", // KeptBond (docs/BONDS.md): fill in after `node deploy-bond.mjs`
     testOracle: true,
     // vibe/vibe's launch factories, newest first, with the block of each one's first launch. Launch
     // numbers restart at 1 on each, so the quick start tries the current factory first
@@ -91,6 +92,8 @@ export const config = {
   marketsFrom: BigInt(pick("marketsFrom", n.marketsFrom || n.fromBlock)),
   vault2: pick("vault2", n.vault2),
   vault2From: BigInt(pick("vault2From", n.vault2From || n.fromBlock)),
+  // KeptBond: ETH behind v2 milestones, paid to holders when a promise breaks
+  bond: pick("bond", n.bond || ""),
   // verdicts are signed by KEPT's test key, not the IMD swarm: the site says so on every page
   testOracle: Boolean(n.testOracle),
   vibeFactories: (n.vibeFactories || []).map((f) => ({ address: f.address, from: BigInt(f.from) })),
@@ -112,6 +115,9 @@ export const v2Live = isAddr(config.vault2);
 export const mainVault = v1Live ? config.vault : config.vault2;
 /** The vault that holds pledge `id`. */
 export const vaultOf = (id) => (Number(id) >= FIRST_V2 ? config.vault2 : config.vault);
+
+/** KEPT bonds are live on this network (they back KeptVault v2 milestones). */
+export const bondLive = v2Live && isAddr(config.bond);
 
 /** Will they ship? markets are live on this network. */
 export const marketsLive = deployed && isAddr(config.markets);

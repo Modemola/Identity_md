@@ -1,6 +1,6 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v1Live, v2Live, mainVault } from "./config.js";
+import { config, deployed, marketsLive, bondLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v1Live, v2Live, mainVault } from "./config.js";
 
 import {
   client,
@@ -15,6 +15,8 @@ import {
   getAllMarkets,
   tokenInfo,
   vibeLaunch,
+  getBond,
+  bondAbi,
   getPledges,
   getPledge,
   getConstants,
@@ -754,7 +756,8 @@ function timeline(items, { start, grace, onPick, compact = false }) {
         "button",
         {
           type: "button",
-          class: `tl-node ${m.cls}`,
+          // a node near either end opens its tooltip inward, so the hidden tooltip never widens the page
+          class: `tl-node ${m.cls}${at(m.deadline) > 70 ? " tip-end" : at(m.deadline) < 30 ? " tip-start" : ""}`,
           style: { left: `${at(m.deadline)}%`, "--i": i },
           "data-tip": `${m.title || "Untitled"} · ${dateOf(m.deadline)}`,
           "aria-label": `Milestone ${m.index + 1}: ${m.title || "untitled"}, due ${dateOf(m.deadline)}`,
@@ -891,7 +894,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
         historyEl,
         actions.length ? h("div", { class: "actions" }, actions) : null,
         // markets read the v1 vault for now (KeptMarkets takes one vault at deploy)
-        p.id < FIRST_V2 ? marketPanel(p, m, c) : null,
+        p.id < FIRST_V2 ? marketPanel(p, m, c) : bondPanel(p, m),
       ),
       h(
         "div",
@@ -1088,6 +1091,131 @@ function marketBar(yes, no) {
 const wouldPay = (stake, mine, theirs) => (stake && mine ? stake + (stake * (theirs - (theirs * 200n) / 10_000n)) / mine : 0n);
 
 /** "Will they ship?": the market on one milestone. Loads on its own; hidden where it has nothing to show. */
+// ------------------------------------------------------------------ bonds (KeptBond, docs/BONDS.md)
+
+const AUCTION_MAX = 30n * 86400n;
+
+/** ETH behind a milestone: posted before the deadline, back on a kept verdict, and on a broken one
+ *  it buys the token from holders, who sell into a rising bid, and burns it. */
+function bondPanel(p, m) {
+  if (!bondLive) return null;
+  const el = h("div", { class: "market bond", "aria-busy": "true" }, h("div", { class: "sk sk-line w60" }));
+  const acct = currentAccount();
+  getBond(p.id, m.index, { maxAge: 10_000, who: acct })
+    .then((b) => {
+      el.removeAttribute("aria-busy");
+      const body = bondBody(p, m, b, acct);
+      if (!body) return el.remove();
+      el.replaceChildren(...body);
+    })
+    .catch(() => el.replaceChildren(h("div", { class: "muted fine" }, "Bond unavailable right now.")));
+  return el;
+}
+
+function bondBody(p, m, b, acct) {
+  const t = p.tokenInfo;
+  const sym = `$${t.symbol}`;
+  const keys = [`bond:${p.id}:${m.index}:${acct || "-"}`, `pledge:${p.id}`];
+  const open = m.outcome === 0 && now() <= m.deadline;
+  if (!b.total && !open) return null;
+  const call = (functionName, args, value) => ({ address: config.bond, abi: bondAbi, functionName, args, value });
+  const auctionOn = b.price > 0n;
+  const chip = !b.resolved
+    ? b.total
+      ? h("span", { class: "chip open" }, h("span", { class: "lamp open" }), "bonded")
+      : h("span", { class: "chip kind" }, "no bond yet")
+    : auctionOn
+      ? h("span", { class: "chip broken" }, h("span", { class: "lamp broken blink" }), "buying back")
+      : b.forfeit > 0n
+        ? h("span", { class: "chip kind" }, "auction ended")
+        : h("span", { class: "chip kept" }, h("span", { class: "lamp kept" }), "returned");
+  const out = [
+    h("div", { class: "mk-head" }, h("span", { class: "mk-title" }, "ETH bond"), chip, h("span", { class: "muted mk-pot tnum" }, `${fmt(b.total, 18, 4)} ETH posted`)),
+  ];
+  const actions = [];
+  if (!b.resolved) {
+    out.push(h("p", { class: "muted fine mk-fine" }, `ETH behind this promise. Kept: it goes back to whoever posted it. Broken: it buys ${sym} from holders and burns it.`));
+    if (b.posted) out.push(h("div", { class: "mk-mine" }, `You posted ${fmt(b.posted, 18, 4)} ETH.`));
+    if (open) actions.push(bondForm(p, m, keys, call));
+    else if (m.outcome !== 0)
+      actions.push(h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Apply the verdict to the bond", one(call("resolve", [BigInt(p.id), m.index])), keys) }, "Apply the verdict"));
+    else out.push(h("span", { class: "note" }, "Waiting for the verdict. Once it lands, anyone can apply it to the bond."));
+  } else {
+    const said =
+      b.shareBps === 10_000
+        ? "Kept: the whole bond goes back to whoever posted it."
+        : b.shareBps === 0
+          ? `Broken: the whole bond buys ${sym} from holders and burns it.`
+          : `Partly kept: ${b.shareBps / 100}% goes back to whoever posted it, the rest buys ${sym} from holders and burns it.`;
+    out.push(h("p", { class: "muted fine mk-fine" }, said));
+    if (b.refund > 0n) actions.push(h("button", { class: "btn small primary", onclick: (e) => onchain(e.currentTarget, "Take your bond back", one(call("refund", [BigInt(p.id), m.index])), keys) }, icon("check", 15), `Take back ${fmt(b.refund, 18, 4)} ETH`));
+    if (auctionOn) {
+      // the bid in ETH per whole token, and what is left to spend
+      const perToken = (b.price * 10n ** BigInt(t.decimals)) / 10n ** 18n;
+      out.push(
+        h("div", { class: "mk-sides tnum" }, h("span", { class: "broken" }, `Bid ${fmt(perToken, 18, 10)} ETH per ${sym}, rising`), h("span", {}, `${fmt(b.forfeit, 18, 4)} ETH left to spend`)),
+      );
+      actions.push(sellForm(p, m, b, keys, call));
+    } else if (b.forfeit > 0n && b.auctionStart > 0n && now() > b.auctionStart + AUCTION_MAX) {
+      actions.push(h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Send the leftover", one(call("sweep", [BigInt(p.id), m.index])), keys) }, "Send the unsold ETH on"));
+    }
+  }
+  if (actions.length) out.push(h("div", { class: "actions" }, actions));
+  return out;
+}
+
+function bondForm(p, m, keys, call) {
+  const input = h("input", { type: "number", min: "0.001", step: "0.01", value: "0.1", "aria-label": "ETH to bond" });
+  const post = async (button) => {
+    let value;
+    try {
+      value = parseUnits(input.value || "0", 18);
+    } catch {
+      return toast("Enter an amount of ETH.", "alarm");
+    }
+    if (value < 10n ** 15n) return toast("The smallest bond is 0.001 ETH.", "alarm");
+    await onchain(button, "Post a bond", [{ label: `Post ${fmt(value, 18, 4)} ETH behind "${m.title}"`, run: (ph) => send(call("bond", [BigInt(p.id), m.index], value), ph) }], keys);
+  };
+  return h("div", { class: "bet" }, input, h("span", { class: "muted" }, "ETH"), h("button", { class: "btn small primary", onclick: (e) => post(e.currentTarget) }, "Post a bond"), h("span", { class: "note" }, "It can't be withdrawn: only the verdict releases it."));
+}
+
+function sellForm(p, m, b, keys, call) {
+  const t = p.tokenInfo;
+  const input = h("input", { type: "number", min: "0", step: "any", placeholder: "Amount", "aria-label": `${t.symbol} to sell` });
+  const quote = h("span", { class: "muted tnum" });
+  const amountOf = () => {
+    try {
+      return parseUnits(input.value || "0", t.decimals);
+    } catch {
+      return 0n;
+    }
+  };
+  const ethFor = (amount) => {
+    const e = (amount * b.price) / 10n ** 18n;
+    return e > b.forfeit ? b.forfeit : e;
+  };
+  input.addEventListener("input", () => (quote.textContent = amountOf() ? `about ${fmt(ethFor(amountOf()), 18, 6)} ETH` : ""));
+  const sell = async (button) => {
+    const amount = amountOf();
+    if (!amount) return toast(`Enter an amount of ${t.symbol}.`, "alarm");
+    const acct = currentAccount() || (await connect());
+    const have = await balanceOf(p.token, acct);
+    if (have < amount) return toast(`You hold ${fmt(have, t.decimals)} ${t.symbol}.`, "alarm");
+    // the bid only rises, so the quote now is a safe floor; 1% covers a re-read between blocks
+    const minEth = (ethFor(amount) * 99n) / 100n;
+    await onchain(
+      button,
+      `Sell ${t.symbol} to the bond`,
+      [
+        { label: `Allow the bond to take the ${t.symbol}`, run: async (ph) => ((await needsAllowance(p.token, config.bond, amount)) ? ensureAllowance(p.token, config.bond, amount, ph) : null) },
+        { label: `Sell ${fmt(amount, t.decimals)} ${t.symbol} for about ${fmt(ethFor(amount), 18, 6)} ETH`, run: (ph) => send(call("sell", [BigInt(p.id), m.index, amount, minEth]), ph) },
+      ],
+      keys,
+    );
+  };
+  return h("div", { class: "bet" }, input, h("span", { class: "muted" }, t.symbol), h("button", { class: "btn small primary", onclick: (e) => sell(e.currentTarget) }, "Sell to the bond"), quote, h("span", { class: "note" }, "The bid doubles every hour until holders sell. Every token sold is burned."));
+}
+
 function marketPanel(p, m, c) {
   if (!marketsLive) return null;
   const el = h("div", { class: "market", "aria-busy": "true" }, h("div", { class: "sk sk-line w60" }));
