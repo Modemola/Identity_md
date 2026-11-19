@@ -32,10 +32,20 @@ Only public event logs; no vibe/vibe contract is called and nothing needs to cha
 
 | what | where | used for |
 | --- | --- | --- |
-| `Launched(uint256 indexed id, address indexed creator, address indexed token, ...)`, topic `0xa7e8032b…f5c8` | factory `0xe794217880011f9ca6961340ed5c16ec9559fea0`, from block 126,079,564 | "Draft my pledge" from a launch number: `id` finds the launch, `token` is what gets locked, the first data word is the pool |
-| `Graduated(bytes32 indexed dexPool)`, topic `0xab164bba…b2ae` | the launch's pool | whether the token can be locked yet (below) |
+| `Launched(uint256 indexed id, address indexed creator, address indexed token, ...)`, topic `0xa7e8032b…f5c8` | factories `0xac135da186de8325047ef2afd1d16d5971f731f7` (current, from block 149,444,416) and `0xe794217880011f9ca6961340ed5c16ec9559fea0` (the first, from block 126,079,564) | the launcher record, and "Draft my pledge" from a launch number. Launch numbers restart at 1 on the current factory, so KEPT tries it first. |
+| `Graduated(bytes32 indexed dexPool)`, topic `0xab164bba…b2ae` | the launch's pool | the record, and whether the token can be locked yet (below) |
+| `LaunchBuy`, `Buy`, `Sell` | the launch's pool | the record: what buyers put in, and what the launcher bought and sold on its own curve |
 
 A team types its launch number (e.g. 8422 for $SCOUT) and KEPT drafts the pledge: the token, a release milestone from the team's repo, and one milestone per roadmap line. The team reviews every field before signing.
+
+## The launcher record
+
+Every vibe/vibe launch already has a KEPT record, with no opt-in: what the wallet behind it did with its other launches. That covers launches, graduations, and how soon after launching it sold into its own buyers. Pages: `https://keptmd.vercel.app/#/check/<token, wallet or launch number>`. The rule behind each colour and the API are in [RECORDS.md](RECORDS.md).
+
+On a launch page, the record badge tells buyers what they're buying into:
+```html
+<img src="https://keptmd.vercel.app/api/record?q=0x…&format=svg" alt="KEPT record">
+```
 
 ## For your launch pages
 

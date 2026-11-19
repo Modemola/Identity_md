@@ -1,6 +1,6 @@
 import "./styles.css";
 import { parseUnits, isAddress, getAddress, parseEventLogs } from "viem";
-import { config, deployed, marketsLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v1Live, v2Live, mainVault } from "./config.js";
+import { config, deployed, marketsLive, bondLive, LIVE, NETWORKS, networkFor, netQuery, setNetwork, FIRST_V2, v1Live, v2Live, mainVault } from "./config.js";
 
 import {
   client,
@@ -15,6 +15,8 @@ import {
   getAllMarkets,
   tokenInfo,
   vibeLaunch,
+  getBond,
+  bondAbi,
   getPledges,
   getPledge,
   getConstants,
@@ -41,11 +43,12 @@ import { h, fill, link, short, addrLink, now, fmt, when, span, IMD_DECIMALS } fr
 import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, tilt, liveInterval, setInstant, canTransition, reduced } from "./fx.js";
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
+import { checkHome, checkPage, liveFeed } from "./check.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
 
 /** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
 /** Whose launch numbers the quick start reads: vibe/vibe's on its testnet, IMD's elsewhere. */
-const LAUNCHPAD = config.vibeFactory ? "vibe/vibe" : "IMD";
+const LAUNCHPAD = config.vibeFactories.length ? "vibe/vibe" : "IMD";
 const SWARM = config.testOracle ? "KEPT's test oracle" : "the IMD swarm";
 
 initTheme();
@@ -94,12 +97,11 @@ const tally = (pledges) => {
 // ------------------------------------------------------------------ the shell (built once, never re-rendered)
 
 const NAV = [
-  ["/", "Pledges"],
+  ["/", "Check"],
+  ["/pledges", "Pledges"],
   ["/board", "Board"],
-  ["/new", "Make a pledge"],
-  ["/referee", "Referee Fund"],
-  ["/how", "How it works"],
   ["/teams", "For teams"],
+  ["/how", "How it works"],
 ];
 const navLinks = NAV.map(([p, l]) => h("a", { href: link(p), "data-p": p }, l));
 const navInd = h("span", { class: "nav-ind", "aria-hidden": "true" });
@@ -129,7 +131,7 @@ function renderAccount(acct) {
 }
 
 const palette = commandPalette(() => [
-  ...NAV.map(([p, l]) => ({ path: p, label: l, hint: "page" })),
+  ...[...NAV, ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
   ...(cachedPledges() || []).map((p) => {
     const t = tally([p]);
     return { path: `/pledge/${p.id}`, label: p.name, hint: `#${p.id} · ${t.kept}/${p.count} kept`, tone: t.broken ? "broken" : t.kept === p.count ? "kept" : "open" };
@@ -171,6 +173,8 @@ function shell() {
         v1Live ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
         v2Live ? h("span", {}, "Vault v2 ", addrLink(config.vault2)) : null,
         config.hook ? h("span", {}, "Hook ", addrLink(config.hook)) : null,
+        h("a", { href: link("/referee") }, "Referee Fund"),
+        h("a", { href: link("/new") }, "Make a pledge"),
         h("a", { href: config.repo, target: "_blank", rel: "noopener" }, "Source"),
         h("a", { href: "https://imd.fun", target: "_blank", rel: "noopener" }, "IMD"),
       ),
@@ -421,7 +425,7 @@ function viewHome({ quiet }) {
   };
 
   paint(
-    "/",
+    "/pledges",
     () =>
       h(
         "section",
@@ -579,7 +583,7 @@ const step = (n, ic, t, p) => tilt(spotlight(h("div", { class: "step" }, h("div"
 
 function viewPledge(id, { quiet }) {
   const token = navToken;
-  if (!deployed) return paint("/", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/") }, "← All pledges"), notLive()), { quiet });
+  if (!deployed) return paint("/pledges", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/pledges") }, "← All pledges"), notLive()), { quiet });
 
   let lastSig = null;
   let skeleton = false;
@@ -587,7 +591,7 @@ function viewPledge(id, { quiet }) {
     const s = sig([p, c, currentAccount()]);
     if (s === lastSig) return;
     lastSig = s;
-    paint("/", () => pledgeContent(p, c), { quiet: quietDraw });
+    paint("/pledges", () => pledgeContent(p, c), { quiet: quietDraw });
     const hist = cachedHistory(id);
     if (hist) fillHistory(hist);
   };
@@ -595,7 +599,7 @@ function viewPledge(id, { quiet }) {
   const p0 = cachedPledge(id);
   const c0 = cachedConstants();
   if (p0 && c0) draw(p0, c0, quiet);
-  else (skeleton = true), paint("/", () => pledgeSkeleton(id), { quiet });
+  else (skeleton = true), paint("/pledges", () => pledgeSkeleton(id), { quiet });
 
   const refresh = (maxAge) =>
     Promise.all([getPledge(id, { maxAge }), getConstants({ maxAge: Math.max(maxAge, 30_000) })])
@@ -603,7 +607,7 @@ function viewPledge(id, { quiet }) {
       .then(([p, c]) => token === navToken && draw(p, c, lastSig !== null || (quiet && !skeleton)))
       .catch(() => {
         if (token !== navToken || lastSig) return;
-        paint("/", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/") }, "← All pledges"), h("div", { class: "empty" }, `Pledge #${id} not found.`)), { quiet: true });
+        paint("/pledges", () => h("section", { class: "wrap" }, h("a", { class: "back", href: link("/pledges") }, "← All pledges"), h("div", { class: "empty" }, `Pledge #${id} not found.`)), { quiet: true });
       });
   const history = (maxAge) =>
     getHistory(id, { maxAge })
@@ -619,7 +623,7 @@ function pledgeSkeleton(id) {
   return h(
     "section",
     { class: "wrap" },
-    h("a", { class: "back", href: link("/") }, "← All pledges"),
+    h("a", { class: "back", href: link("/pledges") }, "← All pledges"),
     h("div", { class: "label", style: { marginTop: "22px" } }, `Pledge #${id}`),
     h("div", { class: "sk sk-title" }),
     h("div", { class: "sk sk-line w40" }),
@@ -655,7 +659,7 @@ function pledgeContent(p, c) {
   return h(
     "section",
     { class: "wrap" },
-    h("a", { class: "back", href: link("/") }, "← All pledges"),
+    h("a", { class: "back", href: link("/pledges") }, "← All pledges"),
     h("div", { class: "label", style: { marginTop: "22px" } }, `Pledge #${p.id} · locks ${p.tokenInfo.symbol}`),
     title,
     h("div", { class: "muted meta-line" }, "Token ", addrLink(p.token), " · created ", when(p.createdAt), " by ", addrLink(p.creator), " · beneficiary ", addrLink(p.beneficiary)),
@@ -752,7 +756,8 @@ function timeline(items, { start, grace, onPick, compact = false }) {
         "button",
         {
           type: "button",
-          class: `tl-node ${m.cls}`,
+          // a node near either end opens its tooltip inward, so the hidden tooltip never widens the page
+          class: `tl-node ${m.cls}${at(m.deadline) > 70 ? " tip-end" : at(m.deadline) < 30 ? " tip-start" : ""}`,
           style: { left: `${at(m.deadline)}%`, "--i": i },
           "data-tip": `${m.title || "Untitled"} · ${dateOf(m.deadline)}`,
           "aria-label": `Milestone ${m.index + 1}: ${m.title || "untitled"}, due ${dateOf(m.deadline)}`,
@@ -889,7 +894,7 @@ function milestoneRow(p, m, c, total, isBeneficiary, historyEl) {
         historyEl,
         actions.length ? h("div", { class: "actions" }, actions) : null,
         // markets read the v1 vault for now (KeptMarkets takes one vault at deploy)
-        p.id < FIRST_V2 ? marketPanel(p, m, c) : null,
+        p.id < FIRST_V2 ? marketPanel(p, m, c) : bondPanel(p, m),
       ),
       h(
         "div",
@@ -1086,6 +1091,131 @@ function marketBar(yes, no) {
 const wouldPay = (stake, mine, theirs) => (stake && mine ? stake + (stake * (theirs - (theirs * 200n) / 10_000n)) / mine : 0n);
 
 /** "Will they ship?": the market on one milestone. Loads on its own; hidden where it has nothing to show. */
+// ------------------------------------------------------------------ bonds (KeptBond, docs/BONDS.md)
+
+const AUCTION_MAX = 30n * 86400n;
+
+/** ETH behind a milestone: posted before the deadline, back on a kept verdict, and on a broken one
+ *  it buys the token from holders, who sell into a rising bid, and burns it. */
+function bondPanel(p, m) {
+  if (!bondLive) return null;
+  const el = h("div", { class: "market bond", "aria-busy": "true" }, h("div", { class: "sk sk-line w60" }));
+  const acct = currentAccount();
+  getBond(p.id, m.index, { maxAge: 10_000, who: acct })
+    .then((b) => {
+      el.removeAttribute("aria-busy");
+      const body = bondBody(p, m, b, acct);
+      if (!body) return el.remove();
+      el.replaceChildren(...body);
+    })
+    .catch(() => el.replaceChildren(h("div", { class: "muted fine" }, "Bond unavailable right now.")));
+  return el;
+}
+
+function bondBody(p, m, b, acct) {
+  const t = p.tokenInfo;
+  const sym = `$${t.symbol}`;
+  const keys = [`bond:${p.id}:${m.index}:${acct || "-"}`, `pledge:${p.id}`];
+  const open = m.outcome === 0 && now() <= m.deadline;
+  if (!b.total && !open) return null;
+  const call = (functionName, args, value) => ({ address: config.bond, abi: bondAbi, functionName, args, value });
+  const auctionOn = b.price > 0n;
+  const chip = !b.resolved
+    ? b.total
+      ? h("span", { class: "chip open" }, h("span", { class: "lamp open" }), "bonded")
+      : h("span", { class: "chip kind" }, "no bond yet")
+    : auctionOn
+      ? h("span", { class: "chip broken" }, h("span", { class: "lamp broken blink" }), "buying back")
+      : b.forfeit > 0n
+        ? h("span", { class: "chip kind" }, "auction ended")
+        : h("span", { class: "chip kept" }, h("span", { class: "lamp kept" }), "returned");
+  const out = [
+    h("div", { class: "mk-head" }, h("span", { class: "mk-title" }, "ETH bond"), chip, h("span", { class: "muted mk-pot tnum" }, `${fmt(b.total, 18, 4)} ETH posted`)),
+  ];
+  const actions = [];
+  if (!b.resolved) {
+    out.push(h("p", { class: "muted fine mk-fine" }, `ETH behind this promise. Kept: it goes back to whoever posted it. Broken: it buys ${sym} from holders and burns it.`));
+    if (b.posted) out.push(h("div", { class: "mk-mine" }, `You posted ${fmt(b.posted, 18, 4)} ETH.`));
+    if (open) actions.push(bondForm(p, m, keys, call));
+    else if (m.outcome !== 0)
+      actions.push(h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Apply the verdict to the bond", one(call("resolve", [BigInt(p.id), m.index])), keys) }, "Apply the verdict"));
+    else out.push(h("span", { class: "note" }, "Waiting for the verdict. Once it lands, anyone can apply it to the bond."));
+  } else {
+    const said =
+      b.shareBps === 10_000
+        ? "Kept: the whole bond goes back to whoever posted it."
+        : b.shareBps === 0
+          ? `Broken: the whole bond buys ${sym} from holders and burns it.`
+          : `Partly kept: ${b.shareBps / 100}% goes back to whoever posted it, the rest buys ${sym} from holders and burns it.`;
+    out.push(h("p", { class: "muted fine mk-fine" }, said));
+    if (b.refund > 0n) actions.push(h("button", { class: "btn small primary", onclick: (e) => onchain(e.currentTarget, "Take your bond back", one(call("refund", [BigInt(p.id), m.index])), keys) }, icon("check", 15), `Take back ${fmt(b.refund, 18, 4)} ETH`));
+    if (auctionOn) {
+      // the bid in ETH per whole token, and what is left to spend
+      const perToken = (b.price * 10n ** BigInt(t.decimals)) / 10n ** 18n;
+      out.push(
+        h("div", { class: "mk-sides tnum" }, h("span", { class: "broken" }, `Bid ${fmt(perToken, 18, 10)} ETH per ${sym}, rising`), h("span", {}, `${fmt(b.forfeit, 18, 4)} ETH left to spend`)),
+      );
+      actions.push(sellForm(p, m, b, keys, call));
+    } else if (b.forfeit > 0n && b.auctionStart > 0n && now() > b.auctionStart + AUCTION_MAX) {
+      actions.push(h("button", { class: "btn small", onclick: (e) => onchain(e.currentTarget, "Send the leftover", one(call("sweep", [BigInt(p.id), m.index])), keys) }, "Send the unsold ETH on"));
+    }
+  }
+  if (actions.length) out.push(h("div", { class: "actions" }, actions));
+  return out;
+}
+
+function bondForm(p, m, keys, call) {
+  const input = h("input", { type: "number", min: "0.001", step: "0.01", value: "0.1", "aria-label": "ETH to bond" });
+  const post = async (button) => {
+    let value;
+    try {
+      value = parseUnits(input.value || "0", 18);
+    } catch {
+      return toast("Enter an amount of ETH.", "alarm");
+    }
+    if (value < 10n ** 15n) return toast("The smallest bond is 0.001 ETH.", "alarm");
+    await onchain(button, "Post a bond", [{ label: `Post ${fmt(value, 18, 4)} ETH behind "${m.title}"`, run: (ph) => send(call("bond", [BigInt(p.id), m.index], value), ph) }], keys);
+  };
+  return h("div", { class: "bet" }, input, h("span", { class: "muted" }, "ETH"), h("button", { class: "btn small primary", onclick: (e) => post(e.currentTarget) }, "Post a bond"), h("span", { class: "note" }, "It can't be withdrawn: only the verdict releases it."));
+}
+
+function sellForm(p, m, b, keys, call) {
+  const t = p.tokenInfo;
+  const input = h("input", { type: "number", min: "0", step: "any", placeholder: "Amount", "aria-label": `${t.symbol} to sell` });
+  const quote = h("span", { class: "muted tnum" });
+  const amountOf = () => {
+    try {
+      return parseUnits(input.value || "0", t.decimals);
+    } catch {
+      return 0n;
+    }
+  };
+  const ethFor = (amount) => {
+    const e = (amount * b.price) / 10n ** 18n;
+    return e > b.forfeit ? b.forfeit : e;
+  };
+  input.addEventListener("input", () => (quote.textContent = amountOf() ? `about ${fmt(ethFor(amountOf()), 18, 6)} ETH` : ""));
+  const sell = async (button) => {
+    const amount = amountOf();
+    if (!amount) return toast(`Enter an amount of ${t.symbol}.`, "alarm");
+    const acct = currentAccount() || (await connect());
+    const have = await balanceOf(p.token, acct);
+    if (have < amount) return toast(`You hold ${fmt(have, t.decimals)} ${t.symbol}.`, "alarm");
+    // the bid only rises, so the quote now is a safe floor; 1% covers a re-read between blocks
+    const minEth = (ethFor(amount) * 99n) / 100n;
+    await onchain(
+      button,
+      `Sell ${t.symbol} to the bond`,
+      [
+        { label: `Allow the bond to take the ${t.symbol}`, run: async (ph) => ((await needsAllowance(p.token, config.bond, amount)) ? ensureAllowance(p.token, config.bond, amount, ph) : null) },
+        { label: `Sell ${fmt(amount, t.decimals)} ${t.symbol} for about ${fmt(ethFor(amount), 18, 6)} ETH`, run: (ph) => send(call("sell", [BigInt(p.id), m.index, amount, minEth]), ph) },
+      ],
+      keys,
+    );
+  };
+  return h("div", { class: "bet" }, input, h("span", { class: "muted" }, t.symbol), h("button", { class: "btn small primary", onclick: (e) => sell(e.currentTarget) }, "Sell to the bond"), quote, h("span", { class: "note" }, "The bid doubles every hour until holders sell. Every token sold is burned."));
+}
+
 function marketPanel(p, m, c) {
   if (!marketsLive) return null;
   const el = h("div", { class: "market", "aria-busy": "true" }, h("div", { class: "sk sk-line w60" }));
@@ -1390,7 +1520,7 @@ function viewNew({ quiet }) {
 
   // the quick start: an IMD launch number, optionally a repo and a roadmap, becomes a draft pledge
   const qs = {
-    launch: h("input", { placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 2185", inputmode: "numeric" }),
+    launch: h("input", { placeholder: config.vibeFactories.length ? "e.g. 7836" : "e.g. 2185", inputmode: "numeric" }),
     repo: h("input", { placeholder: "owner/repo of your product (optional)", spellcheck: "false" }),
     roadmap: h("textarea", { rows: "4", placeholder: "Your roadmap, one promise per line (optional)\nMobile app\nMainnet\nPartnerships page" }),
     total: h("input", { type: "number", min: "0", step: "any", placeholder: "e.g. 100000000" }),
@@ -1570,7 +1700,7 @@ const nextTag = (tag) => {
  * page milestone per roadmap line, deadlines spread over `months` and tokens split evenly.
  */
 async function draftFromLaunch(n, opts) {
-  if (config.vibeFactory) {
+  if (config.vibeFactories.length) {
     const v = await vibeLaunch(n);
     if (!v.graduated) throw new Error(`vibe/vibe launch #${n} hasn't graduated yet. vibe/vibe locks its token until then, so the vault can't take it. Draft it again once it graduates.`);
     return draftFrom(n, getAddress(v.token), opts);
@@ -2414,7 +2544,7 @@ function graveRow(m, p, hist, pending = false) {
 
 /** The page linked from every outreach DM: what KEPT does for a team, our own record as proof, one step to start. */
 function viewTeams({ quiet }) {
-  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: config.vibeFactory ? "e.g. 8422" : "e.g. 1033", "aria-label": `Your ${LAUNCHPAD} launch number`, id: "teams-launch" });
+  const launchIn = h("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: config.vibeFactories.length ? "e.g. 7836" : "e.g. 1033", "aria-label": `Your ${LAUNCHPAD} launch number`, id: "teams-launch" });
   const start = (e) => {
     e?.preventDefault();
     const n = launchIn.value.trim();
@@ -2520,6 +2650,38 @@ function viewTeams({ quiet }) {
   );
 }
 
+// ------------------------------------------------------------------ the record (check.js)
+
+function viewCheckHome({ quiet }) {
+  const examples = [
+    { q: "0x0a272E5eE3F48c668ccF30E65E7738099AE0a1DE", label: "$SCOUT" },
+    { q: "7836", label: "launch #7836" },
+  ];
+  const feed = liveFeed();
+  whileHere(feed.stop);
+  paint("/", () => h("section", { class: "wrap" }, checkHome({ examples, feed: feed.el }), pledgeTeaser()), { quiet });
+}
+
+function viewCheck(q, { quiet }) {
+  const token = navToken;
+  checkPage(q, (content, done) => {
+    if (token !== navToken) return;
+    paint("/", () => h("section", { class: "wrap" }, content), { quiet: quiet || done });
+  });
+}
+
+/** Below the record: the other half of KEPT, teams that lock their own tokens. */
+function pledgeTeaser() {
+  return reveal(
+    h(
+      "section",
+      { class: "teaser" },
+      h("div", {}, h("span", { class: "eyebrow" }, h("span", { class: "lamp ok" }), "For teams with nothing to hide"), h("h2", { class: "display-s" }, "Put your tokens where your roadmap is."), h("p", { class: "muted" }, "Lock part of your supply behind public milestones. The IMD swarm checks each one at its deadline. Kept, it unlocks to you. Missed, it burns. Your record follows your wallet.")),
+      h("div", { class: "chips" }, magnetic(h("a", { class: "btn primary", href: link("/new") }, "Make a pledge", icon("arrow", 16))), h("a", { class: "btn", href: link("/pledges") }, "See every pledge")),
+    ),
+  );
+}
+
 // ------------------------------------------------------------------ router
 
 let lastPath = null;
@@ -2539,7 +2701,10 @@ function route({ quiet = false } = {}) {
   if (path === "/teams") return viewTeams({ quiet });
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
-  return viewHome({ quiet });
+  if (path === "/pledges") return viewHome({ quiet });
+  const c = path.match(/^\/check\/(.+)$/);
+  if (c) return viewCheck(decodeURIComponent(c[1]), { quiet });
+  return viewCheckHome({ quiet });
 }
 
 shell();

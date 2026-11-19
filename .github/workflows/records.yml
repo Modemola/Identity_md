@@ -1,0 +1,47 @@
+# KEPT launcher records: reads new vibe/vibe launches, trades and graduations every hour and
+# publishes the index to the `data` branch, where /api/record reads it. Vercel ignores that branch.
+name: records
+
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: records
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: code
+      - name: Check out the data branch
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" data >/dev/null; then
+            git clone --depth 1 --branch data "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" data
+          else
+            mkdir data && cd data && git init -b data && git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Index
+        run: node code/scripts/records/indexer.mjs data/records/vibevibe-46630
+      - name: Publish
+        run: |
+          cd data
+          git config user.name "kept-records"
+          git config user.email "kept-records@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          # one commit only: history isn't needed and would grow by megabytes an hour
+          git commit -q -m "records at block $(node -e 'console.log(require("./records/vibevibe-46630/meta.json").block)')"
+          git reset --soft "$(git commit-tree HEAD^{tree} -m "KEPT launcher records, rebuilt hourly")"
+          git push -f origin data

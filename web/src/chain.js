@@ -10,8 +10,9 @@ import hookAbi from "./abi/KeptHook.json";
 import marketsAbi from "./abi/KeptMarkets.json";
 import vault2Abi from "./abi/KeptVaultV2.json";
 import questions2Abi from "./abi/KeptQuestionsV2.json";
+import bondAbi from "./abi/KeptBond.json";
 
-export { vaultAbi, vault2Abi, hookAbi, marketsAbi, erc20Abi };
+export { vaultAbi, vault2Abi, hookAbi, marketsAbi, erc20Abi, bondAbi };
 
 /** Address and ABI of the vault that holds pledge `id`, for reads and writes alike. */
 export const vaultCall = (id) => (Number(id) >= FIRST_V2 ? { address: config.vault2, abi: vault2Abi } : { address: config.vault, abi: vaultAbi });
@@ -242,12 +243,15 @@ async function rawLogs(filter, from, { first = false } = {}) {
  * whether the pool has graduated. vibe/vibe locks a token's transfers until it graduates.
  */
 export async function vibeLaunch(n) {
-  if (!config.vibeFactory) throw new Error("vibe/vibe isn't on this network.");
-  const [l] = await rawLogs({ address: config.vibeFactory, topics: [VV_LAUNCHED, word(n)] }, config.vibeFrom, { first: true });
-  if (!l) throw new Error(`vibe/vibe launch #${n} not found.`);
-  const pool = getAddress(`0x${l.data.slice(26, 66)}`);
-  const grad = await rawLogs({ address: pool, topics: [VV_GRADUATED] }, BigInt(l.blockNumber), { first: true });
-  return { id: n, creator: topicAddr(l.topics[2]), token: topicAddr(l.topics[3]), pool, graduated: grad.length > 0 };
+  if (!config.vibeFactories.length) throw new Error("vibe/vibe isn't on this network.");
+  for (const [i, f] of config.vibeFactories.entries()) {
+    const [l] = await rawLogs({ address: f.address, topics: [VV_LAUNCHED, word(n)] }, f.from, { first: true });
+    if (!l) continue;
+    const pool = getAddress(`0x${l.data.slice(26, 66)}`);
+    const grad = await rawLogs({ address: pool, topics: [VV_GRADUATED] }, BigInt(l.blockNumber), { first: true });
+    return { id: n, creator: topicAddr(l.topics[2]), token: topicAddr(l.topics[3]), pool, graduated: grad.length > 0, oldFactory: i > 0 };
+  }
+  throw new Error(`vibe/vibe launch #${n} not found.`);
 }
 
 // ------------------------------------------------------------------ events
@@ -351,6 +355,25 @@ export function getAllMarkets({ maxAge = 0 } = {}) {
   }, { maxAge });
 }
 
+// ------------------------------------------------------------------ bonds (KeptBond)
+
+async function loadBond(pledgeId, index, who) {
+  const id = BigInt(pledgeId);
+  const read = (functionName, args) => client.readContract({ address: config.bond, abi: bondAbi, functionName, args });
+  const [info, posted, refund] = await Promise.all([
+    read("bondInfo", [id, index]),
+    who ? read("bondOf", [id, index, who]) : 0n,
+    who ? read("refundOf", [id, index, who]) : 0n,
+  ]);
+  const [total, refundable, forfeit, startPrice, maxPrice, auctionStart, shareBps, resolved, price] = info;
+  return { total, refundable, forfeit, startPrice, maxPrice, auctionStart, shareBps: Number(shareBps), resolved, price, posted, refund };
+}
+
+/** One milestone's ETH bond, with the connected account's part of it. */
+export function getBond(pledgeId, index, { maxAge = 0, who = account } = {}) {
+  return load(`bond:${pledgeId}:${index}:${who || "-"}`, () => loadBond(pledgeId, index, who), { maxAge });
+}
+
 // ------------------------------------------------------------------ oracle
 
 /** The attestation's requestId is the oracle UUID's sixteen bytes, left-aligned. */
@@ -428,10 +451,10 @@ async function ensureChain() {
  * Simulates first (so reverts surface with their reason), then sends and waits.
  * `onPhase` hears "sign" (waiting on the wallet), "pending" (with the hash) and "confirmed".
  */
-export async function send({ address, abi, functionName, args = [] }, onPhase = () => {}) {
+export async function send({ address, abi, functionName, args = [], value }, onPhase = () => {}) {
   if (!account) await connect();
   await ensureChain();
-  const { request } = await client.simulateContract({ address, abi, functionName, args, account });
+  const { request } = await client.simulateContract({ address, abi, functionName, args, account, ...(value ? { value } : {}) });
   onPhase("sign");
   const hash = await writeContract(wallet, request);
   onPhase("pending", hash);

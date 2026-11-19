@@ -33,6 +33,15 @@ With `deployment.json` in hand:
 
 Before that, any page can be tried with `?net=vibevibe&vault2=0x…&vault2From=…`.
 
+## Bonds: ETH behind a promise
+
+```sh
+node deploy-bond.mjs --dry-run
+node deploy-bond.mjs
+```
+
+This deploys KeptBond beside the vault (about 0.002 testnet ETH). On every v2 pledge page, anyone can then post ETH behind a milestone. Kept, it goes back. Broken, it buys the token from holders and burns it. See [docs/BONDS.md](../../docs/BONDS.md).
+
 ## Answer checks: the test oracle desk
 
 ```sh
