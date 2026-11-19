@@ -9,6 +9,11 @@ import { config } from "./config.js";
 
 const HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
+const MAINNET_EXPLORER = "https://robin.etherscan.io";
+/** Records come from two sources: vibe/vibe on the testnet, IMD launches on Robinhood mainnet. */
+const SOURCE = config.net === "vibevibe" ? "vibevibe" : "imd";
+const SOURCE_NAME = { vibevibe: "vibe/vibe", imd: "IMD" };
+const explorerOf = (source) => (source === "imd" ? MAINNET_EXPLORER : EXPLORER);
 
 const getJSON = (url, key, maxAge) =>
   load(
@@ -21,8 +26,41 @@ const getJSON = (url, key, maxAge) =>
     },
     { maxAge },
   );
-export const getRecord = (q) => getJSON(`${HOST}/api/record?q=${encodeURIComponent(q)}`, `record:${q.toLowerCase()}`, 120_000);
+// the network you're on decides which source a launch number means first
+export const getRecord = (q) => getJSON(`${HOST}/api/record?q=${encodeURIComponent(q)}&source=${SOURCE}`, `record:${SOURCE}:${q.toLowerCase()}`, 120_000);
 export const getTop = () => getJSON(`${HOST}/api/record?view=top&limit=12`, "record:top", 300_000);
+export const getImd = () => getJSON(`${HOST}/api/record?view=imd`, "record:imd", 300_000);
+
+/** IMD on Robinhood Chain: every launch whose launcher sold its own tokens into its pool. */
+function imdSection() {
+  const list = h("div", { class: "exit-board" }, ...Array.from({ length: 3 }, () => h("div", { class: "exit-row sk" })));
+  const sub = h("p", { class: "muted" }, "Real money on Robinhood Chain. Every IMD launch names the wallet that gets the team's share of the supply: here are the launches where that wallet sold it into the launch's own pool.");
+  const pct = (b) => `${(b / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}%`;
+  getImd()
+    .then((d) => {
+      sub.textContent = `Real money on Robinhood Chain. Of ${d.totals.launches} IMD launches that name a launcher wallet, ${d.totals.sold} saw that wallet sell its own tokens into the launch's pool, ${d.totals.fastExits} of them within an hour.`;
+      list.replaceChildren(
+        h("div", { class: "exit-row head imd-row" }, h("span", {}, "#"), h("span", {}, "Token"), h("span", {}, "Sold after"), h("span", { class: "hide-s" }, "Of its allocation"), h("span", { class: "hide-s" }, "Launcher"), h("span", {})),
+        ...d.sold.map((l, i) =>
+          reveal(
+            h(
+              "a",
+              { class: "exit-row imd-row", href: link(`/check/${l.token}`) },
+              h("span", { class: "n tnum" }, String(l.id)),
+              h("span", { class: "who" }, `$${l.symbol}`),
+              h("span", { class: `big tnum ${l.exitAfter !== null && l.exitAfter <= 3600 ? "alarm" : "caution"}` }, l.exitAfter === null ? "?" : ago(l.exitAfter)),
+              h("span", { class: "hide-s tnum" }, pct(l.soldBps)),
+              h("span", { class: "hide-s addr" }, short(l.launcher)),
+              icon("arrow", 16),
+            ),
+            Math.min(i, 8) * 40,
+          ),
+        ),
+      );
+    })
+    .catch(() => list.replaceChildren(h("div", { class: "empty" }, "The IMD record is updating. Try again in a minute.")));
+  return reveal(h("section", { class: "exit-sec" }, h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "IMD launchers who sold"), sub), list));
+}
 
 const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet" };
 const TONE_CLASS = { exits: "t-alarm", sold: "t-caution", clean: "t-ok", new: "t-new" };
@@ -40,7 +78,7 @@ function fmtEth(x) {
   if (x < 0.001) return "<0.001";
   return x.toLocaleString("en-US", { maximumFractionDigits: x < 1 ? 3 : 2 });
 }
-const ex = (kind, v) => h("a", { class: "addr", href: `${EXPLORER}/${kind}/${v}`, target: "_blank", rel: "noopener" }, short(v));
+const ex = (kind, v, source = "vibevibe") => h("a", { class: "addr", href: `${explorerOf(source)}/${kind}/${v}`, target: "_blank", rel: "noopener" }, short(v));
 
 /** The search box: a token, a wallet or a launch number. */
 export function searchBox({ value = "", big = false } = {}) {
@@ -228,7 +266,7 @@ export function checkHome({ examples, feed }) {
     h(
       "div",
       { class: "check-hero" },
-      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Live record · every vibe/vibe launch"),
+      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Live record · every vibe/vibe and IMD launch"),
       h("h1", { class: "display" }, words("Check before you buy.", { delay: 80, accent: ["buy."] })),
       h(
         "p",
@@ -242,18 +280,19 @@ export function checkHome({ examples, feed }) {
       h(
         "div",
         { class: "big-stats" },
-        h("div", {}, stats.launches, h("span", {}, "launches on record")),
+        h("div", {}, stats.launches, h("span", {}, "vibe/vibe launches on record")),
         h("div", { class: "alarm" }, stats.exiters, h("span", {}, "launchers sold into their own launch within an hour")),
         h("div", {}, stats.out, h("span", {}, "taken out by launchers selling their own tokens")),
-        h("div", {}, stats.graduated, h("span", {}, "of launches ever graduated")),
+        h("div", {}, stats.graduated, h("span", {}, "of vibe/vibe launches ever graduated")),
       ),
     ),
+    imdSection(),
     feed,
     reveal(
       h(
         "section",
         { class: "exit-sec" },
-        h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Fastest exits"), h("p", { class: "muted" }, "Launchers that most often sold into their own launch within an hour of creating it. Every number links to its record, and every record links to the chain."), updated),
+        h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Fastest exits on vibe/vibe"), h("p", { class: "muted" }, "Launchers that most often sold into their own launch within an hour of creating it. Every number links to its record, and every record links to the chain."), updated),
         board,
       ),
     ),
@@ -262,7 +301,59 @@ export function checkHome({ examples, feed }) {
 
 // ------------------------------------------------------------------ one record
 
-function launchCard(l, { lead = false } = {}) {
+/** Who holds the supply right now: launcher, launch pool, burned, everyone else. */
+function holdingsBar(hd, graduated, poolName = "Launch pool") {
+  const pct = (b) => `${(b / 100).toLocaleString("en-US", { maximumFractionDigits: b < 100 ? 2 : 1 })}%`;
+  const parts = [
+    ["launcher", "The launcher", hd.launcherBps],
+    ...(graduated ? [] : [["pool", poolName, hd.poolBps]]),
+    ["burned", "Burned", hd.burnedBps],
+    ["others", "Everyone else", graduated ? hd.othersBps + hd.poolBps : hd.othersBps],
+  ].filter(([, , b]) => b > 0);
+  return h(
+    "div",
+    { class: "hold" },
+    h("div", { class: "hold-head" }, h("span", { class: "label" }, "Who holds it now"), h("b", { class: hd.launcherBps >= 1000 ? "alarm" : "" }, `Launcher ${pct(hd.launcherBps)}`)),
+    h("div", { class: "hold-bar", role: "img", "aria-label": parts.map(([, t, b]) => `${t} ${pct(b)}`).join(", ") }, ...parts.map(([k, t, b]) => h("i", { class: `h-${k}`, style: { flexGrow: String(Math.max(b, 40)) }, title: `${t} ${pct(b)}` }))),
+    h("div", { class: "hold-keys" }, ...parts.map(([k, t, b]) => h("span", {}, h("i", { class: `h-${k}` }), `${t} ${pct(b)}`))),
+  );
+}
+
+/** An IMD launch: what the launcher did with the allocation it received. */
+function imdCard(l, { lead = false, hold = null } = {}) {
+  const pct = (b) => `${(b / 100).toLocaleString("en-US", { maximumFractionDigits: b < 100 ? 2 : 0 })}%`;
+  const exit = l.exitAfter !== null;
+  return h(
+    "div",
+    { class: `launch-card${lead ? " lead" : ""}${l.fast ? " fast" : ""}` },
+    h("div", { class: "lc-top" }, h("span", { class: "sym" }, `$${l.symbol || "?"}`), h("span", { class: "faint" }, l.name), h("span", { class: "spacer" }), h("span", { class: "chip kind" }, "IMD · Robinhood Chain")),
+    h(
+      "div",
+      { class: "lc-grid" },
+      h("div", {}, h("span", { class: "label" }, "Launch"), `#${l.id}`, h("small", { class: "faint" }, ` · ${l.kind.replace(/_/g, " ")}`)),
+      h("div", {}, h("span", { class: "label" }, "Launched"), when(l.launchedAt)),
+      h(
+        "div",
+        { class: l.fast ? "alarm" : exit ? "caution" : "ok" },
+        h("span", { class: "label" }, "Launcher sold into the pool"),
+        exit ? `${pct(l.soldBps)} of its allocation` : "never",
+        exit ? h("small", {}, `, first ${ago(l.exitAfter)} after launch`) : null,
+      ),
+      h(
+        "div",
+        { class: l.movedBps ? "caution" : "" },
+        h("span", { class: "label" }, "Moved to other wallets"),
+        l.movedBps ? `${pct(l.movedBps)} of its allocation` : "none",
+        l.liquidityBps ? h("small", { class: "ok" }, ` · added ${pct(l.liquidityBps)} as liquidity`) : null,
+      ),
+    ),
+    hold ? holdingsBar(hold, false, "Uniswap pool") : null,
+    h("div", { class: "lc-links" }, "Token ", ex("address", l.token, "imd"), l.repo ? [" · ", h("a", { class: "addr", href: l.repo, target: "_blank", rel: "noopener" }, "source repo")] : null),
+  );
+}
+
+function launchCard(l, { lead = false, hold = null } = {}) {
+  if (l.source === "imd") return imdCard(l, { lead, hold });
   const exit = l.exitAfter !== null;
   const fast = exit && l.exitAfter <= 3600;
   return h(
@@ -290,6 +381,7 @@ function launchCard(l, { lead = false } = {}) {
         exit && l.pairIsEth ? h("small", {}, ` · ${fmtEth(ethOf(l.creatorOut))} ETH out`) : null,
       ),
     ),
+    hold ? holdingsBar(hold, l.graduated) : null,
     h("div", { class: "lc-links" }, "Token ", ex("address", l.token), " · Pool ", ex("address", l.pool)),
   );
 }
@@ -305,7 +397,14 @@ export function checkResult(q, rec) {
           "div",
           { class: "banner" },
           h("span", { class: "lamp caution" }),
-          h("div", {}, h("b", {}, `Launch #${asked[0].id} exists on both vibe/vibe factories. `), "Showing the current factory. The first factory's #", String(asked[1].id), ": ", h("a", { href: link(`/check/${asked[1].token}`) }, short(asked[1].token)), "."),
+          h(
+            "div",
+            {},
+            h("b", {}, `Launch #${asked[0].id} names ${asked.length} launches. `),
+            `Showing ${SOURCE_NAME[asked[0].source]}${asked[0].source === "vibevibe" ? ` (${asked[0].factory})` : ""}. The others: `,
+            ...asked.slice(1).flatMap((m, i) => [i ? ", " : "", h("a", { href: link(`/check/${m.token}`) }, `${SOURCE_NAME[m.source]}${m.source === "vibevibe" && m.factory !== "vibe/vibe" ? " (first factory)" : ""} ${short(m.token)}`)]),
+            ".",
+          ),
         )
       : null,
   ];
@@ -316,15 +415,31 @@ export function checkResult(q, rec) {
         "div",
         { class: "verdict-panel none" },
         h("div", { class: "vp-word" }, "No launches on record"),
-        h("p", {}, /^0x/i.test(q) ? "This address hasn't launched a token on vibe/vibe, and isn't a vibe/vibe token. A wallet with no record isn't proven safe: it may be new, or launching from another wallet." : `No vibe/vibe launch #${q} on record yet.`),
+        h("p", {}, /^0x/i.test(q) ? "This address hasn't launched a token on vibe/vibe or IMD, and isn't a token from either. A wallet with no record isn't proven safe: it may be new, or launching from another wallet." : `No launch #${q} on record yet, on vibe/vibe or IMD.`),
       ),
     ];
   }
   const s = L.summary;
+  const imd = L.source === "imd";
   const tone = TONE_CLASS[L.tone];
   const share = `https://x.com/intent/post?text=${encodeURIComponent(
-    `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher: ${s.launches} launches, ${s.graduated} graduated, sold into ${s.fastExits} within an hour of launching.`,
-  )}&url=${encodeURIComponent(`https://keptmd.vercel.app/#/check/${q}`)}`;
+    imd
+      ? `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher on IMD: ${s.launches} launch${s.launches === 1 ? "" : "es"}, sold into its own pool on ${s.sold}, within an hour on ${s.fastExits}.`
+      : `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher: ${s.launches} launches, ${s.graduated} graduated, sold into ${s.fastExits} within an hour of launching.`,
+  )}&url=${encodeURIComponent(`https://keptmd.vercel.app/${SOURCE === "vibevibe" ? "?net=vibevibe" : ""}#/check/${q}`)}`;
+  const nums = imd
+    ? [
+        h("div", {}, h("b", { class: "tnum" }, String(s.launches)), h("span", {}, s.launches === 1 ? "IMD launch" : "IMD launches")),
+        h("div", { class: s.sold ? "alarm" : "" }, h("b", { class: "tnum" }, String(s.sold)), h("span", {}, "sold into its own pool")),
+        h("div", { class: s.fastExits ? "alarm" : "" }, h("b", { class: "tnum" }, String(s.fastExits)), h("span", {}, "sold within an hour")),
+        h("div", { class: s.moved ? "caution" : "" }, h("b", { class: "tnum" }, String(s.moved)), h("span", {}, "moved tokens to other wallets")),
+      ]
+    : [
+        h("div", {}, h("b", { class: "tnum" }, s.launches.toLocaleString("en-US")), h("span", {}, s.launches === 1 ? "launch" : "launches")),
+        h("div", {}, h("b", { class: "tnum" }, s.graduated.toLocaleString("en-US")), h("span", {}, "graduated")),
+        h("div", { class: s.fastExits ? "alarm" : "" }, h("b", { class: "tnum" }, s.fastExits.toLocaleString("en-US")), h("span", {}, "sold within an hour")),
+        h("div", { class: Number(s.creatorOutEth.replace(/[<,]/g, "")) > 0 ? "alarm" : "" }, h("b", { class: "tnum" }, s.creatorOutEth), h("span", {}, "ETH out to the launcher")),
+      ];
   const badge = `<img src="https://keptmd.vercel.app/api/record?q=${q}&format=svg" alt="KEPT record">`;
   return [
     ...head,
@@ -332,17 +447,10 @@ export function checkResult(q, rec) {
       h(
         "div",
         { class: `verdict-panel ${tone}` },
-        h("div", { class: "vp-kicker" }, lead ? `$${lead.symbol} · launch #${lead.id} · launched by ` : "Launcher ", h("a", { class: "addr", href: `${EXPLORER}/address/${L.address}`, target: "_blank", rel: "noopener" }, L.address)),
+        h("div", { class: "vp-kicker" }, `${imd ? "IMD on Robinhood Chain" : "vibe/vibe"} · `, lead ? `$${lead.symbol} · launch #${lead.id} · launched by ` : "Launcher ", h("a", { class: "addr", href: `${explorerOf(L.source)}/address/${L.address}`, target: "_blank", rel: "noopener" }, L.address)),
         h("div", { class: "vp-word" }, TONE_WORD[L.tone]),
-        h(
-          "div",
-          { class: "vp-nums" },
-          h("div", {}, h("b", { class: "tnum" }, s.launches.toLocaleString("en-US")), h("span", {}, s.launches === 1 ? "launch" : "launches")),
-          h("div", {}, h("b", { class: "tnum" }, s.graduated.toLocaleString("en-US")), h("span", {}, "graduated")),
-          h("div", { class: s.fastExits ? "alarm" : "" }, h("b", { class: "tnum" }, s.fastExits.toLocaleString("en-US")), h("span", {}, "sold within an hour")),
-          h("div", { class: Number(s.creatorOutEth.replace(/[<,]/g, "")) > 0 ? "alarm" : "" }, h("b", { class: "tnum" }, s.creatorOutEth), h("span", {}, "ETH out to the launcher")),
-        ),
-        h("ul", { class: "vp-facts" }, ...L.facts.map((f) => h("li", {}, f))),
+        h("div", { class: "vp-nums" }, ...nums),
+        h("ul", { class: "vp-facts" }, ...L.facts.map((f) => h("li", {}, f)), rec.alsoOn ? h("li", {}, `Also launched ${rec.alsoOn.launches} token${rec.alsoOn.launches === 1 ? "" : "s"} on ${SOURCE_NAME[rec.alsoOn.source]}${rec.alsoOn.fastExits ? `, selling into ${rec.alsoOn.fastExits} within an hour` : ""}.`) : null),
         h(
           "div",
           { class: "vp-actions" },
@@ -354,7 +462,7 @@ export function checkResult(q, rec) {
         ),
       ),
     ),
-    lead ? reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "This launch"), launchCard(lead, { lead: true }))) : null,
+    lead ? reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "This launch"), launchCard(lead, { lead: true, hold: rec.holdings }))) : null,
     rec.kept && rec.kept.pledges.length
       ? reveal(
           h(
@@ -374,7 +482,7 @@ export function checkResult(q, rec) {
         h("div", { class: "launch-list" }, ...L.recent.filter((l) => !lead || l.token !== lead.token).map((l, i) => reveal(launchCard(l), Math.min(i, 6) * 50))),
       ),
     ) : null,
-    h("p", { class: "fine muted check-rule" }, rec.rule, " Facts from vibe/vibe's public event logs on Robinhood Chain testnet. A clean record isn't a promise: a launcher can use a fresh wallet. ", h("a", { href: link("/teams") }, "Teams that want to prove themselves lock tokens on KEPT"), "."),
+    h("p", { class: "fine muted check-rule" }, rec.rule, imd ? " Facts from Robinhood Chain's public transfer logs: a sale is the launcher's own tokens going into the Uniswap pool in a swap; adding liquidity isn't counted. The launcher is the remainder wallet named in the launch's launch.json." : " Facts from vibe/vibe's public event logs on Robinhood Chain testnet.", " A clean record isn't a promise: a launcher can use a fresh wallet. ", h("a", { href: link("/teams") }, "Teams that want to prove themselves lock tokens on KEPT"), "."),
   ];
 }
 

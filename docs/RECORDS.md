@@ -2,7 +2,13 @@
 
 Bad actors never lock tokens behind promises. So KEPT also keeps a record of every launcher, whether they opt in or not: what the wallet behind a token did with every launch before this one.
 
-Today the record covers **every vibe/vibe launch** on Robinhood Chain testnet, on both of vibe/vibe's factories. Open https://keptmd.vercel.app, paste a token, a wallet or a launch number, and press Check.
+The record covers two launchpads:
+- **every vibe/vibe launch** on Robinhood Chain testnet, on both of vibe/vibe's factories
+- **every IMD launch on Robinhood Chain mainnet** that names a launcher wallet (below)
+
+Open https://keptmd.vercel.app, paste a token, a wallet or a launch number, and press Check. A launch number can name a launch on both; the site shows the one for the network you're on first, and lists the others.
+
+Every record also shows **who holds the token right now**, read live: the launcher, the launch pool or curve, burned, and everyone else. A launcher with a record of selling fast, still holding a big share, is the plainest warning a buyer can get.
 
 ## What the record shows
 
@@ -22,6 +28,19 @@ Per launcher, these add up to:
 - ETH in and ETH out on its own launches, and what buyers put in
 
 Amounts are summed for ETH-paired launches only. Launches paired with another token are counted, but their amounts aren't added to ETH.
+
+## IMD launches on Robinhood Chain (mainnet)
+
+IMD's own launch factory deploys every IMD token, so the deployer says nothing about who's behind it. The requester instead names a wallet in the launch's `launch.json`: `economics.remainderTo`. That wallet receives the supply left after the pool seed and the swarm's 10%. KEPT treats it as the launcher and follows every transfer of the token out of it:
+
+| transfer | counted as |
+| --- | --- |
+| into the Uniswap v4 PoolManager, in a transaction that swaps | a **sale into its own pool** |
+| into the PoolManager, in a transaction that only adds liquidity | **liquidity added** (not a sale) |
+| to `0x…dEaD` or the zero address | burned |
+| to any other wallet | **moved**: shown, since that wallet may sell instead |
+
+Hook and project launches that name no remainder wallet have no launcher, so they're left out. `scripts/records/imd.mjs` builds this index hourly, beside the vibe/vibe one.
 
 ## The colour of a record
 
