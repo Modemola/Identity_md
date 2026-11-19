@@ -13,6 +13,10 @@ Every 10 minutes, GitHub Actions runs `alerts.mjs`, which sends:
 | a launcher with a red record launches again on vibe/vibe | ⚠️ to the channel, with its record (at most once per wallet every 6 hours) |
 | a watched launcher launches again | 🚀 to its watchers, with its record |
 | a watched launcher sells into one of its own launches | 🔻 to its watchers: which token, how soon after launching, and the ETH it took out |
+| an IMD launcher on Robinhood Chain sells into its own launch's pool | 🔻 to the channel and its watchers: how much of its share, and how soon after launch (adding liquidity stays quiet) |
+| a watched IMD launcher moves its share to another wallet | ↪️ to its watchers: that wallet may sell instead |
+| a watched wallet is the launcher of a new IMD launch | 🚀 to its watchers |
+| Monday, from 09:00 UTC | 📊 the weekly Exits report card to the channel, once a week |
 
 Pledge alerts and red launcher warnings go to the public channel. People who follow a pledge or watch a launcher get those alerts in a private chat with the bot.
 
@@ -41,7 +45,7 @@ The first run starts from the current block, so it doesn't post old verdicts. Du
 ## Bot commands (in a private chat with the bot)
 
 - `/check 0x…` or `/check 7836`: a launcher's record, from a token, a wallet or a vibe/vibe launch number
-- `/watch 0x…`: alerts when that launcher sells into its own launch, or launches again (up to 25 per chat)
+- `/watch 0x…` or `/watch 2288`: alerts when that launcher sells into its own launch, moves its share, or launches again, on vibe/vibe or IMD (up to 25 per chat)
 - `/unwatch 0x…`: stop them
 - `/follow 1`: alerts for pledge #1
 - `/unfollow 1`: stop them

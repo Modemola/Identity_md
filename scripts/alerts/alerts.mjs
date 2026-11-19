@@ -18,6 +18,9 @@
 //   - every new pledge
 //   - vibe/vibe launchers (watch.mjs): to watchers, when a watched wallet sells into its own launch
 //     or launches again; to the channel, when a launcher with a red record launches
+//   - IMD launchers on mainnet (imdwatch.mjs): to the channel and watchers, every sale into a
+//     launch's own pool; to watchers, a share moved to another wallet
+//   - the weekly Exits report card (api/_lib/report.mjs), to the channel on Mondays
 // Bot commands (in a private chat): /check 7836, /watch 0x…, /unwatch 0x…, /follow 1, /unfollow 1,
 // /list, /start (also start=follow_1 and start=watch_0x… links from the site).
 //
@@ -30,6 +33,8 @@ import { Resvg } from "@resvg/resvg-js";
 import { verdictCard } from "../../api/_lib/cards.mjs";
 import { NETS, SITE, TOPIC, allVaultLogs, amount, lastVerdict, pledgeIds, readPledge, rpc, uint } from "../../api/_lib/vault.mjs";
 import { watchCommand, watchedBy, watchPass } from "./watch.mjs";
+import { imdPass } from "./imdwatch.mjs";
+import { weeklyReport, reportCard, reportText } from "../../api/_lib/report.mjs";
 
 const SCALED = 4; // KeptVault v2's ValueScaled: a number read on chain at the deadline
 const pct = (bps) => Math.round(bps / 100);
@@ -311,8 +316,41 @@ try {
   };
   const w = await watchPass({ state, send: sendTo, channel: CHANNEL, save });
   console.log(`launchers: ${w.launches} new launches, ${w.sells} watched sells, ${Object.keys(state.watch).length} watchers`);
+  // IMD launchers on mainnet: a failure here never stops the passes above
+  try {
+    const i = await imdPass({ state, send: sendTo, channel: CHANNEL, save });
+    console.log(`imd: ${i.launches} launches read, ${i.sales} sales, ${i.moves} moves`);
+  } catch (e) {
+    console.error(`imd alerts skipped: ${e.message}`);
+  }
 } catch (e) {
   console.error(`launcher alerts skipped: ${e.message}`);
+}
+// the weekly Exits report: Mondays from 09:00 UTC, once per ISO week, to the channel
+try {
+  const d = new Date(now * 1000);
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
+  const key = `report:${monday.toISOString().slice(0, 10)}`;
+  if (CHANNEL && d.getUTCDay() === 1 && d.getUTCHours() >= 9 && !state.sent[key]) {
+    const r = await weeklyReport();
+    if (r) {
+      const png = render(reportCard(r));
+      const caption = reportText(r);
+      if (DRY) await tg("sendPhoto", { chat_id: CHANNEL, caption, photo: `${png.length} bytes` });
+      else {
+        const form = new FormData();
+        form.append("chat_id", String(CHANNEL));
+        form.append("caption", caption);
+        form.append("photo", new Blob([png], { type: "image/png" }), "kept-exits-report.png");
+        await tg("sendPhoto", form);
+      }
+      state.sent[key] = now;
+      save();
+      console.log(`weekly report sent (${r.range})`);
+    }
+  }
+} catch (e) {
+  console.error(`weekly report skipped: ${e.message}`);
 }
 // forget sent keys older than 90 days, so the state stays small
 for (const [k, t] of Object.entries(state.sent)) if (now - t > 90 * DAY) delete state.sent[k];

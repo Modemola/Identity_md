@@ -1081,3 +1081,8 @@ a.feed-row:hover { background: var(--hover); }
 .h-others { background: var(--ok) !important; }
 .exit-row.imd-row { grid-template-columns: 64px 1fr 1fr 0.8fr 1fr 24px; }
 @media (max-width: 640px) { .exit-row.imd-row { grid-template-columns: 52px 1fr auto 18px; } }
+
+/* the weekly Exits report */
+.report-card { display: block; width: 100%; max-width: 960px; height: auto; border: var(--rule); margin: 8px 0 24px; }
+.report-share { display: grid; gap: 16px; max-width: 760px; margin-bottom: 72px; }
+.report-text { white-space: pre-wrap; font: 14px/1.6 var(--mono); border: var(--hair); padding: 16px; margin: 0; background: var(--raise); }
