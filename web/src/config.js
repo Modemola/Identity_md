@@ -49,7 +49,7 @@ export const NETWORKS = {
     marketsFrom: 0,
     vault2: "0x2e46f4bdddc8664982b2266462d70c056cdf7ee2", // KeptVaultV2 with the test kit (scripts/testnet)
     vault2From: 152827842,
-    bond: "", // KeptBond (docs/BONDS.md): fill in after `node deploy-bond.mjs`
+    bond: "0x13feea3a1364ce3fc22d3ba67116f2cf6daf6f0c", // KeptBond (docs/BONDS.md), deployed at block 155,526,145
     testOracle: true,
     // vibe/vibe's launch factories, newest first, with the block of each one's first launch. Launch
     // numbers restart at 1 on each, so the quick start tries the current factory first
