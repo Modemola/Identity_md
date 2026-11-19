@@ -25,6 +25,7 @@ Deployed on Robinhood Chain testnet:
 | TestIntake | `0xd62cf7ab156aed369ae853312905d33f8b1b1c9e` |
 | TestIMD (faucet) | `0xd55fb61724a30c9f97a37fb29cdf774d4bf90b98` |
 | test oracle signer | `0x42CB35cE774960fd852F186782Fe932CCdA0654E` |
+| KeptBond (ETH bonds, [BONDS.md](BONDS.md)) | `0x13feea3a1364ce3fc22d3ba67116f2cf6daf6f0c` (block 155,526,145) |
 
 ## What KEPT reads from vibe/vibe
 
