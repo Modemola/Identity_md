@@ -5,6 +5,7 @@ import { h, link, short, when } from "./dom.js";
 import { reveal, words, countUp, magnetic, reduced, liveInterval } from "./fx.js";
 import { icon } from "./icons.js";
 import { load } from "./store.js";
+import { config } from "./config.js";
 
 const HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
@@ -345,6 +346,9 @@ export function checkResult(q, rec) {
         h(
           "div",
           { class: "vp-actions" },
+          config.telegramBot
+            ? h("a", { class: "btn small primary", href: `https://t.me/${config.telegramBot}?start=watch_${L.address}`, target: "_blank", rel: "noopener" }, icon("pulse", 14), "Watch on Telegram")
+            : null,
           h("a", { class: "btn small", href: share, target: "_blank", rel: "noopener" }, icon("arrow", 14), "Post this record"),
           h("button", { class: "btn small", type: "button", onclick: (e) => navigator.clipboard?.writeText(badge).then(() => (e.currentTarget.textContent = "Badge code copied")) }, "Copy badge for a launch page"),
         ),
