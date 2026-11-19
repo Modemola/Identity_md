@@ -1,5 +1,6 @@
-# KEPT launcher records: reads new vibe/vibe launches, trades and graduations every hour and
-# publishes the index to the `data` branch, where /api/record reads it. Vercel ignores that branch.
+# KEPT launcher records: every hour, reads new vibe/vibe launches, trades and graduations, and the
+# launcher wallets' transfers on IMD launches on Robinhood Chain mainnet, and publishes both indexes
+# to the `data` branch, where /api/record reads them. Vercel ignores that branch.
 name: records
 
 on:
@@ -32,8 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Index
+      - name: Index vibe/vibe (Robinhood Chain testnet)
         run: node code/scripts/records/indexer.mjs data/records/vibevibe-46630
+      - name: Index IMD launches (Robinhood Chain mainnet)
+        run: node code/scripts/records/imd.mjs data/records/imd-4663
       - name: Publish
         run: |
           cd data

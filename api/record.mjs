@@ -1,16 +1,22 @@
 // KEPT record: who is behind a token, and what they did with their other launches.
 //
 //   /api/record?q=0x…        a token or a wallet
-//   /api/record?q=123        a vibe/vibe launch number (both factories are searched)
+//   /api/record?q=123        a launch number: vibe/vibe (both factories) and IMD are searched
+//   &source=imd              show an IMD launch first when a number names both (the site sends this on mainnet)
 //   &format=svg              a 20 px badge instead of JSON
 //
-// Reads the launcher index (scripts/records/indexer.mjs), refreshed hourly from vibe/vibe's
-// public event logs on Robinhood Chain testnet, plus the wallet's KEPT pledges on every network.
-// Facts only: launches, graduations, buys, and the launcher's own sells on its bonding curves.
+// Reads two launcher indexes, refreshed hourly: vibe/vibe on Robinhood Chain testnet
+// (scripts/records/indexer.mjs) and IMD launches on Robinhood Chain mainnet (scripts/records/imd.mjs),
+// plus the wallet's KEPT pledges on every network. Facts only: launches, and the launcher's own
+// sales into its launches' pools or curves.
 
-import { meta, launcher, findLaunches, fmtEth, FACTORY_LABEL } from "./_lib/records.mjs";
+import { meta, launcher, findLaunches, fmtEth, FACTORY_LABEL, imdMeta, imdLauncher, findImd, IMD_POOL_MANAGER } from "./_lib/records.mjs";
 import { NETS, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
+import { holdings, pctText } from "./_lib/holdings.mjs";
+
+const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
+const MAINNET_RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
 
 const reply = (body, type, status, maxAge) =>
   new Response(body, {
@@ -30,7 +36,7 @@ function badge(text, tone) {
   const right = Math.round(text.length * 6.6 + 20);
   const w = left + right;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20" role="img" aria-label="KEPT record: ${esc(text)}">
-<title>KEPT record: ${esc(text)} · facts from vibe/vibe's public logs</title>
+<title>KEPT record: ${esc(text)} · facts from public chain logs</title>
 <rect width="${w}" height="20" rx="3" fill="#0b0d0c"/>
 <rect x="${left}" width="${right}" height="20" rx="3" fill="${TONE[tone]}"/>
 <rect x="${left}" width="6" height="20" fill="${TONE[tone]}"/>
@@ -64,44 +70,100 @@ export async function GET(request) {
       return reply(JSON.stringify({ error: "record unavailable, retrying shortly" }), "application/json", 503, 30);
     }
   }
+  // IMD on Robinhood Chain: totals, and the launches whose launcher sold into its own pool
+  if (params.get("view") === "imd") {
+    try {
+      const im = await imdMeta();
+      if (!im) throw new Error("index missing");
+      const share = (part, whole) => (BigInt(whole) > 0n ? Number((BigInt(part) * 10_000n) / BigInt(whole)) : 0);
+      const sold = im.launches
+        .filter((l) => l.sells > 0)
+        .map((l) => ({ id: l.id, token: l.token, symbol: l.symbol, launcher: l.launcher, soldBps: share(l.soldToPool, l.received), exitAfter: l.firstSellAt ? l.firstSellAt - l.launchedAt : null }))
+        .sort((a, b) => (a.exitAfter ?? 1e12) - (b.exitAfter ?? 1e12));
+      const body = {
+        updatedAt: im.updatedAt,
+        block: im.block,
+        totals: { launches: im.launches.length, launchers: Object.keys(im.launchers).length, sold: sold.length, fastExits: sold.filter((l) => l.exitAfter !== null && l.exitAfter <= im.fastExitSeconds).length },
+        sold,
+      };
+      return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
+    } catch {
+      return reply(JSON.stringify({ error: "record unavailable, retrying shortly" }), "application/json", 503, 30);
+    }
+  }
   if (!/^0x[0-9a-fA-F]{40}$/.test(q) && !/^#?\d{1,7}$/.test(q)) {
-    const error = "use ?q= with a token, a wallet or a vibe/vibe launch number";
+    const error = "use ?q= with a token, a wallet or a launch number";
     return svg ? reply(badge("?q=0x…", "none"), "image/svg+xml; charset=utf-8", 400, 3600) : reply(JSON.stringify({ error }), "application/json", 400, 3600);
   }
   try {
-    const m = await meta();
-    if (!m) throw new Error("index missing");
-    const found = await findLaunches(q);
+    // two sources: vibe/vibe on the testnet and IMD launches on mainnet. A launch number can name a
+    // launch on each; ?source= (the site sends the network you're on) says which to show first
+    const order = params.get("source") === "imd" ? ["imd", "vibevibe"] : ["vibevibe", "imd"];
+    const [m, im] = await Promise.all([meta().catch(() => null), imdMeta().catch(() => null)]);
+    if (!m && !im) throw new Error("index missing");
+    const bySource = {
+      vibevibe: m ? (await findLaunches(q)).map((f) => ({ ...f, source: "vibevibe", factory: FACTORY_LABEL[f.factory] })) : [],
+      imd: im ? await findImd(q) : [],
+    };
+    const found = order.flatMap((src) => bySource[src]);
+    const primary = found[0];
     // an address that launched nothing may still be a launcher's wallet
-    const wallet = found.length ? found[0].creator : /^0x/.test(q) ? q.toLowerCase() : null;
-    const rec = wallet ? await launcher(wallet) : null;
+    const wallet = primary ? primary.creator : /^0x/.test(q) ? q.toLowerCase() : null;
+    const [recV, recI] = wallet ? await Promise.all([m ? launcher(wallet).catch(() => null) : null, im ? imdLauncher(wallet).catch(() => null) : null]) : [null, null];
+    const recs = { vibevibe: recV, imd: recI };
+    const src = primary ? primary.source : order.find((x) => recs[x]) ?? order[0];
+    const rec = recs[src];
+    const other = order.find((x) => x !== src && recs[x]);
     if (svg) {
       if (!rec) return reply(badge("no launches on record", "none"), "image/svg+xml; charset=utf-8", 200, 300);
       const s = rec.summary;
       const text = s.fastExits ? `${s.fastExits}/${s.launches} quick exits` : s.sold ? `sold ${s.sold}/${s.launches}` : `${s.launches} launch${s.launches === 1 ? "" : "es"} · no sells`;
       return reply(badge(text, rec.tone), "image/svg+xml; charset=utf-8", 200, 300);
     }
+    // the asked-for launch: who holds its supply right now, read live
+    let hold = null;
+    const lead = primary && rec ? rec.launches.find((l) => l.token === primary.token) : null;
+    if (primary?.creator) {
+      if (src === "imd") {
+        hold = await holdings(MAINNET_RPC, primary.token, { launcher: primary.creator, pools: [IMD_POOL_MANAGER] }).catch(() => null);
+        if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now, ${pctText(hold.poolBps)} is in the Uniswap pool${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
+      } else {
+        hold = await holdings(TESTNET_RPC, primary.token, { launcher: primary.creator, pools: lead ? [lead.pool] : [] }).catch(() => null);
+        // a graduated token's curve is empty: its liquidity moved to Uniswap, so the pool share says nothing
+        const curve = lead && !lead.graduated;
+        if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now${curve ? `, ${pctText(hold.poolBps)} is still in the launch pool` : ""}${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
+      }
+    }
+    const fast = ((src === "imd" ? im : m) ?? m ?? im).fastExitSeconds / 60;
     const body = {
-      source: "vibe/vibe launches on Robinhood Chain testnet (46630), from public event logs",
-      updatedAt: m.updatedAt,
-      block: m.block,
+      source: src === "imd" ? "IMD launches on Robinhood Chain (4663), from public transfer logs and each launch's launch.json" : "vibe/vibe launches on Robinhood Chain testnet (46630), from public event logs",
+      network: src,
+      updatedAt: (src === "imd" ? im : m)?.updatedAt,
+      block: (src === "imd" ? im : m)?.block,
       query: q,
-      // a launch number can name a launch on each factory: both are listed, newest factory first
-      matches: found.map((f) => ({ ...f, factory: FACTORY_LABEL[f.factory] })),
+      // every launch the query names, the preferred source first
+      matches: found,
       launcher: rec && {
+        source: src,
         address: rec.address,
         tone: rec.tone,
         facts: rec.facts.map((f) => f.text),
-        summary: {
-          ...rec.summary,
-          buyersInEth: fmtEth(Number(BigInt(rec.summary.buyersIn)) / 1e18),
-          creatorInEth: fmtEth(Number(BigInt(rec.summary.creatorIn)) / 1e18),
-          creatorOutEth: fmtEth(Number(BigInt(rec.summary.creatorOut)) / 1e18),
-        },
-        recent: rec.launches.map((l) => ({ ...l, factory: FACTORY_LABEL[l.factory] })),
+        summary:
+          src === "imd"
+            ? rec.summary
+            : {
+                ...rec.summary,
+                buyersInEth: fmtEth(Number(BigInt(rec.summary.buyersIn)) / 1e18),
+                creatorInEth: fmtEth(Number(BigInt(rec.summary.creatorIn)) / 1e18),
+                creatorOutEth: fmtEth(Number(BigInt(rec.summary.creatorOut)) / 1e18),
+              },
+        recent: src === "imd" ? rec.launches : rec.launches.map((l) => ({ ...l, source: "vibevibe", factory: FACTORY_LABEL[l.factory] })),
       },
+      // the same wallet also launched on the other source
+      alsoOn: other ? { source: other, tone: recs[other].tone, launches: recs[other].summary.launches, fastExits: recs[other].summary.fastExits } : null,
       kept: wallet ? await pledgesOf(wallet) : null,
-      rule: `Red: sold into its own launch within ${m.fastExitSeconds / 60} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet.`,
+      holdings: hold,
+      rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet.`,
     };
     return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
   } catch (e) {

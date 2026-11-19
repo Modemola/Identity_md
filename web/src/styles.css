@@ -990,7 +990,7 @@ a.exit-row:hover { background: var(--hover); }
 .launch-card { border: var(--hair); padding: 16px; display: grid; gap: 14px; background: var(--paper); }
 .launch-card.fast { border-color: color-mix(in srgb, var(--alarm) 60%, transparent); }
 .launch-card.lead { border: var(--rule); }
-.lc-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.lc-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
 .lc-top .sym { font-family: var(--display); font-stretch: 72%; font-weight: 800; font-size: 26px; line-height: 1; }
 .lc-top .faint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .lc-top .spacer { flex: 1; }
@@ -1065,3 +1065,19 @@ a.feed-row:hover { background: var(--hover); }
 .tl-node.tip-start::after { left: 0; translate: 0 4px; }
 .tl-node.tip-end:hover::after, .tl-node.tip-end:focus-visible::after,
 .tl-node.tip-start:hover::after, .tl-node.tip-start:focus-visible::after { translate: 0 0; }
+
+/* who holds the supply now */
+.hold { display: grid; gap: 8px; border-top: var(--hair); padding-top: 12px; }
+.hold-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hold-head b { font-family: var(--display); font-stretch: 72%; font-weight: 800; font-size: 22px; text-transform: uppercase; }
+.hold-bar { display: flex; height: 12px; gap: 2px; }
+.hold-bar i, .hold-keys i { display: block; background: var(--faint); }
+.hold-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--dim); }
+.hold-keys span { display: inline-flex; align-items: center; gap: 6px; }
+.hold-keys i { width: 10px; height: 10px; }
+.h-launcher { background: var(--alarm) !important; }
+.h-pool { background: var(--caution) !important; }
+.h-burned { background: var(--ink) !important; }
+.h-others { background: var(--ok) !important; }
+.exit-row.imd-row { grid-template-columns: 64px 1fr 1fr 0.8fr 1fr 24px; }
+@media (max-width: 640px) { .exit-row.imd-row { grid-template-columns: 52px 1fr auto 18px; } }

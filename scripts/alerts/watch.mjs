@@ -5,7 +5,7 @@
 // Used by alerts.mjs, which owns the bot's messages: two readers of one bot would steal each
 // other's commands.
 
-import { launcher, findLaunches, fmtEth } from "../../api/_lib/records.mjs";
+import { launcher, findLaunches, fmtEth, findImd, imdLauncher } from "../../api/_lib/records.mjs";
 import { SITE } from "../../api/_lib/vault.mjs";
 
 const RPC = process.env.KEPT_TESTNET_RPC || "https://rpc.testnet.chain.robinhood.com";
@@ -86,8 +86,16 @@ export async function watchCommand(cmd, arg, chat, state) {
     return reply;
   };
   if (/^\/check/.test(cmd)) {
+    // an IMD launch on Robinhood mainnet: the record of the wallet that got the team's share
+    const imd = (await findImd(String(arg || "")).catch(() => []))[0];
+    const imdRec = imd ? await imdLauncher(imd.creator).catch(() => null) : /^0x[0-9a-fA-F]{40}$/.test(arg || "") ? await imdLauncher(arg).catch(() => null) : null;
+    if (imdRec && (imd || !(await findLaunches(arg).catch(() => [])).length)) {
+      const tone = { exits: "🔴", sold: "🟠", clean: "🟢", new: "⚪" }[imdRec.tone];
+      const s = imdRec.summary;
+      return done(`IMD on Robinhood Chain${imd ? `, launch #${imd.id}` : ""}: launcher <code>${imdRec.address}</code>\n${tone} ${s.launches} IMD launch${s.launches === 1 ? "" : "es"} · sold into its own pool on ${s.sold} · within an hour on ${s.fastExits}\n${imdRec.facts.slice(0, 3).map((f) => `· ${esc(f.text)}`).join("\n")}\n${recordLink(arg)}`);
+    }
     const r = await resolve(arg);
-    if (!r) return done("Send a token, a wallet or a vibe/vibe launch number: /check 0x… or /check 7836");
+    if (!r) return done("Send a token, a wallet or a launch number: /check 0x… or /check 7836");
     const rec = await launcher(r.wallet);
     const head = r.via ? `Launch #${r.via.id}, launched by <code>${r.wallet}</code>` : `<code>${r.wallet}</code>`;
     return done(`${head}\n${recordLine(rec)}\n${rec ? rec.facts.slice(0, 3).map((f) => `· ${esc(f.text)}`).join("\n") : ""}\n${recordLink(arg)}\n\nWatch this wallet: /watch ${r.wallet}`);

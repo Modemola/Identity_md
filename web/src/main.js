@@ -2654,8 +2654,9 @@ function viewTeams({ quiet }) {
 
 function viewCheckHome({ quiet }) {
   const examples = [
-    { q: "0x0a272E5eE3F48c668ccF30E65E7738099AE0a1DE", label: "$SCOUT" },
-    { q: "7836", label: "launch #7836" },
+    { q: "0x7e717f5e93334b69e17f488c1cd69586cdd34a33", label: "$GPRO on IMD" },
+    { q: "0x0a272E5eE3F48c668ccF30E65E7738099AE0a1DE", label: "$SCOUT on vibe/vibe" },
+    { q: "0x789396c4a865d543ef075c20775b85aa03c08e1b", label: "a serial launcher" },
   ];
   const feed = liveFeed();
   whileHere(feed.stop);
