@@ -43,7 +43,7 @@ import { h, fill, link, short, addrLink, now, fmt, when, span, IMD_DECIMALS } fr
 import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, tilt, liveInterval, setInstant, canTransition, reduced } from "./fx.js";
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
-import { checkHome, checkPage, liveFeed } from "./check.js";
+import { checkHome, checkPage, liveFeed, reportPage } from "./check.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
 
 /** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
@@ -131,7 +131,7 @@ function renderAccount(acct) {
 }
 
 const palette = commandPalette(() => [
-  ...[...NAV, ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
+  ...[...NAV, ["/report", "Exits report"], ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
   ...(cachedPledges() || []).map((p) => {
     const t = tally([p]);
     return { path: `/pledge/${p.id}`, label: p.name, hint: `#${p.id} · ${t.kept}/${p.count} kept`, tone: t.broken ? "broken" : t.kept === p.count ? "kept" : "open" };
@@ -2703,6 +2703,7 @@ function route({ quiet = false } = {}) {
   if (path === "/referee") return viewReferee({ quiet });
   if (path === "/how") return viewHow({ quiet });
   if (path === "/pledges") return viewHome({ quiet });
+  if (path === "/report") return paint("/", () => h("section", { class: "wrap" }, reportPage()), { quiet });
   const c = path.match(/^\/check\/(.+)$/);
   if (c) return viewCheck(decodeURIComponent(c[1]), { quiet });
   return viewCheckHome({ quiet });

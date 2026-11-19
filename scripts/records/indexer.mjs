@@ -228,6 +228,32 @@ export function summarise(launches, blockTimes) {
   return { ...s, buyersIn: s.buyersIn.toString(), creatorIn: s.creatorIn.toString(), creatorOut: s.creatorOut.toString() };
 }
 
+/**
+ * The last 7 days, for the weekly Exits report: launches made in the week, how many their own
+ * launcher sold into within FAST_EXIT, what launchers took out, and the week's worst wallets.
+ */
+export function weekOf(launches, blockTimes, head) {
+  const to = timeOf(blockTimes, head);
+  const from = to - 7 * 86_400;
+  const recent = launches.filter((l) => timeOf(blockTimes, l[L.block]) >= from);
+  const s = summarise(recent, blockTimes);
+  const byCreator = new Map();
+  for (const l of recent) {
+    const fast = l[L.firstSell] && timeOf(blockTimes, l[L.firstSell]) - timeOf(blockTimes, l[L.block]) <= FAST_EXIT;
+    const e = byCreator.get(l[L.creator]) ?? { creator: l[L.creator], launches: 0, fastExits: 0, creatorOut: 0n };
+    e.launches++;
+    if (fast) e.fastExits++;
+    if (l[L.eth]) e.creatorOut += BigInt(l[L.creatorOut]);
+    byCreator.set(l[L.creator], e);
+  }
+  const worst = [...byCreator.values()]
+    .filter((e) => e.fastExits > 0)
+    .sort((a, b) => b.fastExits - a.fastExits || (b.creatorOut > a.creatorOut ? 1 : b.creatorOut < a.creatorOut ? -1 : 0))
+    .slice(0, 5)
+    .map((e) => ({ ...e, creatorOut: e.creatorOut.toString() }));
+  return { from, to, ...s, launchers: byCreator.size, fastLaunchers: [...byCreator.values()].filter((e) => e.fastExits > 0).length, worst };
+}
+
 function writeShards(state) {
   const { launches, blockTimes } = state;
   for (const d of ["creators", "tokens", "ids"]) {
@@ -271,6 +297,7 @@ function writeShards(state) {
     .slice(0, 100)
     .map(([c, s]) => ({ creator: c, ...s }));
   const all = summarise(launches, blockTimes);
+  const week = weekOf(launches, blockTimes, state.block);
   writeFileSync(
     join(OUT, "meta.json"),
     JSON.stringify({
@@ -283,6 +310,7 @@ function writeShards(state) {
       launchFields: ["factory", "id", "token", "pool", "block", "symbol", "name", "pairIsEth", "graduated", "buys", "buyersIn", "creatorIn", "creatorOut", "creatorSells", "firstCreatorSellBlock"],
       blockTimes,
       totals: { ...all, launchers: creators.size, launchersWithFastExits: ranked.filter(([, s]) => s.fastExits > 0).length },
+      week,
       fastExitLeaders: top,
     }),
   );

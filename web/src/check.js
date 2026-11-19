@@ -31,6 +31,32 @@ export const getRecord = (q) => getJSON(`${HOST}/api/record?q=${encodeURICompone
 export const getTop = () => getJSON(`${HOST}/api/record?view=top&limit=12`, "record:top", 300_000);
 export const getImd = () => getJSON(`${HOST}/api/record?view=imd`, "record:imd", 300_000);
 
+/** The weekly Exits report: the card, the post that goes with it, and a one-tap share. */
+export function reportPage() {
+  const text = h("pre", { class: "report-text" }, "Loading this week's report…");
+  const share = h("a", { class: "btn primary", target: "_blank", rel: "noopener", href: "#" }, icon("arrow", 16), "Post on X");
+  fetch(`${HOST}/api/report?format=text`)
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+    .then((t) => {
+      text.textContent = t;
+      // the link previews as the card on X, so the post carries the text and the link only
+      const body = t.replace(/\n*Check before you buy: \S+$/, "");
+      share.href = `https://x.com/intent/post?text=${encodeURIComponent(body)}&url=${encodeURIComponent("https://keptmd.vercel.app/report")}`;
+    })
+    .catch(() => (text.textContent = "The report is updating. Try again in a minute."));
+  return [
+    h(
+      "div",
+      { class: "check-hero" },
+      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Every week"),
+      h("h1", { class: "display" }, words("Exits report", { delay: 80 })),
+      h("p", { class: "lede rise", style: { animationDelay: "300ms" } }, "What launchers did with their own launches in the last 7 days, on vibe/vibe and IMD. Built from the chain every hour; the channel gets it every Monday."),
+    ),
+    reveal(h("img", { class: "report-card", src: `${HOST}/api/report?format=png`, alt: "This week's KEPT Exits report", width: "1200", height: "630" })),
+    reveal(h("div", { class: "report-share" }, text, h("div", { class: "chips" }, share, h("a", { class: "btn", href: link("/") }, "Check a token")))),
+  ];
+}
+
 /** IMD on Robinhood Chain: every launch whose launcher sold its own tokens into its pool. */
 function imdSection() {
   const list = h("div", { class: "exit-board" }, ...Array.from({ length: 3 }, () => h("div", { class: "exit-row sk" })));
@@ -292,7 +318,7 @@ export function checkHome({ examples, feed }) {
       h(
         "section",
         { class: "exit-sec" },
-        h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Fastest exits on vibe/vibe"), h("p", { class: "muted" }, "Launchers that most often sold into their own launch within an hour of creating it. Every number links to its record, and every record links to the chain."), updated),
+        h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Fastest exits on vibe/vibe"), h("p", { class: "muted" }, "Launchers that most often sold into their own launch within an hour of creating it. Every number links to its record, and every record links to the chain. ", h("a", { href: link("/report") }, "This week's Exits report"), "."), updated),
         board,
       ),
     ),

@@ -40,7 +40,11 @@ const word = (data, i) => BigInt(`0x${data.slice(2 + i * 64, 66 + i * 64)}`);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 const recordLink = (q) => `https://${SITE}/#/check/${q}`;
-const ago = (s) => (s < 60 ? "under a minute" : s < 5400 ? `${Math.round(s / 60)} minutes` : s < 172800 ? `${Math.round(s / 3600)} hours` : `${Math.round(s / 86400)} days`);
+const ago = (s) => {
+  if (s < 60) return "under a minute";
+  const [n, unit] = s < 5400 ? [Math.round(s / 60), "minute"] : s < 172800 ? [Math.round(s / 3600), "hour"] : [Math.round(s / 86400), "day"];
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+};
 const blockTimes = new Map();
 /** A block's timestamp, read once per pass. */
 async function timeOf(block) {
@@ -66,13 +70,25 @@ export function recordLine(rec) {
   return `${tone} ${s.launches} launch${s.launches === 1 ? "" : "es"} · ${s.graduated} graduated · sold into ${s.fastExits} within an hour of launching`;
 }
 
-/** The wallet a query names: a token's or launch's launcher, or the wallet itself. */
+/**
+ * The wallet a query names: a token's or launch's launcher, or the wallet itself. An IMD launch on
+ * mainnet comes first when a number names launches on both, as /check does: real money first.
+ */
 export async function resolve(q) {
   const raw = String(q || "").trim().replace(/^#/, "");
   if (!/^0x[0-9a-fA-F]{40}$/.test(raw) && !/^\d{1,7}$/.test(raw)) return null;
+  const imd = (await findImd(raw).catch(() => []))[0];
+  if (imd?.creator) return { wallet: imd.creator, via: { ...imd, source: "imd" } };
   const found = await findLaunches(raw);
-  if (found.length) return { wallet: found[0].creator, via: found[0] };
+  if (found.length) return { wallet: found[0].creator, via: { ...found[0], source: "vibevibe" } };
   return /^0x/.test(raw) ? { wallet: raw.toLowerCase(), via: null } : null;
+}
+
+/** One line for a wallet's IMD record. */
+function imdLine(rec) {
+  const tone = { exits: "🔴", sold: "🟠", clean: "🟢", new: "⚪" }[rec.tone];
+  const s = rec.summary;
+  return `${tone} ${s.launches} IMD launch${s.launches === 1 ? "" : "es"} on Robinhood Chain · sold into its own pool on ${s.sold} · within an hour on ${s.fastExits}`;
 }
 
 /**
@@ -102,14 +118,16 @@ export async function watchCommand(cmd, arg, chat, state) {
   }
   if (/^\/watch/.test(cmd)) {
     const r = await resolve(arg);
-    if (!r) return done("Send a token, a wallet or a vibe/vibe launch number: /watch 0x… or /watch 7836");
+    if (!r) return done("Send a token, a wallet or a launch number: /watch 0x… or /watch 2288");
     if (!mine.includes(r.wallet)) {
       if (mine.length >= MAX_WATCH) return done(`You watch ${MAX_WATCH} wallets already. Drop one with /unwatch first.`);
       mine.push(r.wallet);
     }
-    const rec = await launcher(r.wallet);
+    const [rec, irec] = await Promise.all([launcher(r.wallet).catch(() => null), imdLauncher(r.wallet).catch(() => null)]);
+    const lines = [irec ? imdLine(irec) : null, rec || !irec ? `vibe/vibe: ${recordLine(rec)}` : null].filter(Boolean).join("\n");
+    const where = r.via ? `, the launcher behind ${r.via.source === "imd" ? "IMD" : "vibe/vibe"} launch #${r.via.id}` : "";
     return done(
-      `👁 Watching <code>${r.wallet}</code>${r.via ? `, the launcher behind launch #${r.via.id}` : ""}.\n${recordLine(rec)}\n\nYou'll hear when it sells into one of its own launches, and when it launches again.\n${recordLink(r.wallet)}`,
+      `👁 Watching <code>${r.wallet}</code>${where}.\n${lines}\n\nYou'll hear when it sells into one of its own launches${irec ? ", moves its share to another wallet," : ""} or launches again.\n${recordLink(r.wallet)}`,
     );
   }
   if (/^\/unwatch/.test(cmd)) {

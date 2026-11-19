@@ -43,10 +43,17 @@
     {
       "source": "/teams",
       "destination": "/api/share?page=teams"
+    },
+    {
+      "source": "/report",
+      "destination": "/api/report"
     }
   ],
   "functions": {
     "api/og.mjs": {
+      "includeFiles": "api/_lib/fonts/**"
+    },
+    "api/report.mjs": {
       "includeFiles": "api/_lib/fonts/**"
     }
   },
