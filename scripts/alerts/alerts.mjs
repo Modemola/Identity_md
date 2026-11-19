@@ -16,7 +16,10 @@
 //   - a deadline passed with the milestone still unproven: the 3-day proof window is open
 //   - every swarm verdict (delivered or not) and every release or burn, with the verdict card
 //   - every new pledge
-// Bot commands (in a private chat): /follow 1, /unfollow 1, /list, /start.
+//   - vibe/vibe launchers (watch.mjs): to watchers, when a watched wallet sells into its own launch
+//     or launches again; to the channel, when a launcher with a red record launches
+// Bot commands (in a private chat): /check 7836, /watch 0x…, /unwatch 0x…, /follow 1, /unfollow 1,
+// /list, /start (also start=follow_1 and start=watch_0x… links from the site).
 //
 // What it has sent, and who follows what, is kept in .state.json, so nothing is sent twice.
 
@@ -26,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 import { verdictCard } from "../../api/_lib/cards.mjs";
 import { NETS, SITE, TOPIC, allVaultLogs, amount, lastVerdict, pledgeIds, readPledge, rpc, uint } from "../../api/_lib/vault.mjs";
+import { watchCommand, watchedBy, watchPass } from "./watch.mjs";
 
 const SCALED = 4; // KeptVault v2's ValueScaled: a number read on chain at the deadline
 const pct = (bps) => Math.round(bps / 100);
@@ -57,6 +61,7 @@ state.block ??= null; // last block scanned for events
 state.sent ??= {}; // alert key -> unix time sent
 state.follows ??= {}; // chat id -> [pledge ids]
 state.offset ??= 0; // Telegram getUpdates offset
+state.watch ??= {}; // chat id -> [launcher wallets] (watch.mjs)
 // a dry run never writes: what it "sent" must still go out once the bot is live
 const save = () => DRY || writeFileSync(STATE, `${JSON.stringify(state, null, 2)}\n`);
 
@@ -117,8 +122,14 @@ async function commands(pledgeIds) {
     if (!msg?.text || msg.chat?.type !== "private") continue;
     const chat = String(msg.chat.id);
     let [cmd, arg] = msg.text.trim().split(/\s+/);
-    // a t.me/<bot>?start=follow_1 link arrives as "/start follow_1"
+    // a t.me/<bot>?start=follow_1 link arrives as "/start follow_1", and start=watch_0x… as "/start watch_0x…"
     if (/^\/start/.test(cmd) && /^follow_\d+$/.test(arg || "")) [cmd, arg] = ["/follow", arg.slice(7)];
+    if (/^\/start/.test(cmd) && /^watch_/.test(arg || "")) [cmd, arg] = ["/watch", arg.slice(6)];
+    const launcherReply = await watchCommand(cmd, arg, chat, state).catch(() => "KEPT's launcher records are updating. Try again in a minute.");
+    if (launcherReply) {
+      await tg("sendMessage", { chat_id: msg.chat.id, text: launcherReply, parse_mode: "HTML", link_preview_options: { is_disabled: true } }).catch((e) => console.error(e.message));
+      continue;
+    }
     const id = Number(arg);
     const mine = (state.follows[chat] ??= []);
     let reply;
@@ -132,14 +143,21 @@ async function commands(pledgeIds) {
       state.follows[chat] = mine.filter((x) => x !== id);
       reply = `Stopped following pledge #${esc(arg ?? "")}.`;
     } else if (/^\/list/.test(cmd)) {
-      reply = mine.length ? `You follow: ${mine.map((x) => `#${x}`).join(", ")}` : "You don't follow any pledge yet. Try /follow 1.";
+      const watched = watchedBy(state, chat);
+      reply =
+        [mine.length ? `Pledges you follow: ${mine.map((x) => `#${x}`).join(", ")}` : "", watched.length ? `Launchers you watch:\n${watched.map((w) => `<code>${w}</code>`).join("\n")}` : ""].filter(Boolean).join("\n\n") ||
+        "You don't follow anything yet. Try /watch 7836 or /follow 1.";
     } else {
       reply = [
-        "<b>KEPT alerts</b>: teams lock tokens behind milestones, the IMD swarm checks each one. Kept tranches unlock, missed ones burn.",
+        "<b>KEPT alerts</b>: check the wallet behind a token before you buy, and hear when it sells into its own launch.",
         "",
-        "/follow 1: alerts for pledge #1 (due dates, verdicts, burns)",
+        "/check 0x… or /check 7836: a launcher's record (a token, a wallet or a vibe/vibe launch number)",
+        "/watch 0x…: alerts when that launcher sells into its own launch, or launches again",
+        "/unwatch 0x…: stop them",
+        "",
+        "/follow 1: alerts for KEPT pledge #1 (due dates, verdicts, burns)",
         "/unfollow 1: stop them",
-        "/list: what you follow",
+        "/list: everything you follow",
         "",
         `Every pledge: https://${SITE}/#/board`,
       ].join("\n");
@@ -281,6 +299,21 @@ state.block = latest;
 const fresh = [];
 for (const id of await pledgeIds(NET)) fresh.push(await readPledge(NET, id));
 await dueAlerts(fresh, now, grace);
+// launchers on vibe/vibe: a failure there never stops the pledge alerts above
+try {
+  const sendTo = async (chat_id, text) => {
+    try {
+      await tg("sendMessage", { chat_id, text, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    } catch (e) {
+      console.error(`could not send to ${chat_id}: ${e.message}`);
+      if (/blocked|chat not found|deactivated/i.test(e.message) && chat_id !== CHANNEL) delete state.watch[chat_id];
+    }
+  };
+  const w = await watchPass({ state, send: sendTo, channel: CHANNEL, save });
+  console.log(`launchers: ${w.launches} new launches, ${w.sells} watched sells, ${Object.keys(state.watch).length} watchers`);
+} catch (e) {
+  console.error(`launcher alerts skipped: ${e.message}`);
+}
 // forget sent keys older than 90 days, so the state stays small
 for (const [k, t] of Object.entries(state.sent)) if (now - t > 90 * DAY) delete state.sent[k];
 save();
