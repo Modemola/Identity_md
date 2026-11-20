@@ -166,7 +166,7 @@ function shell() {
     h(
       "div",
       { class: "wrap" },
-      h("div", {}, h("b", {}, "KEPT"), config.testOracle ? " · test network: verdicts from KEPT's test oracle" : " · promises the IMD swarm enforces"),
+      h("div", {}, h("b", {}, "KEPT"), config.testOracle ? " · test network: verdicts from KEPT's test oracle" : " · check before you buy"),
       h(
         "div",
         { class: "foot-links" },
@@ -2077,12 +2077,23 @@ function viewHow({ quiet }) {
         { class: "wrap" },
         h("div", { class: "label", style: { marginTop: "36px" } }, "The mechanism"),
         h("h1", { class: "page-title" }, words("How KEPT works", { stagger: 60 })),
-        h("p", { class: "muted lead rise", style: { animationDelay: "220ms" } }, "Every launch hands a team most of its token supply, and buyers have to hope the team builds what it promised. KEPT turns the roadmap into a contract: the team's tokens unlock only when the IMD swarm confirms each promise."),
-        sec("01", "Three steps"),
+        h("p", { class: "muted lead rise", style: { animationDelay: "220ms" } }, "Every launch hands a team a large share of its token supply, and buyers have to hope the team builds what it promised. KEPT works on both sides of that. Every launcher has a public record of what it did with its launches before, whether it opts in or not. Teams with nothing to hide lock tokens behind promises the IMD swarm checks, and can put ETH behind them."),
+        sec("01", "The record", "every launcher, no opt in"),
+        reveal(
+          h(
+            "div",
+            { class: "facts" },
+            fact("search", "Read from the chain", "Every vibe/vibe launch on Robinhood Chain testnet and every IMD launch on Robinhood Chain mainnet: who launched it, what graduated, and when the launcher sold into its own launch."),
+            fact("gauge", "A colour by a published rule", "Red: sold into its own launch within an hour, on two launches or a quarter of them. Amber: sold into its own launches. Green: never, across two or more. Grey: a first launch."),
+            fact("wallet", "Who funded the wallet", "A fresh wallet still needs ETH. When another wallet funded it, the record lists every other launcher that wallet funded."),
+            fact("lock", "Who holds it now", "Read live: how much of the supply the launcher still holds, how much is in the pool, and how much is burned."),
+          ),
+        ),
+        sec("02", "Promises: three steps"),
         stepsGrid(),
-        sec("02", "A milestone's life", "one check, one verdict"),
+        sec("03", "A milestone's life", "one check, one verdict"),
         reveal(lifecycle()),
-        sec("03", "Milestones the swarm can check", "four templates"),
+        sec("04", "Milestones the swarm can check", "four templates"),
         reveal(
           h(
             "div",
@@ -2093,7 +2104,29 @@ function viewHow({ quiet }) {
             fact("gauge", "Value at least", "A view function reaches a threshold at the checked block, signed by the deadline. This does not prove the value persists."),
           ),
         ),
-        sec("04", "Why you can trust it"),
+        sec("05", "Bonds: ETH behind a promise", "testnet"),
+        reveal(
+          h(
+            "div",
+            { class: "facts" },
+            fact("fund", "Posted before the deadline", "A team, or anyone backing it, posts ETH behind a milestone. It can't be withdrawn: only the verdict releases it."),
+            fact("check", "Kept: it goes back", "A kept milestone returns the bond to whoever posted it. A partly kept one returns the delivered share."),
+            fact("pulse", "Broken: it buys from holders", "The rest buys the token from holders through a bid that starts low and doubles every hour, and every token bought is burned."),
+            fact("seal", "No owner, no oracle", "Nobody can pause it or move the ETH. ETH nobody sells for within 30 days goes to an address fixed at deploy."),
+          ),
+        ),
+        sec("06", "Alerts and the weekly report"),
+        reveal(
+          h(
+            "div",
+            { class: "facts" },
+            fact("pulse", "Watch any launcher", "On Telegram, /watch a token or a wallet: you hear when it sells into its own launch, moves its share or launches again."),
+            fact("search", "Red launchers, as they launch", "The live feed and the channel flag a new launch from a launcher with a red record the moment it lands."),
+            fact("release", "Every Monday", "The Exits report: what launchers did with their own launches that week, as a card to share."),
+            fact("cube", "On any launch page", "A badge and a card for any token, free and without a key, for launchpads and token pages."),
+          ),
+        ),
+        sec("07", "Why you can trust it"),
         reveal(
           h(
             "div",
@@ -2102,9 +2135,17 @@ function viewHow({ quiet }) {
             fact("seal", "Verdicts are signed", "The vault checks the oracle's EIP-712 signature, the panel size and the quorum before it accepts an answer."),
             fact("pulse", "Changes wait seven days", "Intake, action and signer changes wait seven days. The owner can change future panels and ownership; existing pledges cannot exit during the notice."),
             fact("fund", "Paid in IMD, to the swarm", "Each check is 0.5 IMD to the agents who answer it. Pool fees refund the checks of teams that keep their word."),
+            fact("seal", "Facts, not accusations", "A record states what the chain shows and never calls anyone a scammer. A clean record isn't a promise: that's what pledges are for."),
           ),
         ),
-        h("div", { class: "ctas end-ctas" }, magnetic(h("a", { class: "btn primary", href: link("/new") }, "Make a pledge", icon("arrow", 16))), magnetic(h("a", { class: "btn", href: config.repo, target: "_blank", rel: "noopener" }, "Read the contracts"))),
+        h(
+          "div",
+          { class: "ctas end-ctas" },
+          magnetic(h("a", { class: "btn primary", href: link("/") }, "Check a token", icon("arrow", 16))),
+          magnetic(h("a", { class: "btn", href: link("/new") }, "Make a pledge")),
+          h("a", { class: "btn", href: link("/integrate") }, "For launchpads"),
+          h("a", { class: "btn", href: config.repo, target: "_blank", rel: "noopener" }, "Read the code"),
+        ),
       ),
     { quiet },
   );
