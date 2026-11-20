@@ -43,7 +43,7 @@ import { h, fill, link, short, addrLink, now, fmt, when, span, IMD_DECIMALS } fr
 import { initTheme, themeSwitch, reveal, words, countUp, magnetic, spotlight, tilt, liveInterval, setInstant, canTransition, reduced } from "./fx.js";
 import { icon, TEMPLATE_ICON } from "./icons.js";
 import { verdictUnit, sampleData } from "./hero.js";
-import { checkHome, checkPage, liveFeed, reportPage } from "./check.js";
+import { checkHome, checkPage, liveFeed, reportPage, integratePage } from "./check.js";
 import { toast, runSteps, skeletonRows, commandPalette } from "./ui.js";
 
 /** Who signs verdicts on this network, for shared posts: the IMD swarm, or KEPT's test oracle on a testnet. */
@@ -131,7 +131,7 @@ function renderAccount(acct) {
 }
 
 const palette = commandPalette(() => [
-  ...[...NAV, ["/report", "Exits report"], ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
+  ...[...NAV, ["/report", "Exits report"], ["/integrate", "For launchpads"], ["/new", "Make a pledge"], ["/referee", "Referee Fund"], ["/graveyard", "Graveyard"]].map(([p, l]) => ({ path: p, label: l, hint: "page" })),
   ...(cachedPledges() || []).map((p) => {
     const t = tally([p]);
     return { path: `/pledge/${p.id}`, label: p.name, hint: `#${p.id} · ${t.kept}/${p.count} kept`, tone: t.broken ? "broken" : t.kept === p.count ? "kept" : "open" };
@@ -173,6 +173,7 @@ function shell() {
         v1Live ? h("span", {}, "Vault ", addrLink(config.vault)) : null,
         v2Live ? h("span", {}, "Vault v2 ", addrLink(config.vault2)) : null,
         config.hook ? h("span", {}, "Hook ", addrLink(config.hook)) : null,
+        h("a", { href: link("/integrate") }, "For launchpads"),
         h("a", { href: link("/referee") }, "Referee Fund"),
         h("a", { href: link("/new") }, "Make a pledge"),
         h("a", { href: config.repo, target: "_blank", rel: "noopener" }, "Source"),
@@ -2704,6 +2705,7 @@ function route({ quiet = false } = {}) {
   if (path === "/how") return viewHow({ quiet });
   if (path === "/pledges") return viewHome({ quiet });
   if (path === "/report") return paint("/", () => h("section", { class: "wrap" }, reportPage()), { quiet });
+  if (path === "/integrate") return paint("/teams", () => h("section", { class: "wrap" }, integratePage({ example: "0x7e717f5e93334b69e17f488c1cd69586cdd34a33" })), { quiet });
   const c = path.match(/^\/check\/(.+)$/);
   if (c) return viewCheck(decodeURIComponent(c[1]), { quiet });
   return viewCheckHome({ quiet });

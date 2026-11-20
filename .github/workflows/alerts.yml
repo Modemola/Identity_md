@@ -1,5 +1,10 @@
-# KEPT alerts on Telegram (scripts/alerts): every 10 minutes, posts due dates, verdicts, burns and
-# new pledges to the channel and to people who follow a pledge, and answers the bot's commands.
+# KEPT alerts on Telegram (scripts/alerts): every 3 minutes, posts due dates, verdicts, burns,
+# launcher alerts and the weekly report, and answers the bot's commands.
+#
+# GitHub's scheduler drops most runs of a frequent schedule, so once the bot token is set, one run
+# loops for about five and a half hours and then starts the next run itself (a run started this way
+# is never dropped). The schedule is only a backstop; the daily health job also restarts the chain.
+# Actions minutes are free for a public repository.
 #
 # Setup (see scripts/alerts/README.md):
 #   secret    TELEGRAM_BOT_TOKEN     from @BotFather
@@ -11,7 +16,7 @@ name: KEPT alerts
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -20,11 +25,12 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   alerts:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 350
     defaults:
       run:
         working-directory: scripts/alerts
@@ -53,7 +59,22 @@ jobs:
           TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}
           TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
         run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then echo "TELEGRAM_BOT_TOKEN is not set: dry run."; node alerts.mjs --dry; else node alerts.mjs; fi
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then echo "TELEGRAM_BOT_TOKEN is not set: one dry run."; node alerts.mjs --dry; exit 0; fi
+          end=$((SECONDS + 5 * 3600 + 20 * 60))
+          while [ $SECONDS -lt $end ]; do
+            node alerts.mjs || echo "pass failed; the next one retries"
+            sleep 180
+          done
+
+      - name: Start the next run
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
+        working-directory: .
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then echo "no bot token: no chain"; exit 0; fi
+          gh workflow run alerts.yml --repo "$GITHUB_REPOSITORY" --ref main
 
       - name: Save alerts memory
         if: always() && hashFiles('scripts/alerts/.state.json') != ''

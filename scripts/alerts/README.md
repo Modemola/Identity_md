@@ -1,6 +1,6 @@
 # KEPT alerts on Telegram
 
-Every 10 minutes, GitHub Actions runs `alerts.mjs`, which sends:
+Every 3 minutes, GitHub Actions runs `alerts.mjs`, which sends:
 
 | when | what |
 | --- | --- |
@@ -53,7 +53,7 @@ The first run starts from the current block, so it doesn't post old verdicts. Du
 
 A link like `t.me/keptalerts_bot?start=follow_1` follows a pledge in one tap, and `?start=watch_0x…` watches a launcher. Pledge pages, record pages and the 🆕 alerts use these links.
 
-Replies to commands arrive at the next scheduled run, usually within 10 to 20 minutes, because the bot isn't running all the time. GitHub can delay scheduled runs at busy times. It also pauses them after 60 days without activity in the repo; a manual run turns them back on.
+Replies to commands arrive within about 3 minutes. GitHub's scheduler drops most runs of frequent schedules, so once the bot token is set, one run loops for about five and a half hours and then starts the next one itself; a schedule every two hours and the daily health job (`.github/workflows/health.yml`) restart the chain if it ever stops, and the health job opens an issue labelled `kept-health` when it does.
 
 ## Run it locally
 
