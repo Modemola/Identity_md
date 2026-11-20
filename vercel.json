@@ -47,6 +47,10 @@
     {
       "source": "/report",
       "destination": "/api/report"
+    },
+    {
+      "source": "/c/:q",
+      "destination": "/api/rshare?q=:q"
     }
   ],
   "functions": {
@@ -54,6 +58,9 @@
       "includeFiles": "api/_lib/fonts/**"
     },
     "api/report.mjs": {
+      "includeFiles": "api/_lib/fonts/**"
+    },
+    "api/rshare.mjs": {
       "includeFiles": "api/_lib/fonts/**"
     }
   },

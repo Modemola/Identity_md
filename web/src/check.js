@@ -14,6 +14,8 @@ const MAINNET_EXPLORER = "https://robin.etherscan.io";
 const SOURCE = config.net === "vibevibe" ? "vibevibe" : "imd";
 const SOURCE_NAME = { vibevibe: "vibe/vibe", imd: "IMD" };
 const explorerOf = (source) => (source === "imd" ? MAINNET_EXPLORER : EXPLORER);
+/** A record's share link: X, Telegram and Discord preview it as the record's own card. */
+const shareUrl = (q, source = SOURCE) => `https://keptmd.vercel.app/c/${q}?s=${source}`;
 
 const getJSON = (url, key, maxAge) =>
   load(
@@ -513,6 +515,21 @@ export function checkResult(q, rec) {
         ),
       ),
       reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Launchers it funded"), h("div", { class: "exit-board" }, ...sib.map(siblingRow)))),
+      h(
+        "div",
+        { class: "vp-actions check-sec" },
+        h(
+          "a",
+          {
+            class: "btn small",
+            target: "_blank",
+            rel: "noopener",
+            href: `https://x.com/intent/post?text=${encodeURIComponent(`One wallet funded ${sib.length} launchers on vibe/vibe. ${red} have a red record: together they sold into ${all.fastExits.toLocaleString("en-US")} of their own launches within an hour. Checked on @keptonchainn.`)}&url=${encodeURIComponent(shareUrl(q, "vibevibe"))}`,
+          },
+          icon("arrow", 14),
+          "Post this",
+        ),
+      ),
     ];
   }
   if (!L) {
@@ -533,7 +550,7 @@ export function checkResult(q, rec) {
     imd
       ? `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher on IMD: ${s.launches} launch${s.launches === 1 ? "" : "es"}, sold into its own pool on ${s.sold}, within an hour on ${s.fastExits}.`
       : `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher: ${s.launches} launches, ${s.graduated} graduated, sold into ${s.fastExits} within an hour of launching.`,
-  )}&url=${encodeURIComponent(`https://keptmd.vercel.app/${SOURCE === "vibevibe" ? "?net=vibevibe" : ""}#/check/${q}`)}`;
+  )}&url=${encodeURIComponent(shareUrl(q, L.source))}`;
   const nums = imd
     ? [
         h("div", {}, h("b", { class: "tnum" }, String(s.launches)), h("span", {}, s.launches === 1 ? "IMD launch" : "IMD launches")),
