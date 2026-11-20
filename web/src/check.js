@@ -412,6 +412,54 @@ function launchCard(l, { lead = false, hold = null } = {}) {
   );
 }
 
+const TONE_CHIP = { exits: ["broken", "quick exits"], sold: ["open", "has sold"], clean: ["kept", "no sells"], new: ["kind", "first launch"] };
+
+/** One launcher in a funding list: its record in a line, linking to its page. */
+function siblingRow(x) {
+  const [cls, word] = TONE_CHIP[x.tone] ?? TONE_CHIP.new;
+  return h(
+    "a",
+    { class: "exit-row sib-row", href: link(`/check/${x.address}`) },
+    h("span", { class: "who" }, short(x.address)),
+    h("span", { class: `chip ${cls}` }, h("span", { class: `lamp ${cls}` }), word),
+    h("span", { class: `tnum ${x.fastExits ? "alarm" : ""}` }, `${x.fastExits} of ${x.launches} sold within an hour`),
+    icon("arrow", 16),
+  );
+}
+
+const sumOf = (list) => list.reduce((a, x) => ({ launches: a.launches + x.launches, fastExits: a.fastExits + x.fastExits }), { launches: 0, fastExits: 0 });
+
+/** Who funded this launcher, and the other launchers the same wallet funded. */
+function fundingSection(fd) {
+  const f = fd.funder;
+  const what = {
+    faucet: ["Its first ETH came from the testnet faucet, which funds everyone.", "No link to anyone."],
+    bridge: ["Its ETH came from its own deposit from Ethereum.", "No link to another wallet."],
+    contract: [`Its biggest early deposit came from a contract, such as a swap paying out (${short(f.from)}).`, "No link to a person."],
+  }[f.kind];
+  if (what) return reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Funding"), h("p", { class: "muted" }, what[0], " ", what[1])));
+  const sib = fd.siblings || [];
+  const all = sumOf(sib);
+  return reveal(
+    h(
+      "section",
+      { class: "check-sec" },
+      h("h2", { class: "display-s" }, "Funding"),
+      h(
+        "p",
+        { class: sib.length ? "fund-lead" : "muted" },
+        "Funded by ",
+        h("a", { href: link(`/check/${f.from}`) }, short(f.from)),
+        f.bridgedFrom ? [" (a deposit from the Ethereum account ", h("a", { href: link(`/check/${f.bridgedFrom}`) }, short(f.bridgedFrom)), ")"] : null,
+        sib.length
+          ? `, which also funded ${sib.length} other launcher${sib.length === 1 ? "" : "s"}. Together they made ${all.launches.toLocaleString("en-US")} launches and sold into ${all.fastExits.toLocaleString("en-US")} within an hour.`
+          : ". That wallet funded no other launcher on record.",
+      ),
+      sib.length ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
+    ),
+  );
+}
+
 export function checkResult(q, rec) {
   const L = rec.launcher;
   const asked = rec.matches.length ? rec.matches : [];
@@ -434,6 +482,39 @@ export function checkResult(q, rec) {
         )
       : null,
   ];
+  if (!L && rec.funded?.siblings?.length) {
+    const sib = rec.funded.siblings;
+    const all = sumOf(sib);
+    const red = sib.filter((x) => x.tone === "exits").length;
+    return [
+      ...head,
+      reveal(
+        h(
+          "div",
+          { class: `verdict-panel ${red ? "t-alarm" : "t-new"}` },
+          h("div", { class: "vp-kicker" }, "Funder ", h("a", { class: "addr", href: `${EXPLORER}/address/${q}`, target: "_blank", rel: "noopener" }, q)),
+          h("div", { class: "vp-word" }, red ? "Funds launchers that sell fast" : "Funds launchers"),
+          h(
+            "div",
+            { class: "vp-nums" },
+            h("div", {}, h("b", { class: "tnum" }, String(sib.length)), h("span", {}, "launchers funded")),
+            h("div", { class: red ? "alarm" : "" }, h("b", { class: "tnum" }, String(red)), h("span", {}, "with a red record")),
+            h("div", {}, h("b", { class: "tnum" }, all.launches.toLocaleString("en-US")), h("span", {}, "launches between them")),
+            h("div", { class: all.fastExits ? "alarm" : "" }, h("b", { class: "tnum" }, all.fastExits.toLocaleString("en-US")), h("span", {}, "sold within an hour")),
+          ),
+          h(
+            "p",
+            { class: "muted" },
+            rec.funded.bridgeOwner
+              ? ["This address is where deposits from the Ethereum account ", h("a", { href: link(`/check/${rec.funded.bridgeOwner}`) }, short(rec.funded.bridgeOwner)), " arrive, and that account is one of these launchers: the same owner funded all of them. "]
+              : "This wallet launched nothing itself. ",
+            `It sent ETH to ${rec.funded.funded} wallet${rec.funded.funded === 1 ? "" : "s"}${rec.funded.truncated ? " in its first 200 transactions" : ""}, and ${rec.funded.siblings.length === rec.funded.funded ? "every one is" : `${rec.funded.siblings.length} are`} a launcher on vibe/vibe.`,
+          ),
+        ),
+      ),
+      reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Launchers it funded"), h("div", { class: "exit-board" }, ...sib.map(siblingRow)))),
+    ];
+  }
   if (!L) {
     return [
       ...head,
@@ -489,6 +570,7 @@ export function checkResult(q, rec) {
       ),
     ),
     lead ? reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "This launch"), launchCard(lead, { lead: true, hold: rec.holdings }))) : null,
+    rec.funding ? fundingSection(rec.funding) : null,
     rec.kept && rec.kept.pledges.length
       ? reveal(
           h(

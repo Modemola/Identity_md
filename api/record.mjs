@@ -14,6 +14,7 @@ import { meta, launcher, findLaunches, fmtEth, FACTORY_LABEL, imdMeta, imdLaunch
 import { NETS, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
 import { holdings, pctText } from "./_lib/holdings.mjs";
+import { fundingOf, launchersFundedBy, unaliasOf } from "./_lib/funding.mjs";
 
 const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
 const MAINNET_RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -52,6 +53,9 @@ async function pledgesOf(wallet) {
   const mine = every.filter((p) => p.beneficiary === wallet.toLowerCase());
   return { ...scoreOf(mine), pledges: mine.map((p) => ({ chainId: p.chainId, id: p.id, name: p.name, testOracle: p.testOracle })) };
 }
+
+/** The explorer is a nice-to-have: a slow answer never holds up the record. */
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
 
 export async function GET(request) {
   const params = new URL(request.url).searchParams;
@@ -134,6 +138,19 @@ export async function GET(request) {
         if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now${curve ? `, ${pctText(hold.poolBps)} is still in the launch pool` : ""}${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
       }
     }
+    // vibe/vibe: who funded this launcher, and the other launchers the same wallet funded. A wallet
+    // that launched nothing may be a funder: then the launchers it funded are its record
+    let funding = null;
+    let funded = null;
+    if (src === "vibevibe" && rec) funding = await withTimeout(fundingOf(rec.address), 6000).catch(() => null);
+    if (!rec && /^0x/.test(q) && !primary) {
+      const f = await withTimeout(launchersFundedBy(q), 6000).catch(() => null);
+      if (f?.siblings?.length) {
+        // the funder may be an Ethereum account's bridge address: name the account when it launches too
+        const owner = unaliasOf(q);
+        funded = { ...f, ...(f.siblings.some((x) => x.address === owner) ? { bridgeOwner: owner } : {}) };
+      }
+    }
     const fast = ((src === "imd" ? im : m) ?? m ?? im).fastExitSeconds / 60;
     const body = {
       source: src === "imd" ? "IMD launches on Robinhood Chain (4663), from public transfer logs and each launch's launch.json" : "vibe/vibe launches on Robinhood Chain testnet (46630), from public event logs",
@@ -163,6 +180,8 @@ export async function GET(request) {
       alsoOn: other ? { source: other, tone: recs[other].tone, launches: recs[other].summary.launches, fastExits: recs[other].summary.fastExits } : null,
       kept: wallet ? await pledgesOf(wallet) : null,
       holdings: hold,
+      funding,
+      funded,
       rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet.`,
     };
     return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
