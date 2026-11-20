@@ -1,15 +1,21 @@
-# KEPT launcher records: every hour, reads new vibe/vibe launches, trades and graduations, and the
-# launcher wallets' transfers on IMD launches on Robinhood Chain mainnet, and publishes both indexes
-# to the `data` branch, where /api/record reads them. Vercel ignores that branch.
+# KEPT launcher records: reads new vibe/vibe launches, trades and graduations, and the launcher
+# wallets' transfers on IMD launches on Robinhood Chain mainnet, and publishes both indexes to the
+# `data` branch, where /api/record reads them. Vercel ignores that branch.
+#
+# GitHub's scheduler drops most runs of a frequent schedule, so one run loops for about five and a
+# half hours, one pass an hour, then starts the next run itself (a run started this way is never
+# dropped). The schedule is only a backstop that restarts the chain if it ever breaks; the daily
+# health job (health.yml) restarts it too. Actions minutes are free for a public repository.
 name: records
 
 on:
   schedule:
-    - cron: "41 * * * *"
+    - cron: "41 */3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: records
@@ -18,7 +24,7 @@ concurrency:
 jobs:
   index:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,18 +39,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Index vibe/vibe (Robinhood Chain testnet)
-        run: node code/scripts/records/indexer.mjs data/records/vibevibe-46630
-      - name: Index IMD launches (Robinhood Chain mainnet)
-        run: node code/scripts/records/imd.mjs data/records/imd-4663
-      - name: Publish
+      - name: Index and publish every hour
         run: |
-          cd data
-          git config user.name "kept-records"
-          git config user.email "kept-records@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          # one commit only: history isn't needed and would grow by megabytes an hour
-          git commit -q -m "records at block $(node -e 'console.log(require("./records/vibevibe-46630/meta.json").block)')"
-          git reset --soft "$(git commit-tree HEAD^{tree} -m "KEPT launcher records, rebuilt hourly")"
-          git push -f origin data
+          end=$((SECONDS + 5 * 3600 + 20 * 60))
+          while :; do
+            started=$SECONDS
+            bash code/scripts/records/publish.sh || echo "pass failed; the next one retries"
+            [ $((SECONDS + 3600)) -lt $end ] || break
+            sleep $((3600 - (SECONDS - started) > 60 ? 3600 - (SECONDS - started) : 60))
+          done
+      - name: Start the next run
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run records.yml --repo "$GITHUB_REPOSITORY" --ref main

@@ -50,6 +50,8 @@ On a launch page, the record badge tells buyers what they're buying into:
 
 ## For your launch pages
 
+Everything below, with a live preview for any token and code to copy, is at **https://keptmd.vercel.app/#/integrate**.
+
 **Badge**, 20 px, with the token's KEPT score:
 ```html
 <img src="https://keptmd.vercel.app/api/score?token=0x…&chain=46630&format=svg" alt="KEPT score">

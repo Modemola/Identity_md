@@ -462,6 +462,14 @@ function fundingSection(fd) {
   );
 }
 
+/** How fresh this record is: amber past three hours, when the hourly update has missed a few runs. */
+function freshness(rec) {
+  if (!rec.updatedAt) return null;
+  const s = Math.max(0, Date.now() / 1000 - Date.parse(rec.updatedAt) / 1000);
+  const stale = s > 3 * 3600;
+  return h("p", { class: `fine ${stale ? "caution" : "muted"} fresh` }, h("span", { class: `lamp ${stale ? "caution" : "ok"}` }), ` Records updated ${s < 90 ? "just now" : `${ago(s)} ago`}${stale ? ": the hourly update is behind, so the newest launches and sales may be missing." : "."}`);
+}
+
 export function checkResult(q, rec) {
   const L = rec.launcher;
   const asked = rec.matches.length ? rec.matches : [];
@@ -607,6 +615,7 @@ export function checkResult(q, rec) {
         h("div", { class: "launch-list" }, ...L.recent.filter((l) => !lead || l.token !== lead.token).map((l, i) => reveal(launchCard(l), Math.min(i, 6) * 50))),
       ),
     ) : null,
+    freshness(rec),
     h("p", { class: "fine muted check-rule" }, rec.rule, imd ? " Facts from Robinhood Chain's public transfer logs: a sale is the launcher's own tokens going into the Uniswap pool in a swap; adding liquidity isn't counted. The launcher is the remainder wallet named in the launch's launch.json." : " Facts from vibe/vibe's public event logs on Robinhood Chain testnet.", " A clean record isn't a promise: a launcher can use a fresh wallet. ", h("a", { href: link("/teams") }, "Teams that want to prove themselves lock tokens on KEPT"), "."),
   ];
 }
@@ -620,3 +629,101 @@ export function checkPage(q, paintInto) {
   );
 }
 export { magnetic, reduced };
+
+// ------------------------------------------------------------------ for launchpads
+
+/** /integrate: the badge, the card and the API for any token, with code to copy. */
+export function integratePage({ example }) {
+  const SITE_URL = "https://keptmd.vercel.app";
+  const preview = h("div", { class: "int-preview" });
+  const blocks = h("div", { class: "int-blocks" });
+  const copyBtn = (text) =>
+    h(
+      "button",
+      {
+        class: "btn small",
+        type: "button",
+        onclick: (e) => {
+          const b = e.currentTarget;
+          navigator.clipboard?.writeText(text).then(() => {
+            b.textContent = "Copied";
+            setTimeout(() => (b.textContent = "Copy"), 1500);
+          });
+        },
+      },
+      "Copy",
+    );
+  const block = (title, note, code) => h("div", { class: "int-block" }, h("div", { class: "int-head" }, h("b", {}, title), copyBtn(code)), note ? h("p", { class: "muted fine" }, note) : null, h("pre", { class: "int-code" }, code));
+  const render = (q) => {
+    const share = `${SITE_URL}/c/${q}`;
+    preview.replaceChildren(
+      h("div", { class: "int-badge" }, h("span", { class: "label" }, "Badge"), h("a", { href: link(`/check/${q}`) }, h("img", { src: `${HOST}/api/record?q=${encodeURIComponent(q)}&format=svg`, alt: "KEPT record badge", height: "20" }))),
+      h("div", {}, h("span", { class: "label" }, "Card"), h("a", { href: link(`/check/${q}`) }, h("img", { class: "int-card", src: `${HOST}/api/rshare?q=${encodeURIComponent(q)}&format=png`, alt: "KEPT record card", width: "600", height: "315" }))),
+    );
+    blocks.replaceChildren(
+      block("Badge", "20 px high, in the record's colour. Links to the full record.", `<a href="${share}"><img src="${SITE_URL}/api/record?q=${q}&format=svg" alt="KEPT record" height="20"></a>`),
+      block("Card", "The record as an image: the verdict, the numbers, the funding cluster.", `<a href="${share}"><img src="${SITE_URL}/api/rshare?q=${q}&format=png" alt="KEPT record" width="600"></a>`),
+      block("Share link", "Posted on X, Telegram or Discord, it previews as the card.", share),
+      block(
+        "API",
+        "JSON, no key, open to any site, cached for 5 minutes. tone is exits, sold, clean or new; facts are plain sentences; holdings says what the launcher still holds.",
+        `const r = await fetch("${SITE_URL}/api/record?q=${q}").then((x) => x.json());
+r.launcher?.tone;      // "exits" | "sold" | "clean" | "new"
+r.launcher?.facts;     // ["Sold into its own launch within 60 minutes …", …]
+r.launcher?.summary;   // launches, graduated, fastExits, …
+r.holdings?.text;      // "The launcher holds 28.9% of the supply right now, …"
+r.funding?.siblings;   // other launchers funded by the same wallet (vibe/vibe)`,
+      ),
+    );
+  };
+  const input = h("input", { type: "search", value: example, placeholder: "Token, wallet or launch #", "aria-label": "Token address, wallet address or launch number", spellcheck: "false" });
+  const form = h(
+    "form",
+    {
+      class: "check-search",
+      onsubmit: (e) => {
+        e.preventDefault();
+        const q = input.value.trim().replace(/^#/, "");
+        if (/^0x[0-9a-fA-F]{40}$/.test(q) || /^\d{1,7}$/.test(q)) render(q);
+        else toastLike(input);
+      },
+    },
+    icon("search", 18),
+    input,
+    h("button", { class: "btn primary", type: "submit" }, "Preview", icon("arrow", 16)),
+  );
+  render(example);
+  const template = `<!-- on every launch page: replace {{TOKEN}} with the launch's token address -->
+<a href="${SITE_URL}/c/{{TOKEN}}">
+  <img src="${SITE_URL}/api/record?q={{TOKEN}}&format=svg" alt="KEPT record" height="20">
+</a>`;
+  return [
+    h(
+      "div",
+      { class: "check-hero" },
+      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp ok" }), "For launchpads and token pages"),
+      h("h1", { class: "display" }, words("Show the record where people buy.", { delay: 80, accent: ["buy."] })),
+      h("p", { class: "lede rise", style: { animationDelay: "380ms" } }, "Every vibe/vibe and IMD launch already has a KEPT record. Put it next to the buy button: one line of code, free, no key, nothing to sign up for. Paste a token to see it."),
+      h("div", { class: "rise", style: { animationDelay: "480ms" } }, form),
+    ),
+    reveal(h("section", { class: "check-sec" }, preview)),
+    reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Copy and paste"), blocks)),
+    reveal(
+      h(
+        "section",
+        { class: "check-sec" },
+        h("h2", { class: "display-s" }, "On every launch at once"),
+        h("p", { class: "muted" }, "A launchpad adds the badge to its launch page template once, and every launch shows its launcher's record from then on, including launches made after today."),
+        block("Launch page template", null, template),
+      ),
+    ),
+    h("p", { class: "fine muted check-rule" }, "The record states facts from public chain logs and never calls anyone a scammer. The colour follows a published rule: ", h("a", { href: link("/how") }, "how it works"), ". Questions or a launchpad not covered yet: ", h("a", { href: "https://x.com/keptonchainn", target: "_blank", rel: "noopener" }, "@keptonchainn"), "."),
+  ];
+}
+
+/** A small shake on an input that wasn't a token, wallet or launch number. */
+function toastLike(el) {
+  el.setCustomValidity("Paste a token address, a wallet address or a launch number.");
+  el.reportValidity();
+  setTimeout(() => el.setCustomValidity(""), 2000);
+}

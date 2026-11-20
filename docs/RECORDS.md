@@ -95,6 +95,8 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 - `ids/f-n.json`: launch number to token
 - `meta.json`: totals, block times and the ranking
 
+GitHub's scheduler drops most runs of an hourly schedule, so one run of the job loops for about five and a half hours, one pass an hour, then starts the next run itself. The daily health job restarts the chain if it stops and opens an issue labelled `kept-health`. Every record shows when it was last updated, and `/api/health` gives the age of each source.
+
 The API reads one small file per lookup. Vercel ignores the `data` branch, so the hourly update never triggers a deploy.
 
 To run it yourself:

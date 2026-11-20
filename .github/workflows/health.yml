@@ -1,0 +1,60 @@
+# KEPT health: checks that the records are fresh (keptmd.vercel.app/api/health) and that the alerts
+# chain is running. Anything stopped is restarted, and an issue labelled kept-health is opened, so
+# the repository owner hears about it by email; it closes itself once everything is fresh again.
+name: health
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  issues: write
+  contents: read
+
+concurrency:
+  group: health
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check and restart
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
+        run: |
+          set -u
+          problems=""
+          health=$(curl -s -m 60 https://keptmd.vercel.app/api/health || echo '{}')
+          echo "$health"
+          if [ "$(echo "$health" | jq -r '.ok // false')" != "true" ]; then
+            problems="$problems
+          - Records are stale or unreadable: $(echo "$health" | jq -c '.sources // "no answer"')"
+            gh workflow run records.yml --repo "$GITHUB_REPOSITORY" --ref main && problems="$problems (restarted the records job)"
+          fi
+          # a records or alerts run should always be running or queued once its chain has started
+          running() { gh run list --repo "$GITHUB_REPOSITORY" --workflow "$1" --json status --jq '[.[] | select(.status != "completed")] | length' --limit 10; }
+          if [ "$(running records.yml)" = "0" ]; then
+            gh workflow run records.yml --repo "$GITHUB_REPOSITORY" --ref main && problems="$problems
+          - The records job had stopped; restarted it."
+          fi
+          if [ "$HAS_BOT" = "true" ] && [ "$(running alerts.yml)" = "0" ]; then
+            gh workflow run alerts.yml --repo "$GITHUB_REPOSITORY" --ref main && problems="$problems
+          - The alerts job had stopped; restarted it."
+          fi
+          gh label create kept-health --repo "$GITHUB_REPOSITORY" --color B60205 --description "KEPT's background jobs" 2>/dev/null || true
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label kept-health --state open --json number --jq '.[0].number // empty')
+          if [ -n "$problems" ]; then
+            body="The health check at $(date -u +"%Y-%m-%d %H:%M UTC") found:
+          $problems
+
+          Data ages: https://keptmd.vercel.app/api/health. This issue closes itself once everything is fresh."
+            if [ -n "$open" ]; then gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
+            else gh issue create --repo "$GITHUB_REPOSITORY" --title "KEPT health: a background job needs attention" --label kept-health --body "$body"; fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" --comment "Everything is fresh again as of $(date -u +"%Y-%m-%d %H:%M UTC")."
+          fi
