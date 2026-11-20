@@ -39,7 +39,8 @@ const addrOf = (t) => `0x${t.slice(-40)}`.toLowerCase();
 const word = (data, i) => BigInt(`0x${data.slice(2 + i * 64, 66 + i * 64)}`);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-const recordLink = (q) => `https://${SITE}/#/check/${q}`;
+// the share link: Telegram previews it as the record's own card
+const recordLink = (q) => `https://${SITE}/c/${q}`;
 const ago = (s) => {
   if (s < 60) return "under a minute";
   const [n, unit] = s < 5400 ? [Math.round(s / 60), "minute"] : s < 172800 ? [Math.round(s / 3600), "hour"] : [Math.round(s / 86400), "day"];

@@ -72,7 +72,7 @@ export async function imdPass({ state, send, channel, save }) {
     seen.add(L.id);
     if (firstRun || !L.launcher) continue;
     for (const chat of watchers.get(L.launcher) ?? []) {
-      await send(chat, `🚀 <code>${short(L.launcher)}</code> is the launcher of a new IMD launch: <b>$${esc(L.symbol)}</b> (#${L.id}, Robinhood Chain).\nhttps://${SITE}/#/check/${L.token}`);
+      await send(chat, `🚀 <code>${short(L.launcher)}</code> is the launcher of a new IMD launch: <b>$${esc(L.symbol)}</b> (#${L.id}, Robinhood Chain).\nhttps://${SITE}/c/${L.token}?s=imd`);
     }
   }
   st.seen = [...seen];
@@ -82,7 +82,7 @@ export async function imdPass({ state, send, channel, save }) {
     const logs = await rpc("eth_getLogs", [{ address: L.token, topics: [TRANSFER, pad(L.launcher)], fromBlock: hex(from), toBlock: hex(head) }]);
     if (!logs.length) continue;
     const received = BigInt(L.received || "0");
-    const link = `https://${SITE}/#/check/${L.token}`;
+    const link = `https://${SITE}/c/${L.token}?s=imd`;
     const title = `<b>$${esc(L.symbol)}</b> (IMD launch #${L.id}, Robinhood Chain)`;
     // one message per launch per pass: several sales in a row read as one
     let sold = 0n;
