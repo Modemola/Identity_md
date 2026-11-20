@@ -42,6 +42,21 @@ IMD's own launch factory deploys every IMD token, so the deployer says nothing a
 
 Hook and project launches that name no remainder wallet have no launcher, so they're left out. `scripts/records/imd.mjs` builds this index hourly, beside the vibe/vibe one.
 
+## Funding: one owner, many wallets
+
+A launcher can start a fresh wallet, but it has to put ETH in it. For vibe/vibe launchers, each record shows where a wallet's **biggest early deposit** came from (of its first ten incoming transfers), read live from the testnet explorer:
+
+| source | what it says |
+| --- | --- |
+| the testnet faucet | nothing: it funds everyone |
+| the wallet's own deposit from Ethereum | nothing about another wallet. Arbitrum chains show a deposit as coming from the sender's address shifted by `0x1111…1111`, so a wallet funding itself looks like a different sender; KEPT recognises it |
+| a contract, such as a swap paying out | nothing about a person |
+| **another wallet** | **a link**: KEPT lists every other launcher that wallet funded, with their records |
+
+When the funding wallet is an Ethereum account's deposit address, the record names the account too. The first such cluster found: one Ethereum account bridged ETH to itself and four fresh wallets, and all five are red launchers, with 359 launches and 160 sold into within an hour.
+
+Looking up a wallet that launched nothing but funded launchers shows those launchers as its record. A funder that sent ETH to more than 200 wallets is treated as a service, such as an exchange, and links no one. Mainnet funding needs an explorer key, so IMD records don't show it yet.
+
 ## The colour of a record
 
 The colour is a rule, not an opinion. Anyone can check it against the numbers on the page:
