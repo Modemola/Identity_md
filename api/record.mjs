@@ -4,6 +4,7 @@
 //   /api/record?q=123        a launch number: vibe/vibe (both factories) and IMD are searched
 //   &source=imd              show an IMD launch first when a number names both (the site sends this on mainnet)
 //   &format=svg              a 20 px badge instead of JSON
+//   ?view=top | imd | groups  the fastest exits, IMD launches that sold, the funding groups board
 //
 // Reads two launcher indexes, refreshed hourly: vibe/vibe on Robinhood Chain testnet
 // (scripts/records/indexer.mjs) and IMD launches on Robinhood Chain mainnet (scripts/records/imd.mjs),
@@ -14,8 +15,8 @@ import { meta, launcher, findLaunches, liveLaunch, fmtEth, FACTORY_LABEL, imdMet
 import { NETS, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
 import { holdings, pctText } from "./_lib/holdings.mjs";
-import { fundingOf, launchersFundedBy, unaliasOf, redLink, groupLink, groupWarning } from "./_lib/funding.mjs";
-import { groupOf } from "./_lib/records.mjs";
+import { fundingOf, launchersFundedBy, unaliasOf, redLink, groupLink, groupWarning, RED_SHARE } from "./_lib/funding.mjs";
+import { groupOf, groupsMeta } from "./_lib/records.mjs";
 
 const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
 const MAINNET_RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -84,6 +85,25 @@ export async function GET(request) {
       return reply(JSON.stringify({ ...rest, totals: { ...t, buyersInEth: fmtEth(Number(BigInt(t.buyersIn)) / 1e18), creatorOutEth: fmtEth(Number(BigInt(t.creatorOut)) / 1e18), creatorInEth: fmtEth(Number(BigInt(t.creatorIn)) / 1e18) }, leaders }, null, 2), "application/json", 200, 300);
     } catch {
       return reply(JSON.stringify({ error: "record unavailable, retrying shortly" }), "application/json", 503, 30);
+    }
+  }
+  // funding groups: launchers tied together by the wallets that funded them, the red ones first
+  if (params.get("view") === "groups") {
+    try {
+      const gm = await groupsMeta();
+      if (!gm?.list) throw new Error("groups missing");
+      // the board lists the groups that turn their launchers amber: at least a quarter red
+      const red = gm.list.filter((g) => g.red && g.red / g.launchers >= RED_SHARE).sort((a, b) => b.fastExits - a.fastExits || b.red - a.red);
+      const limit = Math.min(200, Number(params.get("limit")) || 100);
+      const body = {
+        updatedAt: gm.updatedAt,
+        totals: { launchers: gm.launchers, launchersRead: gm.launchersRead, groups: gm.groups, groupedLaunchers: gm.groupedLaunchers, redGroups: red.length, redGroupLaunchers: red.reduce((a, g) => a + g.launchers, 0), redGroupFastExits: red.reduce((a, g) => a + g.fastExits, 0) },
+        rule: "Groups where at least a quarter of the launchers have a red record, by how many launches their launchers sold into within an hour.",
+        groups: red.slice(0, limit),
+      };
+      return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
+    } catch {
+      return reply(JSON.stringify({ error: "funding groups are being built, try again shortly" }), "application/json", 503, 60);
     }
   }
   // IMD on Robinhood Chain: totals, and the launches whose launcher sold into its own pool

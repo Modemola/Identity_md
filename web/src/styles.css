@@ -950,6 +950,7 @@ nav.links { min-width: 0; }
 .exit-row { display: grid; grid-template-columns: 44px 1.4fr 1fr 0.8fr 0.8fr 24px; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: var(--hair); text-decoration: none; transition: background-color 0.2s; }
 a.exit-row:hover { background: var(--hover); }
 .exit-row.head { font-size: var(--label); letter-spacing: var(--track); text-transform: uppercase; color: var(--faint); padding: 10px 4px; }
+.exit-row.group-row { grid-template-columns: 44px 1.2fr 1fr 1fr 24px; }
 .exit-row .n { color: var(--faint); }
 .exit-row .who { font-weight: 500; }
 .exit-row .big { font-family: var(--display); font-stretch: 72%; font-weight: 800; font-size: 30px; line-height: 1; }
@@ -1011,6 +1012,8 @@ a.exit-row:hover { background: var(--hover); }
 @media (max-width: 640px) {
   .exit-row { grid-template-columns: 30px 1fr auto 18px; }
   .exit-row .hide-s { display: none; }
+  .exit-row.group-row { grid-template-columns: 24px 1fr auto auto 16px; gap: 10px; font-size: 13px; }
+  .exit-row.group-row .big { font-size: 24px; }
   .check-search { flex-wrap: wrap; padding: 6px 6px 6px 12px; }
   .check-search .btn { flex: 1 0 100%; justify-content: center; }
   .check-search.big .btn { height: 48px; }

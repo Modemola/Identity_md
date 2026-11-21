@@ -111,6 +111,8 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 
 **Totals and the fastest exits**: `https://keptmd.vercel.app/api/record?view=top`.
 
+**Funding groups**: `https://keptmd.vercel.app/api/record?view=groups`, the groups where at least a quarter of the launchers are red, by fast exits. On the site: https://keptmd.vercel.app/#/groups
+
 ## How it stays current
 
 `scripts/records/indexer.mjs` reads new launches, trades and graduations from both factories, in as few RPC calls as the testnet allows. A GitHub Action (`.github/workflows/records.yml`) runs it every hour and publishes small JSON files to the repo's `data` branch:

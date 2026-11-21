@@ -31,6 +31,102 @@ const getJSON = (url, key, maxAge) =>
 // the network you're on decides which source a launch number means first
 export const getRecord = (q) => getJSON(`${HOST}/api/record?q=${encodeURIComponent(q)}&source=${SOURCE}`, `record:${SOURCE}:${q.toLowerCase()}`, 120_000);
 export const getTop = () => getJSON(`${HOST}/api/record?view=top&limit=12`, "record:top", 300_000);
+const getGroups = () => getJSON(`${HOST}/api/record?view=groups`, "record:groups", 300_000);
+
+/** One funding group in a ranked list: the wallet its money starts from, and what its launchers did. */
+function groupRow(g, i) {
+  const share = Math.round((100 * g.red) / g.launchers);
+  return reveal(
+    h(
+      "a",
+      { class: "exit-row group-row", href: link(`/check/${g.root}`) },
+      h("span", { class: "n tnum" }, String(i + 1).padStart(2, "0")),
+      h("span", { class: "who" }, short(g.root)),
+      h("span", { class: "big alarm tnum" }, String(g.fastExits), h("small", {}, ` of ${g.launches.toLocaleString("en-US")}`)),
+      h("span", { class: "tnum" }, `${g.red} of ${g.launchers} red`, h("small", { class: "faint hide-s" }, ` · ${share}%`)),
+      icon("arrow", 16),
+    ),
+    Math.min(i, 8) * 40,
+  );
+}
+const groupHead = () => h("div", { class: "exit-row group-row head" }, h("span", {}, "#"), h("span", {}, "Money from"), h("span", {}, "Fast exits"), h("span", {}, "Launchers"), h("span", {}));
+
+/** The funding groups board: launchers tied together by the wallets that funded them, red ones first. */
+export function groupsPage() {
+  const stats = { groups: h("b", { class: "tnum" }, "…"), launchers: h("b", { class: "tnum" }, "…"), fast: h("b", { class: "tnum" }, "…"), read: h("b", { class: "tnum" }, "…") };
+  const board = h("div", { class: "exit-board" }, ...Array.from({ length: 8 }, () => h("div", { class: "exit-row sk" })));
+  const updated = h("span", { class: "faint" });
+  const post = h("a", { class: "btn small", target: "_blank", rel: "noopener", href: "#", hidden: true }, icon("arrow", 14), "Post the top group");
+  getGroups()
+    .then((r) => {
+      const t = r.totals;
+      countUp(stats.groups, t.redGroups);
+      countUp(stats.launchers, t.redGroupLaunchers);
+      countUp(stats.fast, t.redGroupFastExits);
+      countUp(stats.read, t.launchersRead);
+      updated.textContent = `Updated ${when(Date.parse(r.updatedAt) / 1000)}`;
+      board.replaceChildren(groupHead(), ...r.groups.map(groupRow));
+      const g = r.groups[0];
+      if (g) {
+        post.hidden = false;
+        post.href = `https://x.com/intent/post?text=${encodeURIComponent(`One source of money, ${g.launchers} launchers on vibe/vibe. ${g.red} have a red record: they sold into ${g.fastExits.toLocaleString("en-US")} of their own launches within an hour. Checked on @keptonchainn.`)}&url=${encodeURIComponent(shareUrl(g.root, "vibevibe"))}`;
+      }
+    })
+    .catch(() => board.replaceChildren(h("div", { class: "empty" }, "Funding groups are being built. They're read hourly; try again shortly.")));
+  return [
+    h(
+      "div",
+      { class: "check-hero" },
+      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Follow the money · vibe/vibe"),
+      h("h1", { class: "display" }, words("Funding groups", { delay: 80 })),
+      h(
+        "p",
+        { class: "lede rise", style: { animationDelay: "300ms" } },
+        "A launcher can start a fresh wallet, but someone has to send it ETH. KEPT reads where every launcher's money came from, two wallets back, and groups the launchers that share it. These are the groups where at least a quarter of the launchers sell into their own launches fast.",
+      ),
+    ),
+    reveal(
+      h(
+        "div",
+        { class: "big-stats" },
+        h("div", { class: "alarm" }, stats.groups, h("span", {}, "groups with red launchers")),
+        h("div", {}, stats.launchers, h("span", {}, "launchers in them")),
+        h("div", { class: "alarm" }, stats.fast, h("span", {}, "launches sold into within an hour")),
+        h("div", {}, stats.read, h("span", {}, "launchers' funding read")),
+      ),
+    ),
+    reveal(
+      h(
+        "section",
+        { class: "exit-sec" },
+        h(
+          "div",
+          { class: "sec-head" },
+          h("h2", { class: "display-s" }, "By fast exits"),
+          h("p", { class: "muted" }, "Each row is the wallet the group's money starts from. Open it to see every launcher in the group and the path the money took. A group is a fact about money, not proof of one owner; the rule is in ", h("a", { href: "https://github.com/modemola/identity_md/blob/main/docs/RECORDS.md#funding-groups", target: "_blank", rel: "noopener" }, "RECORDS.md"), "."),
+          updated,
+        ),
+        board,
+        h("div", { class: "chips check-sec" }, post, h("a", { class: "btn small", href: link("/") }, "Check a token")),
+      ),
+    ),
+  ];
+}
+
+/** The home page's short list of funding groups. */
+function groupsTeaser() {
+  const board = h("div", { class: "exit-board" }, ...Array.from({ length: 5 }, () => h("div", { class: "exit-row sk" })));
+  const sec = h(
+    "section",
+    { class: "exit-sec" },
+    h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Funding groups"), h("p", { class: "muted" }, "Fresh wallets, the same money. Launchers tied together by the wallets that funded them, where a quarter or more sell fast. ", h("a", { href: link("/groups") }, "All funding groups"), ".")),
+    board,
+  );
+  getGroups()
+    .then((r) => (r.groups.length ? board.replaceChildren(groupHead(), ...r.groups.slice(0, 5).map(groupRow)) : sec.remove()))
+    .catch(() => sec.remove());
+  return reveal(sec);
+}
 export const getImd = () => getJSON(`${HOST}/api/record?view=imd`, "record:imd", 300_000);
 
 /** The weekly Exits report: the card, the post that goes with it, and a one-tap share. */
@@ -326,6 +422,7 @@ export function checkHome({ examples, feed }) {
         board,
       ),
     ),
+    groupsTeaser(),
   ];
 }
 

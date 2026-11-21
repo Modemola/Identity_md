@@ -162,9 +162,15 @@ for (const list of members.values()) {
     fastExits: rows.reduce((a, r) => a + r.fastExits, 0),
     graduated: rows.reduce((a, r) => a + r.graduated, 0),
   };
-  fs.writeFileSync(path.join(OUT, "groups", `${id}.json`), JSON.stringify({ id, totals, launchers: rows, funders }));
+  // the wallet the money starts from: the one most of the group's wallets were funded by, among
+  // those with no funder of their own in the group
+  const count = new Map();
+  for (const x of list) if (via.get(x)) count.set(via.get(x), (count.get(via.get(x)) ?? 0) + 1);
+  const byUse = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([a]) => a);
+  const root = byUse.find((a) => !via.get(a)) ?? byUse[0] ?? id;
+  fs.writeFileSync(path.join(OUT, "groups", `${id}.json`), JSON.stringify({ id, root, totals, launchers: rows, funders }));
   for (const x of list) (nodes[x.slice(2, 4)] ??= {})[x] = id;
-  index.push({ id, ...totals });
+  index.push({ id, root, ...totals, funders: funders.length });
 }
 for (const [sh, map] of Object.entries(nodes)) fs.writeFileSync(path.join(OUT, "nodes", `${sh}.json`), JSON.stringify(map));
 index.sort((a, b) => b.fastExits - a.fastExits || b.launchers - a.launchers);
@@ -179,6 +185,8 @@ fs.writeFileSync(
     groupedLaunchers: index.reduce((a, g) => a + g.launchers, 0),
     redGroups: index.filter((g) => g.red).length,
     top: index.slice(0, 50),
+    // every group, for the groups board
+    list: index,
   }),
 );
 console.log(`funding: ${index.length} groups, ${index.reduce((a, g) => a + g.launchers, 0)} launchers in them, ${index.filter((g) => g.red).length} with a red launcher`);
