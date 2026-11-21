@@ -2,10 +2,9 @@
 
 ![KEPT: promises the swarm enforces. The IMD swarm as a sphere of agents around a pledge, in the KEPT swarm scope.](docs/brand/kept-cover.png)
 
-**A token launch where the roadmap is a contract, and the IMD swarm decides if it was kept.**
+**Check before you buy. KEPT is the public record of every launcher, and a way for honest teams to prove themselves.**
 
-Built for the IMD hackathon. Live on Robinhood Chain:
-**<https://keptmd.vercel.app>** · five minute walkthrough in [docs/JUDGES.md](docs/JUDGES.md).
+Live on Robinhood Chain: **<https://keptmd.vercel.app>**. Built for the IMD hackathon and kept going since; the original five minute walkthrough is in [docs/JUDGES.md](docs/JUDGES.md).
 
 ---
 
@@ -23,7 +22,28 @@ team does not control.
 IMD already has that judge. Its oracle sends a precise question to a panel of agents, and the
 network signs their verdict with EIP-712. KEPT connects that verdict to the team's tokens.
 
-## What KEPT is
+## What KEPT does
+
+**Records, for every launcher.** Bad actors never opt in, so KEPT reads the chain instead. Every vibe/vibe launch (Robinhood Chain testnet) and every IMD launch on Robinhood Chain mainnet has a record of the wallet behind it:
+- what it launched before, what graduated, and how soon it sold into its own launches
+- who funded the wallet, and the other launchers that funder funded
+- how much of the supply it holds right now
+
+A colour follows a published rule, and the record states facts, never accusations. Paste a token, a wallet or a launch number at <https://keptmd.vercel.app>. See [docs/RECORDS.md](docs/RECORDS.md).
+
+**Seen as it happens.**
+- **Live feed:** flags a new launch from a red launcher the moment it lands.
+- **Telegram:** `/watch` follows any launcher, and the channel posts red launchers and launchers' sales.
+- **Weekly report:** the Exits report is a card every Monday.
+- **Share links:** every record has one, `/c/<token>`, that previews as its own card.
+
+**Everywhere people buy.** A badge, a card and a free API for any token, with code to copy, at <https://keptmd.vercel.app/#/integrate>.
+
+**Promises, for teams with nothing to hide.**
+- **Pledges:** a team locks its own tokens behind milestones the IMD swarm checks (below). Kept, they unlock; missed, they burn.
+- **Bonds:** on KeptVault v2, a team can also post ETH that buys the token from holders if the promise breaks. See [docs/BONDS.md](docs/BONDS.md).
+
+## Promises: how a pledge works
 
 1. **A vault.** A team locks its tokens behind up to eight public milestones, each with a
    deadline and a share of the tokens. Nothing can withdraw them: no admin, no pause, no upgrade.
@@ -103,6 +123,12 @@ site reads the vault before you connect anything.
 | [`docs/launches/`](docs/launches) | IMD launch records and the audit adaptation notes for each launch |
 | [`docs/research.md`](docs/research.md) | IMD protocol notes and addresses |
 | [`docs/brand/`](docs/brand) | Logo, avatar, X banner and the script that draws them |
+| [`docs/RECORDS.md`](docs/RECORDS.md) | Launcher records: what's read, the colour rule, funding links, how they stay current |
+| [`docs/BONDS.md`](docs/BONDS.md) | ETH bonds behind promises, and the rising-bid buyback |
+| [`docs/VAULT_V2.md`](docs/VAULT_V2.md) | KeptVault v2: partial credit, checks after the deadline, appeals |
+| [`docs/API.md`](docs/API.md) | The public API: score, badge, embed, record |
+| [`docs/VIBEVIBE.md`](docs/VIBEVIBE.md) | KEPT on vibe/vibe, for the vibe/vibe team |
+| [`scripts/alerts/README.md`](scripts/alerts/README.md) | The Telegram bot: alerts, commands, setup |
 
 ## Repository layout
 
@@ -142,8 +168,11 @@ seeds a local anvil chain with pledges in every state for exactly that.
 | Fork rehearsal against Robinhood's live Intake and PoolManager | Passing, opt in |
 | Website | Live at keptmd.vercel.app, reading the live vault |
 | KEPT's own pledge | 300,000,000 KEPT locked behind three milestones |
+| Launcher records | Live for vibe/vibe (testnet) and IMD (mainnet), rebuilt hourly |
+| `KeptVaultV2` and `KeptBond` | Live on Robinhood Chain testnet with the test kit (`scripts/testnet`) |
+| Telegram alerts | Built; on once the bot token is set |
 
-221 tests passing, 0 failing. IMD's audit agents reviewed both launches; every finding is in
+The suite has grown since launch: 375 tests passing, 0 failing (`forge test`), plus opt-in fork tests against the live chains. IMD's audit agents reviewed both launches; every finding is in
 [docs/SECURITY.md](docs/SECURITY.md) with the test that pins it.
 
 ## Local development
