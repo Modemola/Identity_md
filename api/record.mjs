@@ -10,11 +10,11 @@
 // plus the wallet's KEPT pledges on every network. Facts only: launches, and the launcher's own
 // sales into its launches' pools or curves.
 
-import { meta, launcher, findLaunches, fmtEth, FACTORY_LABEL, imdMeta, imdLauncher, findImd, IMD_POOL_MANAGER } from "./_lib/records.mjs";
+import { meta, launcher, findLaunches, liveLaunch, fmtEth, FACTORY_LABEL, imdMeta, imdLauncher, findImd, IMD_POOL_MANAGER } from "./_lib/records.mjs";
 import { NETS, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
 import { holdings, pctText } from "./_lib/holdings.mjs";
-import { fundingOf, launchersFundedBy, unaliasOf } from "./_lib/funding.mjs";
+import { fundingOf, launchersFundedBy, unaliasOf, redLink } from "./_lib/funding.mjs";
 
 const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
 const MAINNET_RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -52,6 +52,17 @@ async function pledgesOf(wallet) {
   const every = (await Promise.all(nets.map(([id, n]) => allPledges(Number(id), n).catch(() => [])))).flat();
   const mine = every.filter((p) => p.beneficiary === wallet.toLowerCase());
   return { ...scoreOf(mine), pledges: mine.map((p) => ({ chainId: p.chainId, id: p.id, name: p.name, testOracle: p.testOracle })) };
+}
+
+/**
+ * A record with a launch the hourly index hasn't read yet: put first, and said plainly. A wallet
+ * with nothing else on record gets a first-launch record from it.
+ */
+function withLive(rec, l) {
+  const note = { tone: "caution", text: `$${l.symbol || "?"} launched after the last hourly update, so its buys and the launcher's sales aren't counted here yet.` };
+  if (rec) return { ...rec, facts: [note, ...rec.facts], launches: [l, ...rec.launches] };
+  const summary = { launches: 1, graduated: 0, sold: 0, fastExits: 0, buys: 0, buyersIn: "0", creatorIn: "0", creatorOut: "0", ethLaunches: l.pairIsEth ? 1 : 0 };
+  return { address: l.creator, summary, tone: "new", facts: [note], launches: [l] };
 }
 
 /** The explorer is a nice-to-have: a slow answer never holds up the record. */
@@ -109,18 +120,30 @@ export async function GET(request) {
       vibevibe: m ? (await findLaunches(q)).map((f) => ({ ...f, source: "vibevibe", factory: FACTORY_LABEL[f.factory] })) : [],
       imd: im ? await findImd(q) : [],
     };
+    // a token launched since the hourly update: read its launch from the chain, so a link in a
+    // fresh alert never lands on "no launches on record"
+    let live = null;
+    if (m && !bySource.vibevibe.length && !bySource.imd.length && /^0x/.test(q)) {
+      live = await withTimeout(liveLaunch(q), 4000).catch(() => null);
+      if (live) bySource.vibevibe = [{ factory: FACTORY_LABEL[live.factory], id: live.id, token: live.token, creator: live.creator, source: "vibevibe" }];
+    }
     const found = order.flatMap((src) => bySource[src]);
     const primary = found[0];
     // an address that launched nothing may still be a launcher's wallet
     const wallet = primary ? primary.creator : /^0x/.test(q) ? q.toLowerCase() : null;
     const [recV, recI] = wallet ? await Promise.all([m ? launcher(wallet).catch(() => null) : null, im ? imdLauncher(wallet).catch(() => null) : null]) : [null, null];
-    const recs = { vibevibe: recV, imd: recI };
+    const recs = { vibevibe: live ? withLive(recV, live) : recV, imd: recI };
     const src = primary ? primary.source : order.find((x) => recs[x]) ?? order[0];
     const rec = recs[src];
     const other = order.find((x) => x !== src && recs[x]);
     if (svg) {
       if (!rec) return reply(badge("no launches on record", "none"), "image/svg+xml; charset=utf-8", 200, 300);
       const s = rec.summary;
+      // a launcher without a red record of its own may still be funded by the wallet behind red ones
+      if (src === "vibevibe" && rec.tone !== "exits") {
+        const link = redLink(await withTimeout(fundingOf(rec.address), 3000).catch(() => null));
+        if (link) return reply(badge(`funder backs ${link.red} red launcher${link.red === 1 ? "" : "s"}`, "sold"), "image/svg+xml; charset=utf-8", 200, 300);
+      }
       const text = s.fastExits ? `${s.fastExits}/${s.launches} quick exits` : s.sold ? `sold ${s.sold}/${s.launches}` : `${s.launches} launch${s.launches === 1 ? "" : "es"} · no sells`;
       return reply(badge(text, rec.tone), "image/svg+xml; charset=utf-8", 200, 300);
     }
@@ -181,8 +204,10 @@ export async function GET(request) {
       kept: wallet ? await pledgesOf(wallet) : null,
       holdings: hold,
       funding,
+      // the funder also funded launchers with a red record
+      linked: rec?.tone !== "exits" ? redLink(funding) : null,
       funded,
-      rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet.`,
+      rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet. Amber also when a green or grey launcher's funder also funded launchers with a red record (see linked); tone stays the launcher's own.`,
     };
     return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
   } catch (e) {

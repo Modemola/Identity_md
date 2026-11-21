@@ -11,6 +11,7 @@ Every 3 minutes, GitHub Actions runs `alerts.mjs`, which sends:
 | a tranche is released, or burned | 🔓 / 🔥 (the burn comes with the verdict card) |
 | someone creates a pledge | 🆕 with a one-tap link to follow it |
 | a launcher with a red record launches again on vibe/vibe | ⚠️ to the channel, with its record (at most once per wallet every 6 hours) |
+| a wallet with no red record launches on vibe/vibe, and the wallet that funded it also funded launchers with a red record | ⚠️ to the channel: the funder and what its red launchers did (at most once per funder every 6 hours) |
 | a watched launcher launches again | 🚀 to its watchers, with its record |
 | a watched launcher sells into one of its own launches | 🔻 to its watchers: which token, how soon after launching, and the ETH it took out |
 | an IMD launcher on Robinhood Chain sells into its own launch's pool | 🔻 to the channel and its watchers: how much of its share, and how soon after launch (adding liquidity stays quiet) |

@@ -42,6 +42,60 @@ function timeOf(blockTimes, b) {
 
 export const FACTORY_LABEL = ["vibe/vibe (first factory)", "vibe/vibe"];
 
+const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
+const LAUNCHED = "0xa7e8032bfd07a9fbcde50eabe91eb2901faee6dbddd9cced579491d9b07ef5c8";
+async function rpc(method, params) {
+  const r = await fetch(TESTNET_RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+function abiString(data, offset) {
+  try {
+    const at = 2 + Number(offset) * 2;
+    const len = Math.min(64, parseInt(data.slice(at, at + 64), 16));
+    return Buffer.from(data.slice(at + 64, at + 64 + len * 2), "hex").toString("utf8").replace(/[\u0000-\u001f]/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A launch newer than the hourly index, read from the chain: the token's `Launched` event since
+ * the index's last block. Its trades aren't counted yet, so it says so (`live: true`).
+ */
+export async function liveLaunch(token) {
+  const m = await meta();
+  if (!m || !/^0x[0-9a-fA-F]{40}$/.test(token)) return null;
+  const head = parseInt(await rpc("eth_blockNumber", []), 16);
+  // the RPC reads at most 100,000 blocks per address filter
+  const from = Math.max(m.block - 2000, head - 95_000);
+  const logs = await rpc("eth_getLogs", [{ address: m.factories, topics: [LAUNCHED, null, null, `0x${token.slice(2).toLowerCase().padStart(64, "0")}`], fromBlock: `0x${from.toString(16)}`, toBlock: "latest" }]);
+  const l = logs[0];
+  if (!l) return null;
+  const word = (i) => BigInt(`0x${l.data.slice(2 + i * 64, 66 + i * 64)}`);
+  const block = await rpc("eth_getBlockByNumber", [l.blockNumber, false]);
+  return {
+    factory: m.factories.indexOf(l.address.toLowerCase()),
+    id: Number(BigInt(l.topics[1])),
+    token: token.toLowerCase(),
+    creator: `0x${l.topics[2].slice(-40)}`.toLowerCase(),
+    pool: `0x${l.data.slice(26, 66)}`.toLowerCase(),
+    symbol: abiString(l.data, word(2)),
+    name: abiString(l.data, word(1)),
+    launchedAt: parseInt(block.timestamp, 16),
+    graduated: false,
+    pairIsEth: word(4) === 0n,
+    buys: 0,
+    buyersIn: "0",
+    creatorIn: "0",
+    creatorOut: "0",
+    creatorSells: 0,
+    exitAfter: null,
+    live: true,
+  };
+}
+
 /** One launch, from the index's compact row, with times and amounts spelled out. */
 function launch(row, blockTimes) {
   const [factory, id, token, pool, block, symbol, name, eth, grad, buys, buyersIn, creatorIn, creatorOut, sells, firstSell] = row;

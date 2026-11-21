@@ -55,6 +55,8 @@ A launcher can start a fresh wallet, but it has to put ETH in it. For vibe/vibe 
 
 When the funding wallet is an Ethereum account's deposit address, the record names the account too. The first such cluster found: one Ethereum account bridged ETH to itself and four fresh wallets, and all five are red launchers, with 359 launches and 160 sold into within an hour.
 
+A launcher with no red record of its own whose funder also funded red launchers reads **amber**, "Funded by the wallet behind red launchers", with the funder named above its own facts: on its page, its card, its badge ("funder backs N red launchers"), and in `linked` in the JSON. `tone` in the JSON stays the rule on its own launches. The alerts channel also posts it the moment such a wallet launches, so a fresh wallet is named before its first sale.
+
 Looking up a wallet that launched nothing but funded launchers shows those launchers as its record. A funder that sent ETH to more than 200 wallets is treated as a service, such as an exchange, and links no one. Mainnet funding needs an explorer key, so IMD records don't show it yet.
 
 ## The colour of a record
@@ -67,6 +69,7 @@ The colour is a rule, not an opinion. Anyone can check it against the numbers on
 | **amber**: "Has sold into its own launches" | it sold into at least one of its own launches, but not that fast that often |
 | **green**: "No sells into its own launches" | it never sold into its own launches, across two launches or more |
 | **grey**: "First launch, no sells yet" | its only launch, with no sells so far: no history to go on yet |
+| **amber**: "Funded by the wallet behind red launchers" | a green or grey record whose funder also funded launchers with a red record (see Funding, above) |
 
 KEPT doesn't call anyone a scammer. The record states what the chain shows, and the page says so.
 
@@ -83,6 +86,8 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 - `launcher`: the summary, the facts as sentences, the colour, and the newest 50 launches in full
 - `matches`: the launches the query named. A launch number can exist on both factories; the current factory comes first.
 - `kept`: the wallet's KEPT pledges and score, on every network
+- `funding`: who funded the launcher, and the other launchers that wallet funded (vibe/vibe)
+- `linked`: set when that funder also funded launchers with a red record: the funder, how many, and their launches and fast exits
 - `rule`: the colour rule, in words
 
 **Totals and the fastest exits**: `https://keptmd.vercel.app/api/record?view=top`.

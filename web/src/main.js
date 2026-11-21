@@ -2085,7 +2085,7 @@ function viewHow({ quiet }) {
             { class: "facts" },
             fact("search", "Read from the chain", "Every vibe/vibe launch on Robinhood Chain testnet and every IMD launch on Robinhood Chain mainnet: who launched it, what graduated, and when the launcher sold into its own launch."),
             fact("gauge", "A colour by a published rule", "Red: sold into its own launch within an hour, on two launches or a quarter of them. Amber: sold into its own launches. Green: never, across two or more. Grey: a first launch."),
-            fact("wallet", "Who funded the wallet", "A fresh wallet still needs ETH. When another wallet funded it, the record lists every other launcher that wallet funded."),
+            fact("wallet", "Who funded the wallet", "A fresh wallet still needs ETH. When another wallet funded it, the record lists every other launcher that wallet funded, and a clean wallet funded by the wallet behind red launchers reads amber from its first launch."),
             fact("lock", "Who holds it now", "Read live: how much of the supply the launcher still holds, how much is in the pool, and how much is burned."),
           ),
         ),
