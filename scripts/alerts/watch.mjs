@@ -7,6 +7,7 @@
 
 import { launcher, findLaunches, fmtEth, findImd, imdLauncher } from "../../api/_lib/records.mjs";
 import { SITE } from "../../api/_lib/vault.mjs";
+import { fundingOf, redLink } from "../../api/_lib/funding.mjs";
 
 const RPC = process.env.KEPT_TESTNET_RPC || "https://rpc.testnet.chain.robinhood.com";
 const FACTORIES = ["0xac135da186de8325047ef2afd1d16d5971f731f7", "0xe794217880011f9ca6961340ed5c16ec9559fea0"];
@@ -19,6 +20,8 @@ export const MAX_WATCH = 25;
 const CHANNEL_QUIET = 6 * 3600;
 /** After a long outage, read at most this many blocks back (about 1.5 hours), not the whole gap. */
 const MAX_GAP = 30_000;
+/** Funding lookups (two explorer calls each) per pass, for launchers without a red record. */
+const MAX_FUNDING_CHECKS = 15;
 
 async function rpc(method, params) {
   for (let attempt = 0; ; attempt++) {
@@ -149,6 +152,8 @@ export const watchedBy = (state, chat) => state.watch[chat] ?? [];
  */
 export async function watchPass({ state, send, channel, save }) {
   const vv = (state.vv ??= { block: null, pools: {}, posted: {} });
+  vv.funders ??= {}; // launcher -> red-linked funder, or "" when checked and not linked
+  let checks = 0;
   const head = parseInt(await rpc("eth_blockNumber", []), 16);
   // the first pass starts now: no flood of old launches
   let from = vv.block == null ? head : vv.block + 1;
@@ -187,6 +192,20 @@ export async function watchPass({ state, send, channel, save }) {
         `⚠️ <b>$${esc(symbol)}</b> just launched on vibe/vibe (#${id})\nIts launcher <code>${short(creator)}</code> sold into its own launch within an hour on <b>${s.fastExits} of ${s.launches}</b> launches before this one.\nCheck before you buy: ${recordLink(token)}`,
       );
       vv.posted[creator] = now;
+    } else if (channel && rec?.tone !== "exits" && checks < MAX_FUNDING_CHECKS && !(creator in vv.funders)) {
+      // a fresh wallet: its own record is clean, but its ETH may come from the wallet behind red ones
+      checks++;
+      const k = redLink(await fundingOf(creator).catch(() => null));
+      vv.funders[creator] = k ? k.funder : "";
+      if (k && now - (vv.posted[k.funder] ?? 0) > CHANNEL_QUIET) {
+        await send(
+          channel,
+          `⚠️ <b>$${esc(symbol)}</b> just launched on vibe/vibe (#${id}) from ${rec ? "a wallet with no red record" : "a fresh wallet"}
+Its ETH came from <code>${short(k.funder)}</code>, which also funded <b>${k.red}</b> launcher${k.red === 1 ? "" : "s"} with a red record: ${k.red === 1 ? "it" : "they"} sold into ${k.fastExits} of ${k.launches} launches within an hour.
+Check before you buy: ${recordLink(token)}`,
+        );
+        vv.posted[k.funder] = now;
+      }
     }
   }
 
@@ -216,6 +235,8 @@ export async function watchPass({ state, send, channel, save }) {
   const keepFrom = head - Math.round((7 * 86400) / SECONDS_PER_BLOCK);
   for (const [p, v] of Object.entries(vv.pools)) if (v.block < keepFrom) delete vv.pools[p];
   for (const [w, t] of Object.entries(vv.posted)) if (now - t > 7 * 86400) delete vv.posted[w];
+  // funding never changes, but keep the memory small: forget all after 5,000 launchers
+  if (Object.keys(vv.funders).length > 5000) vv.funders = {};
   vv.block = head;
   save();
   return { launches: launched.length, sells };

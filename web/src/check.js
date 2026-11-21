@@ -90,8 +90,10 @@ function imdSection() {
   return reveal(h("section", { class: "exit-sec" }, h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "IMD launchers who sold"), sub), list));
 }
 
-const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet" };
-const TONE_CLASS = { exits: "t-alarm", sold: "t-caution", clean: "t-ok", new: "t-new" };
+const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet", linked: "Funded by the wallet behind red launchers" };
+const TONE_CLASS = { exits: "t-alarm", sold: "t-caution", clean: "t-ok", new: "t-new", linked: "t-caution" };
+/** The verdict shown: a green or grey record whose funder also funded red launchers reads amber. */
+const shownTone = (rec) => (rec.linked && (rec.launcher.tone === "new" || rec.launcher.tone === "clean") ? "linked" : rec.launcher.tone);
 
 /** "61 min", "3 h", "2 d" */
 function ago(s) {
@@ -400,8 +402,12 @@ function launchCard(l, { lead = false, hold = null } = {}) {
       { class: "lc-grid" },
       h("div", {}, h("span", { class: "label" }, "Launch"), `#${l.id}`, h("small", { class: "faint" }, l.factory === "vibe/vibe" ? "" : " (first factory)")),
       h("div", {}, h("span", { class: "label" }, "Launched"), when(l.launchedAt)),
-      h("div", {}, h("span", { class: "label" }, "Buyers"), `${l.buys.toLocaleString("en-US")} buys`, l.pairIsEth ? h("small", { class: "faint" }, ` · ${fmtEth(ethOf(l.buyersIn))} ETH`) : null),
-      h(
+      l.live
+        ? h("div", { class: "muted" }, h("span", { class: "label" }, "Trades"), "counted at the next hourly update")
+        : h("div", {}, h("span", { class: "label" }, "Buyers"), `${l.buys.toLocaleString("en-US")} buys`, l.pairIsEth ? h("small", { class: "faint" }, ` · ${fmtEth(ethOf(l.buyersIn))} ETH`) : null),
+      l.live
+        ? null
+        : h(
         "div",
         { class: fast ? "alarm" : exit ? "caution" : "ok" },
         h("span", { class: "label" }, "Launcher sold"),
@@ -458,6 +464,24 @@ function fundingSection(fd) {
           : ". That wallet funded no other launcher on record.",
       ),
       sib.length ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
+    ),
+  );
+}
+
+/** A launcher's funder also funded launchers with a red record: said first, before its own facts. */
+function linkedNote(k, fresh) {
+  return h(
+    "div",
+    { class: "linked-note" },
+    h("span", { class: "lamp alarm" }),
+    h(
+      "p",
+      {},
+      h("b", {}, "Linked to red records. "),
+      "Its ETH came from ",
+      h("a", { href: link(`/check/${k.funder}`) }, short(k.funder)),
+      k.bridgedFrom ? [" (the Ethereum account ", h("a", { href: link(`/check/${k.bridgedFrom}`) }, short(k.bridgedFrom)), ")"] : null,
+      `, which also funded ${k.red} launcher${k.red === 1 ? "" : "s"} with a red record. ${k.red === 1 ? "It" : "Between them they"} sold into ${k.fastExits.toLocaleString("en-US")} of ${k.launches.toLocaleString("en-US")} launches within an hour.${fresh ? " A fresh wallet has no record of its own, but its money does." : ""}`,
     ),
   );
 }
@@ -553,7 +577,8 @@ export function checkResult(q, rec) {
   }
   const s = L.summary;
   const imd = L.source === "imd";
-  const tone = TONE_CLASS[L.tone];
+  const shown = shownTone(rec);
+  const tone = TONE_CLASS[shown];
   const share = `https://x.com/intent/post?text=${encodeURIComponent(
     imd
       ? `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher on IMD: ${s.launches} launch${s.launches === 1 ? "" : "es"}, sold into its own pool on ${s.sold}, within an hour on ${s.fastExits}.`
@@ -580,8 +605,9 @@ export function checkResult(q, rec) {
         "div",
         { class: `verdict-panel ${tone}` },
         h("div", { class: "vp-kicker" }, `${imd ? "IMD on Robinhood Chain" : "vibe/vibe"} · `, lead ? `$${lead.symbol} · launch #${lead.id} · launched by ` : "Launcher ", h("a", { class: "addr", href: `${explorerOf(L.source)}/address/${L.address}`, target: "_blank", rel: "noopener" }, L.address)),
-        h("div", { class: "vp-word" }, TONE_WORD[L.tone]),
+        h("div", { class: "vp-word" }, TONE_WORD[shown]),
         h("div", { class: "vp-nums" }, ...nums),
+        rec.linked ? linkedNote(rec.linked, L.tone === "new") : null,
         h("ul", { class: "vp-facts" }, ...L.facts.map((f) => h("li", {}, f)), rec.alsoOn ? h("li", {}, `Also launched ${rec.alsoOn.launches} token${rec.alsoOn.launches === 1 ? "" : "s"} on ${SOURCE_NAME[rec.alsoOn.source]}${rec.alsoOn.fastExits ? `, selling into ${rec.alsoOn.fastExits} within an hour` : ""}.`) : null),
         h(
           "div",
@@ -672,7 +698,8 @@ r.launcher?.tone;      // "exits" | "sold" | "clean" | "new"
 r.launcher?.facts;     // ["Sold into its own launch within 60 minutes …", …]
 r.launcher?.summary;   // launches, graduated, fastExits, …
 r.holdings?.text;      // "The launcher holds 28.9% of the supply right now, …"
-r.funding?.siblings;   // other launchers funded by the same wallet (vibe/vibe)`,
+r.funding?.siblings;   // other launchers funded by the same wallet (vibe/vibe)
+r.linked;              // set when that wallet also funded red launchers`,
       ),
     );
   };

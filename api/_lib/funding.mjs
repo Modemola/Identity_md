@@ -94,3 +94,20 @@ export async function launchersFundedBy(funder, skip = null) {
     .sort((a, b) => b.fastExits - a.fastExits || b.launches - a.launches);
   return { siblings, funded: wallets.length, truncated };
 }
+
+/**
+ * The warning a fresh wallet can't shake: its funder also funded launchers with a red record.
+ * Null when the funder links to no red launcher. A fact about the funder, not a change to the
+ * launcher's own colour, which stays the rule on its own launches.
+ */
+export function redLink(fd) {
+  const red = (fd?.siblings || []).filter((x) => x.tone === "exits");
+  if (!red.length) return null;
+  return {
+    funder: fd.funder.from,
+    ...(fd.funder.bridgedFrom ? { bridgedFrom: fd.funder.bridgedFrom } : {}),
+    red: red.length,
+    launches: red.reduce((a, x) => a + x.launches, 0),
+    fastExits: red.reduce((a, x) => a + x.fastExits, 0),
+  };
+}

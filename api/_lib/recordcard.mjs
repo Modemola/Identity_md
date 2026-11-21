@@ -8,7 +8,7 @@ const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospa
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const n = (x) => Number(x).toLocaleString("en-US");
-export const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet" };
+export const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet", linked: "Funded by the wallet behind red launchers" };
 
 /** Greedy word wrap for a monospace face. */
 function wrap(text, cols, max) {
@@ -49,10 +49,14 @@ export function cardModel(r, q) {
   const s = L.summary;
   const lead = r.matches?.[0] && L.recent.find((l) => l.token === r.matches[0].token);
   const lines = [];
+  const k = r.linked;
+  if (k) lines.push(`Funded by the same wallet as ${k.red} red launcher${k.red === 1 ? "" : "s"}. ${k.red === 1 ? "It" : "They"} sold into ${n(k.fastExits)} launch${k.fastExits === 1 ? "" : "es"} within an hour.`);
   if (L.facts[0]) lines.push(L.facts[0]);
   const sib = r.funding?.siblings || [];
   if (imd && L.facts[1]) lines.push(L.facts[1]);
-  else if (sib.length) {
+  else if (k) {
+    // already said
+  } else if (sib.length) {
     const fast = sib.reduce((a, x) => a + x.fastExits, 0);
     lines.push(`Its funder also funded ${sib.length} other launcher${sib.length === 1 ? "" : "s"}, which sold into ${n(fast)} launches within an hour.`);
   } else if (r.holdings?.text) lines.push(r.holdings.text);
@@ -61,7 +65,8 @@ export function cardModel(r, q) {
     tone: L.tone,
     kicker: `KEPT RECORD · ${imd ? "IMD on Robinhood Chain" : "vibe/vibe"}`,
     subject: lead ? `$${lead.symbol} · launched by ${short(L.address)}` : `Launcher ${short(L.address)}`,
-    word: TONE_WORD[L.tone],
+    // a green or grey record funded by the wallet behind red launchers reads amber, as on the page
+    ...(k && (L.tone === "new" || L.tone === "clean") ? { word: TONE_WORD.linked, toneOverride: "sold" } : { word: TONE_WORD[L.tone] }),
     nums: imd
       ? [[s.launches, s.launches === 1 ? "IMD launch" : "IMD launches"], [s.sold, "sold into own pool"], [s.fastExits, "sold within an hour"], [s.moved, "moved to other wallets"]]
       : [[s.launches, s.launches === 1 ? "launch" : "launches"], [s.graduated, "graduated"], [s.fastExits, "sold within an hour"], [`${s.creatorOutEth}`, `${"test ETH out"}`]],
@@ -73,7 +78,7 @@ export function cardModel(r, q) {
 export function recordCardSvg(model) {
   const W = 1200;
   const H = 630;
-  const tone = C[model.tone] ?? C.new;
+  const tone = C[model.toneOverride ?? model.tone] ?? C.new;
   const word = wrap(model.word.toUpperCase(), 21, 2);
   const wordSize = word.length > 1 ? 64 : 76;
   const top = 168;
