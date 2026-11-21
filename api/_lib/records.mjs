@@ -27,6 +27,18 @@ async function get(path) {
 export const meta = () => get("meta.json");
 const shard = (a) => a.slice(2, 4).toLowerCase();
 
+/**
+ * The funding group an address belongs to (scripts/records/clusters.mjs): launchers tied together by
+ * the wallets that funded them, up to two steps back. Null when it's in none.
+ */
+export async function groupOf(address) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address || "")) return null;
+  const a = address.toLowerCase();
+  const id = (await get(`funding/nodes/${shard(a)}.json`).catch(() => null))?.[a];
+  return id ? get(`funding/groups/${id}.json`).catch(() => null) : null;
+}
+export const groupsMeta = () => get("funding/meta.json").catch(() => null);
+
 function timeOf(blockTimes, b) {
   let lo = blockTimes[0], hi = blockTimes[blockTimes.length - 1];
   for (const p of blockTimes) {

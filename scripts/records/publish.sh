@@ -3,6 +3,8 @@
 # `data` branch. Run from the workflow's workspace (code/ and data/ side by side).
 set -euo pipefail
 node code/scripts/records/indexer.mjs data/records/vibevibe-46630
+# funding groups: the explorer is a nice-to-have, so a failed pass keeps the last groups
+node code/scripts/records/clusters.mjs data/records/vibevibe-46630 || echo "funding groups: pass failed, keeping the last ones"
 node code/scripts/records/imd.mjs data/records/imd-4663
 cd data
 git config user.name "kept-records"
