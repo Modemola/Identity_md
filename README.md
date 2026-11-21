@@ -26,7 +26,7 @@ network signs their verdict with EIP-712. KEPT connects that verdict to the team
 
 **Records, for every launcher.** Bad actors never opt in, so KEPT reads the chain instead. Every vibe/vibe launch (Robinhood Chain testnet) and every IMD launch on Robinhood Chain mainnet has a record of the wallet behind it:
 - what it launched before, what graduated, and how soon it sold into its own launches
-- who funded the wallet, and the other launchers that funder funded. A clean wallet funded by the wallet behind red launchers reads amber, and the alerts channel names it the moment it launches
+- who funded the wallet, two steps back, and the funding group that money ties it to. A clean wallet in a group with red launchers reads amber, and the alerts channel names it the moment it launches
 - how much of the supply it holds right now
 
 A colour follows a published rule, and the record states facts, never accusations. Paste a token, a wallet or a launch number at <https://keptmd.vercel.app>. See [docs/RECORDS.md](docs/RECORDS.md).

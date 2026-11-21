@@ -55,9 +55,27 @@ A launcher can start a fresh wallet, but it has to put ETH in it. For vibe/vibe 
 
 When the funding wallet is an Ethereum account's deposit address, the record names the account too. The first such cluster found: one Ethereum account bridged ETH to itself and four fresh wallets, and all five are red launchers, with 359 launches and 160 sold into within an hour.
 
-A launcher with no red record of its own whose funder also funded red launchers reads **amber**, "Funded by the wallet behind red launchers", with the funder named above its own facts: on its page, its card, its badge ("funder backs N red launchers"), and in `linked` in the JSON. `tone` in the JSON stays the rule on its own launches. The alerts channel also posts it the moment such a wallet launches, so a fresh wallet is named before its first sale.
+A launcher with no red record of its own whose funder also funded red launchers reads **amber**, "Funded by the wallet behind red launchers", with the funder named above its own facts: on its page, its card, its badge ("funding tied to N red launchers"), and in `linked` in the JSON. `tone` in the JSON stays the rule on its own launches. The alerts channel also posts it the moment such a wallet launches, so a fresh wallet is named before its first sale.
 
 Looking up a wallet that launched nothing but funded launchers shows those launchers as its record. A funder that sent ETH to more than 200 wallets is treated as a service, such as an exchange, and links no one. Mainnet funding needs an explorer key, so IMD records don't show it yet.
+
+### Funding groups
+
+One wallet funding many launchers is the easy case. An operator who knows that funds each launcher from its own fresh wallet, and funds those wallets from one more. So KEPT reads two steps back for every vibe/vibe launcher, every hour (`scripts/records/clusters.mjs`):
+1. each launcher's funder
+2. each funder's own funder, and how many wallets each of them funded
+
+Launchers that share a funder, or whose funders share a funder, form a **funding group**. The group's record is its launchers' records added up, and every launcher's page lists the rest of its group with the path its money took ("this wallet, funded by A, funded by B").
+
+The links are narrow on purpose, so a group means one source of money:
+- the faucet, contracts and a wallet's own deposit from Ethereum link no one
+- a wallet that sent ETH to 150 wallets or more is a service, such as an exchange, and links no one
+- the second step back links only through a wallet that funded 30 wallets or fewer
+- an Ethereum account that launches is joined with the address its deposits arrive from
+
+A group is a fact about money, not a claim of one owner: a busy funder can fund unrelated people. That is why a record turns amber only when at least a quarter of the other launchers its money ties it to are red.
+
+A wallet newer than the hourly index is read live: its funder's group, or its funder's funder's.
 
 ## The colour of a record
 
@@ -69,7 +87,7 @@ The colour is a rule, not an opinion. Anyone can check it against the numbers on
 | **amber**: "Has sold into its own launches" | it sold into at least one of its own launches, but not that fast that often |
 | **green**: "No sells into its own launches" | it never sold into its own launches, across two launches or more |
 | **grey**: "First launch, no sells yet" | its only launch, with no sells so far: no history to go on yet |
-| **amber**: "Funded by the wallet behind red launchers" | a green or grey record whose funder also funded launchers with a red record (see Funding, above) |
+| **amber**: "Funded by the wallet behind red launchers" | a green or grey record whose funding ties it to other launchers, at least a quarter of them red (see Funding, above) |
 
 KEPT doesn't call anyone a scammer. The record states what the chain shows, and the page says so.
 
@@ -87,7 +105,8 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 - `matches`: the launches the query named. A launch number can exist on both factories; the current factory comes first.
 - `kept`: the wallet's KEPT pledges and score, on every network
 - `funding`: who funded the launcher, and the other launchers that wallet funded (vibe/vibe)
-- `linked`: set when that funder also funded launchers with a red record: the funder, how many, and their launches and fast exits
+- `linked`: set when the launcher's funding ties it to launchers with a red record: the funder, the path, how many, and their launches and fast exits
+- `group`: the launcher's funding group: totals, the path its money took, and up to 60 launchers
 - `rule`: the colour rule, in words
 
 **Totals and the fastest exits**: `https://keptmd.vercel.app/api/record?view=top`.
@@ -99,6 +118,7 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 - `tokens/xx.json`: token to launch
 - `ids/f-n.json`: launch number to token
 - `meta.json`: totals, block times and the ranking
+- `funding/`: who funded each launcher and its funder (`edges.json`), and the funding groups (`nodes/xx.json`, `groups/<id>.json`, `meta.json`)
 
 GitHub's scheduler drops most runs of an hourly schedule, so one run of the job loops for about five and a half hours, one pass an hour, then starts the next run itself. The health job, every six hours, restarts the chain if it stops and opens an issue labelled `kept-health`. Every record shows when it was last updated, and `/api/health` gives the age of each source.
 

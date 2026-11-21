@@ -14,7 +14,8 @@ import { meta, launcher, findLaunches, liveLaunch, fmtEth, FACTORY_LABEL, imdMet
 import { NETS, isLive } from "./_lib/vault.mjs";
 import { allPledges, scoreOf } from "./score.mjs";
 import { holdings, pctText } from "./_lib/holdings.mjs";
-import { fundingOf, launchersFundedBy, unaliasOf, redLink } from "./_lib/funding.mjs";
+import { fundingOf, launchersFundedBy, unaliasOf, redLink, groupLink, groupWarning } from "./_lib/funding.mjs";
+import { groupOf } from "./_lib/records.mjs";
 
 const TESTNET_RPC = process.env.KEPT_RPC_46630 || "https://rpc.testnet.chain.robinhood.com";
 const MAINNET_RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -141,8 +142,8 @@ export async function GET(request) {
       const s = rec.summary;
       // a launcher without a red record of its own may still be funded by the wallet behind red ones
       if (src === "vibevibe" && rec.tone !== "exits") {
-        const link = redLink(await withTimeout(fundingOf(rec.address), 3000).catch(() => null));
-        if (link) return reply(badge(`funder backs ${link.red} red launcher${link.red === 1 ? "" : "s"}`, "sold"), "image/svg+xml; charset=utf-8", 200, 300);
+        const link = groupWarning(await withTimeout(groupLink(rec.address), 3000).catch(() => null), rec.address);
+        if (link) return reply(badge(`funding tied to ${link.red} red launcher${link.red === 1 ? "" : "s"}`, "sold"), "image/svg+xml; charset=utf-8", 200, 300);
       }
       const text = s.fastExits ? `${s.fastExits}/${s.launches} quick exits` : s.sold ? `sold ${s.sold}/${s.launches}` : `${s.launches} launch${s.launches === 1 ? "" : "es"} · no sells`;
       return reply(badge(text, rec.tone), "image/svg+xml; charset=utf-8", 200, 300);
@@ -165,8 +166,18 @@ export async function GET(request) {
     // that launched nothing may be a funder: then the launchers it funded are its record
     let funding = null;
     let funded = null;
-    if (src === "vibevibe" && rec) funding = await withTimeout(fundingOf(rec.address), 6000).catch(() => null);
+    let group = null;
+    if (src === "vibevibe" && rec) {
+      funding = await withTimeout(fundingOf(rec.address), 6000).catch(() => null);
+      // the launchers this wallet's money ties it to, up to two funders back
+      group = await withTimeout(groupLink(rec.address, funding?.funder), 5000).catch(() => null);
+    }
     if (!rec && /^0x/.test(q) && !primary) {
+      // a funder in a funding group: the group is its record, two steps deep
+      const g = await groupOf(q).catch(() => null);
+      if (g) group = { group: g, path: [q.toLowerCase()], live: false };
+    }
+    if (!rec && /^0x/.test(q) && !primary && !group) {
       const f = await withTimeout(launchersFundedBy(q), 6000).catch(() => null);
       if (f?.siblings?.length) {
         // the funder may be an Ethereum account's bridge address: name the account when it launches too
@@ -205,9 +216,19 @@ export async function GET(request) {
       holdings: hold,
       funding,
       // the funder also funded launchers with a red record
-      linked: rec?.tone !== "exits" ? redLink(funding) : null,
+      // a launcher in a funding group is judged by its group; one newer than the index, by its funder's launchers
+      linked: rec && rec.tone !== "exits" ? (group ? groupWarning(group, rec.address) : redLink(funding)) : null,
       funded,
-      rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet. Amber also when a green or grey launcher's funder also funded launchers with a red record (see linked); tone stays the launcher's own.`,
+      // the funding group: launchers tied together by the wallets that funded them
+      group: group && {
+        id: group.group.id,
+        totals: group.group.totals,
+        funders: group.group.funders.length,
+        path: group.path,
+        live: group.live,
+        launchers: group.group.launchers.slice(0, 60),
+      },
+      rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet. Amber also when a green or grey launcher's funder also funded launchers with a red record (see linked: launchers its funding ties it to, up to two funders back); tone stays the launcher's own.`,
     };
     return reply(JSON.stringify(body, null, 2), "application/json", 200, 300);
   } catch (e) {

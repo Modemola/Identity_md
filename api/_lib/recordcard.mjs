@@ -30,6 +30,17 @@ function wrap(text, cols, max) {
 /** What the card shows, from a /api/record answer: the verdict, four numbers and two lines. */
 export function cardModel(r, q) {
   const L = r.launcher;
+  if (!L && r.group) {
+    const t = r.group.totals;
+    return {
+      tone: t.red ? "exits" : "new",
+      kicker: "KEPT RECORD · vibe/vibe",
+      subject: `Funder ${short(q)}`,
+      word: t.red ? "Funds launchers that sell fast" : "Funds launchers",
+      nums: [[t.launchers, "launchers in its group"], [t.red, "red records"], [t.launches, "launches"], [t.fastExits, "sold within an hour"]],
+      lines: [`${t.launchers} launchers tied together by the wallets that funded them, up to two funders back.`],
+    };
+  }
   if (!L && r.funded?.siblings?.length) {
     const sib = r.funded.siblings;
     const red = sib.filter((x) => x.tone === "exits").length;
@@ -50,7 +61,8 @@ export function cardModel(r, q) {
   const lead = r.matches?.[0] && L.recent.find((l) => l.token === r.matches[0].token);
   const lines = [];
   const k = r.linked;
-  if (k) lines.push(`Funded by the same wallet as ${k.red} red launcher${k.red === 1 ? "" : "s"}. ${k.red === 1 ? "It" : "They"} sold into ${n(k.fastExits)} launch${k.fastExits === 1 ? "" : "es"} within an hour.`);
+  if (k?.group) lines.push(`Its funding ties it to ${k.others} other launcher${k.others === 1 ? "" : "s"}, ${k.red} red. ${k.red === 1 ? "It" : "They"} sold into ${n(k.fastExits)} launch${k.fastExits === 1 ? "" : "es"} within an hour.`);
+  else if (k) lines.push(`Funded by the same wallet as ${k.red} red launcher${k.red === 1 ? "" : "s"}. ${k.red === 1 ? "It" : "They"} sold into ${n(k.fastExits)} launch${k.fastExits === 1 ? "" : "es"} within an hour.`);
   if (L.facts[0]) lines.push(L.facts[0]);
   const sib = r.funding?.siblings || [];
   if (imd && L.facts[1]) lines.push(L.facts[1]);

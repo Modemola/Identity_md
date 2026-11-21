@@ -438,7 +438,7 @@ function siblingRow(x) {
 const sumOf = (list) => list.reduce((a, x) => ({ launches: a.launches + x.launches, fastExits: a.fastExits + x.fastExits }), { launches: 0, fastExits: 0 });
 
 /** Who funded this launcher, and the other launchers the same wallet funded. */
-function fundingSection(fd) {
+function fundingSection(fd, grouped = false) {
   const f = fd.funder;
   const what = {
     faucet: ["Its first ETH came from the testnet faucet, which funds everyone.", "No link to anyone."],
@@ -461,9 +461,39 @@ function fundingSection(fd) {
         f.bridgedFrom ? [" (a deposit from the Ethereum account ", h("a", { href: link(`/check/${f.bridgedFrom}`) }, short(f.bridgedFrom)), ")"] : null,
         sib.length
           ? `, which also funded ${sib.length} other launcher${sib.length === 1 ? "" : "s"}. Together they made ${all.launches.toLocaleString("en-US")} launches and sold into ${all.fastExits.toLocaleString("en-US")} within an hour.`
-          : ". That wallet funded no other launcher on record.",
+          : grouped
+            ? ". The launchers its money ties it to, up to two funders back, are below."
+            : ". That wallet funded no other launcher on record.",
       ),
-      sib.length ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
+      sib.length && !grouped ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
+    ),
+  );
+}
+
+/** One funding group's numbers, as a sentence. */
+const groupSentence = (t) =>
+  `${t.launchers} launchers are tied together by the wallets that funded them, up to two funders back. ${t.red ? `${t.red} ${t.red === 1 ? "has" : "have"} a red record. ` : "None has a red record. "}Between them: ${t.launches.toLocaleString("en-US")} launches, ${t.fastExits.toLocaleString("en-US")} sold into within an hour.`;
+
+/** The launchers this wallet's money ties it to. */
+function groupSection(g, self) {
+  const others = g.launchers.filter((x) => x.address !== self);
+  const path = g.path.length > 1 ? g.path : null;
+  return reveal(
+    h(
+      "section",
+      { class: "check-sec", id: "funding-group" },
+      h("h2", { class: "display-s" }, "Funding group", h("span", { class: "faint" }, ` · ${g.totals.launchers} launchers`)),
+      h("p", { class: "fund-lead" }, groupSentence(g.totals)),
+      path
+        ? h(
+            "p",
+            { class: "fund-path" },
+            ...path.flatMap((a, i) => [i ? h("span", { class: "faint" }, " funded by ") : null, i ? h("a", { href: link(`/check/${a}`) }, short(a)) : h("b", {}, "This wallet")]),
+            g.live ? h("span", { class: "faint" }, " · read live, newer than the hourly index") : null,
+          )
+        : null,
+      h("div", { class: "exit-board" }, ...others.map(siblingRow)),
+      g.totals.launchers > g.launchers.length ? h("p", { class: "fine muted" }, `Showing the ${g.launchers.length} with the most fast exits.`) : null,
     ),
   );
 }
@@ -481,7 +511,13 @@ function linkedNote(k, fresh) {
       "Its ETH came from ",
       h("a", { href: link(`/check/${k.funder}`) }, short(k.funder)),
       k.bridgedFrom ? [" (the Ethereum account ", h("a", { href: link(`/check/${k.bridgedFrom}`) }, short(k.bridgedFrom)), ")"] : null,
-      `, which also funded ${k.red} launcher${k.red === 1 ? "" : "s"} with a red record. ${k.red === 1 ? "It" : "Between them they"} sold into ${k.fastExits.toLocaleString("en-US")} of ${k.launches.toLocaleString("en-US")} launches within an hour.${fresh ? " A fresh wallet has no record of its own, but its money does." : ""}`,
+      k.group
+        ? [
+            k.path?.[2] ? [", which was funded by ", h("a", { href: link(`/check/${k.path[2]}`) }, short(k.path[2]))] : null,
+            `. That money ties it to ${k.others} other launcher${k.others === 1 ? "" : "s"}, ${k.red} with a red record: ${k.red === 1 ? "it" : "they"} sold into ${k.fastExits.toLocaleString("en-US")} of ${k.launches.toLocaleString("en-US")} launch${k.launches === 1 ? "" : "es"} within an hour.`,
+          ]
+        : `, which also funded ${k.red} launcher${k.red === 1 ? "" : "s"} with a red record. ${k.red === 1 ? "It" : "Between them they"} sold into ${k.fastExits.toLocaleString("en-US")} of ${k.launches.toLocaleString("en-US")} launch${k.launches === 1 ? "" : "es"} within an hour.`,
+      fresh ? " A fresh wallet has no record of its own, but its money does." : null,
     ),
   );
 }
@@ -516,6 +552,46 @@ export function checkResult(q, rec) {
         )
       : null,
   ];
+  if (!L && rec.group) {
+    const g = rec.group;
+    const t = g.totals;
+    return [
+      ...head,
+      reveal(
+        h(
+          "div",
+          { class: `verdict-panel ${t.red ? "t-alarm" : "t-new"}` },
+          h("div", { class: "vp-kicker" }, "Funder ", h("a", { class: "addr", href: `${EXPLORER}/address/${q}`, target: "_blank", rel: "noopener" }, q)),
+          h("div", { class: "vp-word" }, t.red ? "Funds launchers that sell fast" : "Funds launchers"),
+          h(
+            "div",
+            { class: "vp-nums" },
+            h("div", {}, h("b", { class: "tnum" }, String(t.launchers)), h("span", {}, "launchers in its group")),
+            h("div", { class: t.red ? "alarm" : "" }, h("b", { class: "tnum" }, String(t.red)), h("span", {}, "with a red record")),
+            h("div", {}, h("b", { class: "tnum" }, t.launches.toLocaleString("en-US")), h("span", {}, "launches between them")),
+            h("div", { class: t.fastExits ? "alarm" : "" }, h("b", { class: "tnum" }, t.fastExits.toLocaleString("en-US")), h("span", {}, "sold within an hour")),
+          ),
+          h("p", { class: "muted" }, "This wallet launched nothing itself. ", groupSentence(t)),
+        ),
+      ),
+      reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Its funding group"), h("div", { class: "exit-board" }, ...g.launchers.map(siblingRow)))),
+      h(
+        "div",
+        { class: "vp-actions check-sec" },
+        h(
+          "a",
+          {
+            class: "btn small",
+            target: "_blank",
+            rel: "noopener",
+            href: `https://x.com/intent/post?text=${encodeURIComponent(`${t.launchers} launchers on vibe/vibe, tied together by the wallets that funded them. ${t.red} ${t.red === 1 ? "has" : "have"} a red record and sold into ${t.fastExits.toLocaleString("en-US")} of their own launches within an hour. Checked on @keptonchainn.`)}&url=${encodeURIComponent(shareUrl(q, "vibevibe"))}`,
+          },
+          icon("arrow", 14),
+          "Post this",
+        ),
+      ),
+    ];
+  }
   if (!L && rec.funded?.siblings?.length) {
     const sib = rec.funded.siblings;
     const all = sumOf(sib);
@@ -621,7 +697,8 @@ export function checkResult(q, rec) {
       ),
     ),
     lead ? reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "This launch"), launchCard(lead, { lead: true, hold: rec.holdings }))) : null,
-    rec.funding ? fundingSection(rec.funding) : null,
+    rec.funding ? fundingSection(rec.funding, Boolean(rec.group)) : null,
+    rec.group ? groupSection(rec.group, L.address) : null,
     rec.kept && rec.kept.pledges.length
       ? reveal(
           h(

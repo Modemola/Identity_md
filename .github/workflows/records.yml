@@ -4,8 +4,8 @@
 #
 # GitHub's scheduler drops most runs of a frequent schedule, so one run loops for about five and a
 # half hours, one pass an hour, then starts the next run itself (a run started this way is never
-# dropped). The schedule is only a backstop that restarts the chain if it ever breaks; the daily
-# health job (health.yml) restarts it too. Actions minutes are free for a public repository.
+# dropped). The schedule is only a backstop that restarts the chain if it ever breaks; the health
+# job (health.yml, every six hours) restarts it too. Actions minutes are free for a public repository.
 name: records
 
 on:
