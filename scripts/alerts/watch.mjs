@@ -7,7 +7,7 @@
 
 import { launcher, findLaunches, fmtEth, findImd, imdLauncher } from "../../api/_lib/records.mjs";
 import { SITE } from "../../api/_lib/vault.mjs";
-import { fundingOf, redLink } from "../../api/_lib/funding.mjs";
+import { fundingOf, redLink, groupLink, groupWarning } from "../../api/_lib/funding.mjs";
 
 const RPC = process.env.KEPT_TESTNET_RPC || "https://rpc.testnet.chain.robinhood.com";
 const FACTORIES = ["0xac135da186de8325047ef2afd1d16d5971f731f7", "0xe794217880011f9ca6961340ed5c16ec9559fea0"];
@@ -195,16 +195,20 @@ export async function watchPass({ state, send, channel, save }) {
     } else if (channel && rec?.tone !== "exits" && checks < MAX_FUNDING_CHECKS && !(creator in vv.funders)) {
       // a fresh wallet: its own record is clean, but its ETH may come from the wallet behind red ones
       checks++;
-      const k = redLink(await fundingOf(creator).catch(() => null));
-      vv.funders[creator] = k ? k.funder : "";
-      if (k && now - (vv.posted[k.funder] ?? 0) > CHANNEL_QUIET) {
+      // judged by its funding group (the hourly index, or its funder's group read live); with no group, by its funder's own launchers
+      const gl = await groupLink(creator).catch(() => null);
+      const k = gl ? groupWarning(gl, creator) : redLink(await fundingOf(creator).catch(() => null));
+      const key = k ? (k.group ?? k.funder) : "";
+      vv.funders[creator] = key;
+      if (k && now - (vv.posted[key] ?? 0) > CHANNEL_QUIET) {
+        const how = k.group
+          ? `Its ETH came from <code>${short(k.funder)}</code>, and that money ties it to ${k.others} other launcher${k.others === 1 ? "" : "s"}, <b>${k.red}</b> with a red record`
+          : `Its ETH came from <code>${short(k.funder)}</code>, which also funded <b>${k.red}</b> launcher${k.red === 1 ? "" : "s"} with a red record`;
         await send(
           channel,
-          `⚠️ <b>$${esc(symbol)}</b> just launched on vibe/vibe (#${id}) from ${rec ? "a wallet with no red record" : "a fresh wallet"}
-Its ETH came from <code>${short(k.funder)}</code>, which also funded <b>${k.red}</b> launcher${k.red === 1 ? "" : "s"} with a red record: ${k.red === 1 ? "it" : "they"} sold into ${k.fastExits} of ${k.launches} launches within an hour.
-Check before you buy: ${recordLink(token)}`,
+          `⚠️ <b>$${esc(symbol)}</b> just launched on vibe/vibe (#${id}) from ${rec ? "a wallet with no red record" : "a fresh wallet"}\n${how}: ${k.red === 1 ? "it" : "they"} sold into ${k.fastExits} of ${k.launches} launch${k.launches === 1 ? "" : "es"} within an hour.\nCheck before you buy: ${recordLink(token)}`,
         );
-        vv.posted[k.funder] = now;
+        vv.posted[key] = now;
       }
     }
   }
