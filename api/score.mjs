@@ -22,7 +22,18 @@ const reply = (body, type, status, maxAge) =>
     },
   });
 
-export async function allPledges(chainId, net) {
+// every record page reads the wallet's pledges: keep the list two minutes, one read shared by all
+const pledgeCache = new Map();
+export function allPledges(chainId, net) {
+  const hit = pledgeCache.get(chainId);
+  if (hit && Date.now() - hit.at < 120_000) return hit.p;
+  const p = readAll(chainId, net);
+  pledgeCache.set(chainId, { at: Date.now(), p });
+  p.catch(() => pledgeCache.delete(chainId));
+  return p;
+}
+
+async function readAll(chainId, net) {
   const all = await pledgeIds(net);
   const out = [];
   // a few at a time, to stay friendly with public RPCs
