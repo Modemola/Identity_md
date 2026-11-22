@@ -31,7 +31,7 @@ const getJSON = (url, key, maxAge) =>
 // the network you're on decides which source a launch number means first
 export const getRecord = (q) => getJSON(`${HOST}/api/record?q=${encodeURIComponent(q)}&source=${SOURCE}`, `record:${SOURCE}:${q.toLowerCase()}`, 120_000);
 export const getTop = () => getJSON(`${HOST}/api/record?view=top&limit=12`, "record:top", 300_000);
-const getGroups = () => getJSON(`${HOST}/api/record?view=groups`, "record:groups", 300_000);
+const getGroups = (net = "vibevibe") => getJSON(`${HOST}/api/record?view=groups${net === "imd" ? "&net=imd" : ""}`, `record:groups:${net}`, 300_000);
 
 /** One funding group in a ranked list: the wallet its money starts from, and what its launchers did. */
 function groupRow(g, i) {
@@ -77,7 +77,7 @@ export function groupsPage() {
     h(
       "div",
       { class: "check-hero" },
-      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Follow the money · vibe/vibe"),
+      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Follow the money · vibe/vibe and IMD"),
       h("h1", { class: "display" }, words("Funding groups", { delay: 80 })),
       h(
         "p",
@@ -110,7 +110,23 @@ export function groupsPage() {
         h("div", { class: "chips check-sec" }, post, h("a", { class: "btn small", href: link("/") }, "Check a token")),
       ),
     ),
+    imdGroups(),
   ];
+}
+
+/** IMD's funding groups on mainnet: few launchers, so shown whenever there is one. */
+function imdGroups() {
+  const board = h("div", { class: "exit-board" });
+  const sec = h(
+    "section",
+    { class: "exit-sec" },
+    h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "IMD on Robinhood Chain"), h("p", { class: "muted" }, "The same rule on mainnet, for IMD launchers: real money.")),
+    board,
+  );
+  getGroups("imd")
+    .then((r) => (r.groups.length ? board.replaceChildren(groupHead(), ...r.groups.map(groupRow)) : sec.remove()))
+    .catch(() => sec.remove());
+  return reveal(sec);
 }
 
 /** The home page's short list of funding groups. */
@@ -652,13 +668,14 @@ export function checkResult(q, rec) {
   if (!L && rec.group) {
     const g = rec.group;
     const t = g.totals;
+    const net = g.network === "imd" ? "imd" : "vibevibe";
     return [
       ...head,
       reveal(
         h(
           "div",
           { class: `verdict-panel ${t.red ? "t-alarm" : "t-new"}` },
-          h("div", { class: "vp-kicker" }, "Funder ", h("a", { class: "addr", href: `${EXPLORER}/address/${q}`, target: "_blank", rel: "noopener" }, q)),
+          h("div", { class: "vp-kicker" }, `${SOURCE_NAME[net]} · Funder `, h("a", { class: "addr", href: `${explorerOf(net)}/address/${q}`, target: "_blank", rel: "noopener" }, q)),
           h("div", { class: "vp-word" }, t.red ? "Funds launchers that sell fast" : "Funds launchers"),
           h(
             "div",
@@ -681,7 +698,7 @@ export function checkResult(q, rec) {
             class: "btn small",
             target: "_blank",
             rel: "noopener",
-            href: `https://x.com/intent/post?text=${encodeURIComponent(`${t.launchers} launchers on vibe/vibe, tied together by the wallets that funded them. ${t.red} ${t.red === 1 ? "has" : "have"} a red record and sold into ${t.fastExits.toLocaleString("en-US")} of their own launches within an hour. Checked on @keptonchainn.`)}&url=${encodeURIComponent(shareUrl(q, "vibevibe"))}`,
+            href: `https://x.com/intent/post?text=${encodeURIComponent(`${t.launchers} launchers on ${net === "imd" ? "IMD" : "vibe/vibe"}, tied together by the wallets that funded them. ${t.red} ${t.red === 1 ? "has" : "have"} a red record and sold into ${t.fastExits.toLocaleString("en-US")} of their own launches within an hour. Checked on @keptonchainn.`)}&url=${encodeURIComponent(shareUrl(q, net))}`,
           },
           icon("arrow", 14),
           "Post this",

@@ -44,7 +44,7 @@ Hook and project launches that name no remainder wallet have no launcher, so the
 
 ## Funding: one owner, many wallets
 
-A launcher can start a fresh wallet, but it has to put ETH in it. For vibe/vibe launchers, each record shows where a wallet's **biggest early deposit** came from (of its first ten incoming transfers), read live from the testnet explorer:
+A launcher can start a fresh wallet, but it has to put ETH in it. Each record shows where a wallet's **biggest early deposit** came from (of its first ten incoming transfers), read from the chain's explorer:
 
 | source | what it says |
 | --- | --- |
@@ -57,7 +57,7 @@ When the funding wallet is an Ethereum account's deposit address, the record nam
 
 A launcher with no red record of its own whose funder also funded red launchers reads **amber**, "Funded by the wallet behind red launchers", with the funder named above its own facts: on its page, its card, its badge ("funding tied to N red launchers"), and in `linked` in the JSON. `tone` in the JSON stays the rule on its own launches. The alerts channel also posts it the moment such a wallet launches, so a fresh wallet is named before its first sale.
 
-Looking up a wallet that launched nothing but funded launchers shows those launchers as its record. A funder that sent ETH to more than 200 wallets is treated as a service, such as an exchange, and links no one. Mainnet funding needs an explorer key, so IMD records don't show it yet.
+Looking up a wallet that launched nothing but funded launchers shows those launchers as its record. A funder that sent ETH to 150 wallets or more (in its first 200 transactions) is treated as a service, such as an exchange, and links no one. IMD launchers on mainnet get the same funding links and groups, read from Blockscout's API (the explorer site blocks automated requests). That needs a free key from dev.blockscout.com, set as `BLOCKSCOUT_API_KEY` in Vercel and as a GitHub Actions secret; without it, IMD records show no funding.
 
 ### Funding groups
 
@@ -111,7 +111,7 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 
 **Totals and the fastest exits**: `https://keptmd.vercel.app/api/record?view=top`.
 
-**Funding groups**: `https://keptmd.vercel.app/api/record?view=groups`, the groups where at least a quarter of the launchers are red, by fast exits. On the site: https://keptmd.vercel.app/#/groups
+**Funding groups**: `https://keptmd.vercel.app/api/record?view=groups` (add `&net=imd` for IMD's), the groups where at least a quarter of the launchers are red, by fast exits. On the site: https://keptmd.vercel.app/#/groups
 
 ## How it stays current
 
@@ -120,7 +120,7 @@ KEPT doesn't call anyone a scammer. The record states what the chain shows, and 
 - `tokens/xx.json`: token to launch
 - `ids/f-n.json`: launch number to token
 - `meta.json`: totals, block times and the ranking
-- `funding/`: who funded each launcher and its funder (`edges.json`), and the funding groups (`nodes/xx.json`, `groups/<id>.json`, `meta.json`)
+- `funding/`: who funded each launcher and its funder (`edges.json`), and the funding groups (`nodes/xx.json`, `groups/<id>.json`, `meta.json`). IMD's are under `records/imd-4663/funding/`, in the same layout.
 
 GitHub's scheduler drops most runs of an hourly schedule, so one run of the job loops for about five and a half hours, one pass an hour, then starts the next run itself. The health job, every six hours, restarts the chain if it stops and opens an issue labelled `kept-health`. Every record shows when it was last updated, and `/api/health` gives the age of each source.
 
