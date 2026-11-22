@@ -5,6 +5,7 @@
 //   &source=imd              show an IMD launch first when a number names both (the site sends this on mainnet)
 //   &format=svg              a 20 px badge instead of JSON
 //   ?view=top | imd | groups  the fastest exits, IMD launches that sold, the funding groups board
+//                             (&net=imd for IMD's groups on mainnet)
 //
 // Reads two launcher indexes, refreshed hourly: vibe/vibe on Robinhood Chain testnet
 // (scripts/records/indexer.mjs) and IMD launches on Robinhood Chain mainnet (scripts/records/imd.mjs),
@@ -90,7 +91,7 @@ export async function GET(request) {
   // funding groups: launchers tied together by the wallets that funded them, the red ones first
   if (params.get("view") === "groups") {
     try {
-      const gm = await groupsMeta();
+      const gm = await groupsMeta(params.get("net") === "imd" ? "imd" : "vibevibe");
       if (!gm?.list) throw new Error("groups missing");
       // the board lists the groups that turn their launchers amber: at least a quarter red
       const red = gm.list.filter((g) => g.red && g.red / g.launchers >= RED_SHARE).sort((a, b) => b.fastExits - a.fastExits || b.red - a.red);
@@ -161,8 +162,8 @@ export async function GET(request) {
       if (!rec) return reply(badge("no launches on record", "none"), "image/svg+xml; charset=utf-8", 200, 300);
       const s = rec.summary;
       // a launcher without a red record of its own may still be funded by the wallet behind red ones
-      if (src === "vibevibe" && rec.tone !== "exits") {
-        const link = groupWarning(await withTimeout(groupLink(rec.address), 3000).catch(() => null), rec.address);
+      if (rec.tone !== "exits") {
+        const link = groupWarning(await withTimeout(groupLink(rec.address, null, src), 3000).catch(() => null), rec.address);
         if (link) return reply(badge(`funding tied to ${link.red} red launcher${link.red === 1 ? "" : "s"}`, "sold"), "image/svg+xml; charset=utf-8", 200, 300);
       }
       const text = s.fastExits ? `${s.fastExits}/${s.launches} quick exits` : s.sold ? `sold ${s.sold}/${s.launches}` : `${s.launches} launch${s.launches === 1 ? "" : "es"} · no sells`;
@@ -182,20 +183,26 @@ export async function GET(request) {
         if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now${curve ? `, ${pctText(hold.poolBps)} is still in the launch pool` : ""}${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
       }
     }
-    // vibe/vibe: who funded this launcher, and the other launchers the same wallet funded. A wallet
-    // that launched nothing may be a funder: then the launchers it funded are its record
+    // who funded this launcher, and the other launchers the same wallet funded, on the launcher's own
+    // network. A wallet that launched nothing may be a funder: then the launchers it funded are its record
     let funding = null;
     let funded = null;
     let group = null;
-    if (src === "vibevibe" && rec) {
-      funding = await withTimeout(fundingOf(rec.address), 6000).catch(() => null);
+    if (rec) {
+      funding = await withTimeout(fundingOf(rec.address, src), 6000).catch(() => null);
       // the launchers this wallet's money ties it to, up to two funders back
-      group = await withTimeout(groupLink(rec.address, funding?.funder), 5000).catch(() => null);
+      group = await withTimeout(groupLink(rec.address, funding?.funder, src), 5000).catch(() => null);
+      if (group) group.network = src;
     }
     if (!rec && /^0x/.test(q) && !primary) {
       // a funder in a funding group: the group is its record, two steps deep
-      const g = await groupOf(q).catch(() => null);
-      if (g) group = { group: g, path: [q.toLowerCase()], live: false };
+      for (const net of order) {
+        const g = await groupOf(q, net).catch(() => null);
+        if (g) {
+          group = { group: g, path: [q.toLowerCase()], live: false, network: net };
+          break;
+        }
+      }
     }
     if (!rec && /^0x/.test(q) && !primary && !group) {
       const f = await withTimeout(launchersFundedBy(q), 6000).catch(() => null);
@@ -241,6 +248,7 @@ export async function GET(request) {
       funded,
       // the funding group: launchers tied together by the wallets that funded them
       group: group && {
+        network: group.network,
         id: group.group.id,
         totals: group.group.totals,
         funders: group.group.funders.length,

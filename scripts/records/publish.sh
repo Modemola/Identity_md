@@ -6,6 +6,10 @@ node code/scripts/records/indexer.mjs data/records/vibevibe-46630
 # funding groups: the explorer is a nice-to-have, so a failed pass keeps the last groups
 node code/scripts/records/clusters.mjs data/records/vibevibe-46630 || echo "funding groups: pass failed, keeping the last ones"
 node code/scripts/records/imd.mjs data/records/imd-4663
+# IMD funding groups on mainnet read Blockscout's API, which needs BLOCKSCOUT_API_KEY
+if [ -n "${BLOCKSCOUT_API_KEY:-}" ]; then
+  node code/scripts/records/clusters.mjs data/records/imd-4663 imd || echo "IMD funding groups: pass failed, keeping the last ones"
+fi
 cd data
 git config user.name "kept-records"
 git config user.email "kept-records@users.noreply.github.com"

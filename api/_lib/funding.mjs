@@ -1,6 +1,7 @@
 // Who funded a launcher, and which other launchers the same wallet funded: the link a fresh
-// wallet can't hide. Read on demand from the Robinhood Chain testnet explorer (Blockscout), so only
-// vibe/vibe launchers for now; mainnet needs an explorer key.
+// wallet can't hide. Read from Blockscout: the Robinhood Chain testnet explorer for vibe/vibe
+// launchers, and Blockscout's API (BLOCKSCOUT_API_KEY) for IMD launchers on mainnet. Every function
+// takes the network last: "vibevibe" (the default) or "imd".
 //
 // A wallet's funder is where its biggest early deposit came from (of its first ten incoming
 // transfers, plain or from inside a contract). Most deposits identify nobody, and the record says so:
@@ -10,10 +11,15 @@
 //   contract  a contract, such as a swap or a router paying out
 //   wallet    another wallet: the only kind that links two launchers
 
-import { launcher, groupOf } from "./records.mjs";
+import { launcher, imdLauncher, groupOf } from "./records.mjs";
 
-const EXPLORER = process.env.KEPT_TESTNET_EXPLORER || "https://explorer.testnet.chain.robinhood.com";
-const FAUCETS = new Set(["0x8762f93772c663c6a88ba50900bd5381df2717be"]);
+const EXPLORERS = {
+  vibevibe: { api: `${process.env.KEPT_TESTNET_EXPLORER || "https://explorer.testnet.chain.robinhood.com"}/api`, faucets: new Set(["0x8762f93772c663c6a88ba50900bd5381df2717be"]) },
+  // the explorer site sits behind a bot check; Blockscout's API takes a free key
+  imd: { api: process.env.KEPT_MAINNET_EXPLORER || "https://api.blockscout.com/4663/api", key: process.env.BLOCKSCOUT_API_KEY, faucets: new Set() },
+};
+/** A launcher's record on a network, for naming funders' other launchers. */
+const recordOn = (a, net) => (net === "imd" ? imdLauncher(a, { limit: 0 }) : launcher(a, { limit: 0 }));
 const ALIAS = BigInt("0x1111000000000000000000000000000000001111");
 /** The address an Ethereum account's deposits arrive from on an Arbitrum chain. */
 export const aliasOf = (a) => `0x${((BigInt(a) + ALIAS) % (1n << 160n)).toString(16).padStart(40, "0")}`;
@@ -26,12 +32,14 @@ export const unaliasOf = (a) => `0x${((BigInt(a) - ALIAS + (1n << 160n)) % (1n <
 export const SERVICE_FANOUT = 150;
 
 const cache = new Map();
-async function api(query) {
-  const hit = cache.get(query);
+async function api(query, net = "vibevibe") {
+  const ex = EXPLORERS[net];
+  const url = `${ex.api}?${query}${ex.key ? `&apikey=${ex.key}` : ""}`;
+  const hit = cache.get(url);
   if (hit && Date.now() - hit.at < 3_600_000) return hit.value;
   for (let attempt = 0; ; attempt++) {
     try {
-      const r = await fetch(`${EXPLORER}/api?${query}`);
+      const r = await fetch(url);
       const j = await r.json();
       // "no transactions found" is an answer; anything else without a list (a rate limit, an error)
       // isn't, and must never be read as "this wallet was never funded"
@@ -39,7 +47,7 @@ async function api(query) {
       const value = Array.isArray(j.result) ? j.result : [];
       // the funding index makes tens of thousands of calls in one process: keep memory bounded
       if (cache.size > 5000) cache.clear();
-      cache.set(query, { at: Date.now(), value });
+      cache.set(url, { at: Date.now(), value });
       return value;
     } catch (e) {
       if (attempt >= 3) throw e;
@@ -57,33 +65,33 @@ const incoming = (rows, w) =>
  * Where a wallet's biggest early deposit came from, and what kind of sender that is, from the
  * explorer alone (no record lookups): what the funding index stores.
  */
-export async function firstFunder(wallet) {
+export async function firstFunder(wallet, net = "vibevibe") {
   const w = wallet.toLowerCase();
   const [plain, internal] = await Promise.all([
-    api(`module=account&action=txlist&address=${w}&sort=asc&page=1&offset=20`),
-    api(`module=account&action=txlistinternal&address=${w}&sort=asc&page=1&offset=20`),
+    api(`module=account&action=txlist&address=${w}&sort=asc&page=1&offset=20`, net),
+    api(`module=account&action=txlistinternal&address=${w}&sort=asc&page=1&offset=20`, net),
   ]);
   const ins = [...incoming(plain, w).map((x) => ({ ...x, internal: false })), ...incoming(internal, w).map((x) => ({ ...x, internal: true }))].sort((a, b) => a.at - b.at).slice(0, 10);
   if (!ins.length) return null;
   const big = ins.reduce((a, b) => (b.value > a.value ? b : a));
-  const kind = FAUCETS.has(big.from) ? "faucet" : big.from === aliasOf(w) ? "bridge" : big.internal ? "contract" : "wallet";
+  const kind = EXPLORERS[net].faucets.has(big.from) ? "faucet" : big.from === aliasOf(w) ? "bridge" : big.internal ? "contract" : "wallet";
   return { from: big.from, kind, valueEth: Number(big.value) / 1e18, at: big.at };
 }
 
 /** Where a wallet's biggest early deposit came from, naming the Ethereum account behind a deposit. */
-export async function funderOf(wallet) {
-  const f = await firstFunder(wallet);
+export async function funderOf(wallet, net = "vibevibe") {
+  const f = await firstFunder(wallet, net);
   if (!f) return null;
   // a deposit from Ethereum to another address arrives from the depositor's shifted address: name
   // the Ethereum account behind it, which may itself be a launcher
   const l1 = f.kind === "wallet" ? unaliasOf(f.from) : null;
-  const l1Rec = l1 ? await launcher(l1, { limit: 0 }).catch(() => null) : null;
+  const l1Rec = l1 ? await recordOn(l1, net).catch(() => null) : null;
   return { ...f, ...(l1Rec ? { bridgedFrom: l1 } : {}) };
 }
 
 /** The wallets a funder sent ETH to, from its first 200 transactions. */
-export async function fundedBy(funder) {
-  const out = await api(`module=account&action=txlist&address=${funder}&sort=asc&page=1&offset=200`);
+export async function fundedBy(funder, net = "vibevibe") {
+  const out = await api(`module=account&action=txlist&address=${funder}&sort=asc&page=1&offset=200`, net);
   const to = new Set();
   for (const t of out) if ((t.from || "").toLowerCase() === funder && BigInt(t.value || "0") > 0n && t.to) to.add(t.to.toLowerCase());
   return { wallets: [...to], truncated: out.length >= 200 };
@@ -93,22 +101,22 @@ export async function fundedBy(funder) {
  * A launcher's funding: its funder, and, when the funder is a wallet, the other launchers that
  * wallet funded with their combined record. `skip` leaves out the launcher asked about.
  */
-export async function fundingOf(wallet) {
-  const f = await funderOf(wallet);
+export async function fundingOf(wallet, net = "vibevibe") {
+  const f = await funderOf(wallet, net);
   if (!f) return null;
   if (f.kind !== "wallet") return { funder: f, siblings: [] };
-  return { funder: f, ...(await launchersFundedBy(f.from, wallet)) };
+  return { funder: f, ...(await launchersFundedBy(f.from, wallet, net)) };
 }
 
 /** The launchers among the wallets `funder` sent ETH to, each with its record summary. */
-export async function launchersFundedBy(funder, skip = null) {
-  const { wallets, truncated } = await fundedBy(funder.toLowerCase());
+export async function launchersFundedBy(funder, skip = null, net = "vibevibe") {
+  const { wallets, truncated } = await fundedBy(funder.toLowerCase(), net);
   if (wallets.length >= SERVICE_FANOUT) return { siblings: [], service: true, funded: wallets.length };
   const candidates = wallets.filter((x) => x !== skip?.toLowerCase());
-  const recs = await Promise.all(candidates.map((x) => launcher(x, { limit: 0 }).catch(() => null)));
+  const recs = await Promise.all(candidates.map((x) => recordOn(x, net).catch(() => null)));
   const siblings = recs
     .filter(Boolean)
-    .map((r) => ({ address: r.address, tone: r.tone, launches: r.summary.launches, fastExits: r.summary.fastExits, graduated: r.summary.graduated }))
+    .map((r) => ({ address: r.address, tone: r.tone, launches: r.summary.launches, fastExits: r.summary.fastExits, graduated: r.summary.graduated ?? 0 }))
     .sort((a, b) => b.fastExits - a.fastExits || b.launches - a.launches);
   return { siblings, funded: wallets.length, truncated };
 }
@@ -151,17 +159,17 @@ function pathIn(group, address) {
  * wallet newer than the index, read live: its funder's group, or its funder's funder's. `known`
  * is the wallet's funder when the caller already read it.
  */
-export async function groupLink(wallet, known = null) {
+export async function groupLink(wallet, known = null, net = "vibevibe") {
   const w = wallet.toLowerCase();
-  const g = await groupOf(w);
+  const g = await groupOf(w, net);
   if (g) return { group: g, path: pathIn(g, w), live: false };
-  const f = known ?? (await firstFunder(w));
+  const f = known ?? (await firstFunder(w, net));
   if (f?.kind !== "wallet") return null;
-  const g1 = await groupOf(f.from);
+  const g1 = await groupOf(f.from, net);
   if (g1) return { group: g1, path: [w, ...pathIn(g1, f.from)].slice(0, 3), live: true };
-  const ff = await firstFunder(f.from);
+  const ff = await firstFunder(f.from, net);
   if (ff?.kind !== "wallet") return null;
-  const g2 = await groupOf(ff.from);
+  const g2 = await groupOf(ff.from, net);
   return g2 ? { group: g2, path: [w, f.from, ff.from], live: true } : null;
 }
 

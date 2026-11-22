@@ -5,7 +5,9 @@
 // that funder's own money came from: two steps back. Launchers that share a funder, or whose funders
 // share a funder, form a group, and the group's record is the sum of its launchers' records.
 //
-//   node scripts/records/clusters.mjs <records dir>      (the vibe/vibe index, written by indexer.mjs)
+//   node scripts/records/clusters.mjs <records dir>          vibe/vibe (the index indexer.mjs writes)
+//   node scripts/records/clusters.mjs <records dir> imd      IMD on mainnet (imd.mjs's index.json;
+//                                                            needs BLOCKSCOUT_API_KEY)
 //
 // It writes, under <records dir>/funding/:
 //   edges.json        what was read: wallet -> [funder, kind], and each funder's fan out (kept between runs)
@@ -23,7 +25,8 @@ import { firstFunder, fundedBy, unaliasOf, SERVICE_FANOUT } from "../../api/_lib
 import { toneOf } from "../../api/_lib/records.mjs";
 
 const DIR = process.argv[2];
-if (!DIR) throw new Error("usage: clusters.mjs <records dir>");
+const NET = process.argv[3] === "imd" ? "imd" : "vibevibe";
+if (!DIR) throw new Error("usage: clusters.mjs <records dir> [imd]");
 const OUT = path.join(DIR, "funding");
 /** At most this many explorer lookups per run, so one run never holds up the hourly records. */
 const MAX_LOOKUPS = Number(process.env.KEPT_FUNDING_MAX || 40_000);
@@ -42,10 +45,15 @@ const readJson = (p, fallback) => {
 
 // every launcher, with the summary its record is made from
 const launchers = new Map();
-for (const f of fs.readdirSync(path.join(DIR, "creators"))) {
-  const shard = readJson(path.join(DIR, "creators", f), {});
-  for (const [a, rec] of Object.entries(shard)) launchers.set(a, rec.summary);
+if (NET === "imd") {
+  for (const [a, s] of Object.entries(readJson(path.join(DIR, "index.json"), {}).launchers ?? {})) launchers.set(a, s);
+} else {
+  for (const f of fs.readdirSync(path.join(DIR, "creators"))) {
+    const shard = readJson(path.join(DIR, "creators", f), {});
+    for (const [a, rec] of Object.entries(shard)) launchers.set(a, rec.summary);
+  }
 }
+if (!launchers.size) throw new Error(`no launchers in ${DIR}`);
 
 // what earlier runs read: wallet -> [funder, kind] ("" funder: no incoming ETH), funder -> [wallets, truncated]
 const state = readJson(path.join(OUT, "edges.json"), { edges: {}, fan: {} });
@@ -71,11 +79,11 @@ async function pool(items, fn) {
   );
 }
 const readFunder = async (w) => {
-  const f = await firstFunder(w);
+  const f = await firstFunder(w, NET);
   edges[w] = f ? [f.from, KIND[f.kind]] : ["", "n"];
 };
 const readFan = async (w) => {
-  const { wallets, truncated } = await fundedBy(w);
+  const { wallets, truncated } = await fundedBy(w, NET);
   fan[w] = [wallets.length, truncated ? 1 : 0];
 };
 // a funder whose fan out couldn't be read links no one this run: never assume it's one person
@@ -151,7 +159,7 @@ for (const list of members.values()) {
   const rows = ls
     .map((a) => {
       const s = launchers.get(a);
-      return { address: a, tone: toneOf(s), launches: s.launches, fastExits: s.fastExits, graduated: s.graduated, sold: s.sold, funder: via.get(a) ?? null };
+      return { address: a, tone: toneOf(s), launches: s.launches, fastExits: s.fastExits, graduated: s.graduated ?? 0, sold: s.sold, funder: via.get(a) ?? null };
     })
     .sort((x, y) => y.fastExits - x.fastExits || y.launches - x.launches);
   const funders = list.filter((x) => !launchers.has(x)).map((f) => ({ address: f, funder: via.get(f) ?? null, funded: fan[f]?.[0] ?? null }));

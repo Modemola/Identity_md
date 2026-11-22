@@ -7,20 +7,21 @@
 const BASE = process.env.KEPT_RECORDS_URL || "https://raw.githubusercontent.com/Modemola/identity_md/data/records/vibevibe-46630";
 
 const cache = new Map();
-async function get(path) {
-  const hit = cache.get(path);
+async function get(path, base = BASE) {
+  const key = `${base}/${path}`;
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < 300_000) return hit.value;
   let value;
-  if (BASE.startsWith("/")) {
+  if (base.startsWith("/")) {
     const { readFile } = await import("node:fs/promises");
-    value = await readFile(`${BASE}/${path}`, "utf8").then(JSON.parse, () => null);
+    value = await readFile(key, "utf8").then(JSON.parse, () => null);
   } else {
-    const r = await fetch(`${BASE}/${path}`);
+    const r = await fetch(key);
     if (r.status === 404) value = null;
     else if (!r.ok) throw new Error(`records ${r.status}`);
     else value = await r.json();
   }
-  cache.set(path, { at: Date.now(), value });
+  cache.set(key, { at: Date.now(), value });
   return value;
 }
 
@@ -31,13 +32,14 @@ const shard = (a) => a.slice(2, 4).toLowerCase();
  * The funding group an address belongs to (scripts/records/clusters.mjs): launchers tied together by
  * the wallets that funded them, up to two steps back. Null when it's in none.
  */
-export async function groupOf(address) {
+export async function groupOf(address, net = "vibevibe") {
   if (!/^0x[0-9a-fA-F]{40}$/.test(address || "")) return null;
   const a = address.toLowerCase();
-  const id = (await get(`funding/nodes/${shard(a)}.json`).catch(() => null))?.[a];
-  return id ? get(`funding/groups/${id}.json`).catch(() => null) : null;
+  const base = net === "imd" ? IMD_BASE : BASE;
+  const id = (await get(`funding/nodes/${shard(a)}.json`, base).catch(() => null))?.[a];
+  return id ? get(`funding/groups/${id}.json`, base).catch(() => null) : null;
 }
-export const groupsMeta = () => get("funding/meta.json").catch(() => null);
+export const groupsMeta = (net = "vibevibe") => get("funding/meta.json", net === "imd" ? IMD_BASE : BASE).catch(() => null);
 
 function timeOf(blockTimes, b) {
   let lo = blockTimes[0], hi = blockTimes[blockTimes.length - 1];

@@ -40,6 +40,9 @@ jobs:
         with:
           node-version: 22
       - name: Index and publish every hour
+        env:
+          # optional: IMD funding groups on mainnet (a free key from dev.blockscout.com)
+          BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
         run: |
           end=$((SECONDS + 5 * 3600 + 20 * 60))
           while :; do

@@ -34,7 +34,7 @@ export function cardModel(r, q) {
     const t = r.group.totals;
     return {
       tone: t.red ? "exits" : "new",
-      kicker: "KEPT RECORD · vibe/vibe",
+      kicker: `KEPT RECORD · ${r.group.network === "imd" ? "IMD on Robinhood Chain" : "vibe/vibe"}`,
       subject: `Funder ${short(q)}`,
       word: t.red ? "Funds launchers that sell fast" : "Funds launchers",
       nums: [[t.launchers, "launchers in its group"], [t.red, "red records"], [t.launches, "launches"], [t.fastExits, "sold within an hour"]],
