@@ -169,31 +169,37 @@ export async function GET(request) {
       const text = s.fastExits ? `${s.fastExits}/${s.launches} quick exits` : s.sold ? `sold ${s.sold}/${s.launches}` : `${s.launches} launch${s.launches === 1 ? "" : "es"} · no sells`;
       return reply(badge(text, rec.tone), "image/svg+xml; charset=utf-8", 200, 300);
     }
-    // the asked-for launch: who holds its supply right now, read live
-    let hold = null;
+    // the live reads (who holds the supply, who funded the launcher, the wallet's pledges) don't
+    // depend on each other: run them side by side, so a record answers in the time of the slowest
     const lead = primary && rec ? rec.launches.find((l) => l.token === primary.token) : null;
-    if (primary?.creator) {
+    const holdP = (async () => {
+      if (!primary?.creator) return null;
       if (src === "imd") {
-        hold = await holdings(MAINNET_RPC, primary.token, { launcher: primary.creator, pools: [IMD_POOL_MANAGER] }).catch(() => null);
-        if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now, ${pctText(hold.poolBps)} is in the Uniswap pool${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
-      } else {
-        hold = await holdings(TESTNET_RPC, primary.token, { launcher: primary.creator, pools: lead ? [lead.pool] : [] }).catch(() => null);
-        // a graduated token's curve is empty: its liquidity moved to Uniswap, so the pool share says nothing
-        const curve = lead && !lead.graduated;
-        if (hold) hold.text = `The launcher holds ${pctText(hold.launcherBps)} of the supply right now${curve ? `, ${pctText(hold.poolBps)} is still in the launch pool` : ""}${hold.burnedBps ? `, ${pctText(hold.burnedBps)} is burned` : ""}.`;
+        const hd = await holdings(MAINNET_RPC, primary.token, { launcher: primary.creator, pools: [IMD_POOL_MANAGER] }).catch(() => null);
+        if (hd) hd.text = `The launcher holds ${pctText(hd.launcherBps)} of the supply right now, ${pctText(hd.poolBps)} is in the Uniswap pool${hd.burnedBps ? `, ${pctText(hd.burnedBps)} is burned` : ""}.`;
+        return hd;
       }
-    }
+      const hd = await holdings(TESTNET_RPC, primary.token, { launcher: primary.creator, pools: lead ? [lead.pool] : [] }).catch(() => null);
+      // a graduated token's curve is empty: its liquidity moved to Uniswap, so the pool share says nothing
+      const curve = lead && !lead.graduated;
+      if (hd) hd.text = `The launcher holds ${pctText(hd.launcherBps)} of the supply right now${curve ? `, ${pctText(hd.poolBps)} is still in the launch pool` : ""}${hd.burnedBps ? `, ${pctText(hd.burnedBps)} is burned` : ""}.`;
+      return hd;
+    })();
+    const keptP = wallet ? pledgesOf(wallet).catch(() => null) : Promise.resolve(null);
     // who funded this launcher, and the other launchers the same wallet funded, on the launcher's own
-    // network. A wallet that launched nothing may be a funder: then the launchers it funded are its record
-    let funding = null;
+    // network; then the launchers its money ties it to, up to two funders back. A wallet that
+    // launched nothing may be a funder: then the launchers it funded are its record
+    const fundP = rec
+      ? (async () => {
+          const fd = await withTimeout(fundingOf(rec.address, src), 6000).catch(() => null);
+          const gl = await withTimeout(groupLink(rec.address, fd?.funder, src), 5000).catch(() => null);
+          if (gl) gl.network = src;
+          return [fd, gl];
+        })()
+      : Promise.resolve([null, null]);
+    const [hold, kept, [funding, groupFound]] = await Promise.all([holdP, keptP, fundP]);
     let funded = null;
-    let group = null;
-    if (rec) {
-      funding = await withTimeout(fundingOf(rec.address, src), 6000).catch(() => null);
-      // the launchers this wallet's money ties it to, up to two funders back
-      group = await withTimeout(groupLink(rec.address, funding?.funder, src), 5000).catch(() => null);
-      if (group) group.network = src;
-    }
+    let group = groupFound;
     if (!rec && /^0x/.test(q) && !primary) {
       // a funder in a funding group: the group is its record, two steps deep
       for (const net of order) {
@@ -239,7 +245,7 @@ export async function GET(request) {
       },
       // the same wallet also launched on the other source
       alsoOn: other ? { source: other, tone: recs[other].tone, launches: recs[other].summary.launches, fastExits: recs[other].summary.fastExits } : null,
-      kept: wallet ? await pledgesOf(wallet) : null,
+      kept,
       holdings: hold,
       funding,
       // the funder also funded launchers with a red record

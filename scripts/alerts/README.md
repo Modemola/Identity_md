@@ -17,6 +17,7 @@ Every 3 minutes, GitHub Actions runs `alerts.mjs`, which sends:
 | an IMD launcher on Robinhood Chain sells into its own launch's pool | 🔻 to the channel and its watchers: how much of its share, and how soon after launch (adding liquidity stays quiet) |
 | a watched IMD launcher moves its share to another wallet | ↪️ to its watchers: that wallet may sell instead |
 | a watched wallet is the launcher of a new IMD launch | 🚀 to its watchers |
+| a new IMD launch whose launcher has a red record, or whose money ties it to IMD launchers with one (a quarter or more of its funding group) | ⚠️ to the channel, at most once per launcher or group every 6 hours. Funding needs `BLOCKSCOUT_API_KEY` as an Actions secret |
 | Monday, from 09:00 UTC | 📊 the weekly Exits report card to the channel, once a week |
 
 Pledge alerts and red launcher warnings go to the public channel. People who follow a pledge or watch a launcher get those alerts in a private chat with the bot.

@@ -5,7 +5,8 @@
 //
 // Used by alerts.mjs. The launches come from KEPT's hourly IMD index.
 
-import { imdMeta, fmtEth } from "../../api/_lib/records.mjs";
+import { imdMeta, fmtEth, imdLauncher } from "../../api/_lib/records.mjs";
+import { fundingOf, redLink, groupLink, groupWarning } from "../../api/_lib/funding.mjs";
 import { SITE } from "../../api/_lib/vault.mjs";
 
 const RPC = process.env.KEPT_RPC || "https://rpc.mainnet.chain.robinhood.com";
@@ -44,6 +45,39 @@ const ago = (s) => {
 };
 const amountText = (v) => (Number(v) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
+/** The channel posts about one launcher, or one funding group, at most once in this window. */
+const CHANNEL_QUIET = 6 * 3600;
+
+/**
+ * A new IMD launch whose launcher has a red record, or whose money ties it to launchers that do:
+ * said to the channel when the launch appears, before most buyers arrive. Funding needs
+ * BLOCKSCOUT_API_KEY; without it only the launcher's own record counts.
+ */
+async function warnNewLaunch(L, { st, send, channel }) {
+  const posted = (st.posted ??= {});
+  const now = Math.floor(Date.now() / 1000);
+  const rec = await imdLauncher(L.launcher).catch(() => null);
+  const head = `⚠️ <b>$${esc(L.symbol)}</b> just launched on IMD (#${L.id}, Robinhood Chain)`;
+  const link = `Check before you buy: https://${SITE}/c/${L.token}?s=imd`;
+  // its own record: a launcher that already sold into its own pools fast
+  const s = rec?.summary;
+  if (rec?.tone === "exits" && now - (posted[L.launcher] ?? 0) > CHANNEL_QUIET) {
+    await send(channel, `${head}\nIts launcher <code>${short(L.launcher)}</code> sold into its own pool within an hour on <b>${s.fastExits} of ${s.launches}</b> IMD launches.\n${link}`);
+    posted[L.launcher] = now;
+    return;
+  }
+  if (rec?.tone === "exits" || !process.env.BLOCKSCOUT_API_KEY) return;
+  const gl = await groupLink(L.launcher, null, "imd").catch(() => null);
+  const k = gl ? groupWarning(gl, L.launcher) : redLink(await fundingOf(L.launcher, "imd").catch(() => null));
+  const key = k ? (k.group ?? k.funder) : null;
+  if (!k || now - (posted[key] ?? 0) <= CHANNEL_QUIET) return;
+  const how = k.group
+    ? `Its ETH came from <code>${short(k.funder)}</code>, and that money ties it to ${k.others} other IMD launcher${k.others === 1 ? "" : "s"}, <b>${k.red}</b> with a red record`
+    : `Its ETH came from <code>${short(k.funder)}</code>, which also funded <b>${k.red}</b> IMD launcher${k.red === 1 ? "" : "s"} with a red record`;
+  await send(channel, `${head} from a wallet with no red record of its own\n${how}: ${k.red === 1 ? "it" : "they"} sold into their own pool within an hour on ${k.fastExits} of ${k.launches} launch${k.launches === 1 ? "" : "es"}.\n${link}`);
+  posted[key] = now;
+}
+
 /**
  * One pass over every IMD launch with a launcher wallet. `state.imd` keeps the last block read;
  * `state.watch` maps chats to watched wallets (shared with the vibe/vibe watcher).
@@ -74,6 +108,7 @@ export async function imdPass({ state, send, channel, save }) {
     for (const chat of watchers.get(L.launcher) ?? []) {
       await send(chat, `🚀 <code>${short(L.launcher)}</code> is the launcher of a new IMD launch: <b>$${esc(L.symbol)}</b> (#${L.id}, Robinhood Chain).\nhttps://${SITE}/c/${L.token}?s=imd`);
     }
+    if (channel) await warnNewLaunch(L, { st, send, channel });
   }
   st.seen = [...seen];
 
