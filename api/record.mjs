@@ -258,9 +258,16 @@ export async function GET(request) {
         id: group.group.id,
         totals: group.group.totals,
         funders: group.group.funders.length,
+        // the wallets between the money and the launchers, for drawing the group
+        funderList: group.group.funders.slice(0, 40),
         path: group.path,
         live: group.live,
-        launchers: group.group.launchers.slice(0, 60),
+        // the top 60 by fast exits, and always the wallet asked about, so the map can draw its path
+        launchers: (() => {
+          const top = group.group.launchers.slice(0, 60);
+          const me = rec && group.group.launchers.find((x) => x.address === rec.address);
+          return me && !top.includes(me) ? [...top, me] : top;
+        })(),
       },
       rule: `Red: sold into its own launch within ${fast} minutes of launching, on two launches or a quarter of them. Amber: sold into its own launches. Green: never sold into them, across two launches or more. Grey: a first launch with no sells yet. Amber also when a green or grey launcher's funder also funded launchers with a red record (see linked: launchers its funding ties it to, up to two funders back); tone stays the launcher's own.`,
     };
