@@ -296,11 +296,19 @@ export function liveFeed() {
   const recent = new Map();
   const recordChip = (l) => {
     const chip = h("span", { class: "rec-chip" }, "reading record…");
-    getRecord(l.creator)
+    // by token: a launch newer than the hourly record is read live, with its funding
+    getRecord(l.token)
       .then((r) => {
         const L = r.launcher;
         if (!L) return chip.replaceChildren("no record yet");
         const s = L.summary;
+        // a clean or new wallet whose money ties it to red launchers is flagged like one
+        if (r.linked && L.tone !== "exits") {
+          chip.className = "rec-chip t-sold";
+          chip.replaceChildren(h("b", {}, "Red money"), ` · tied to ${r.linked.red} red launcher${r.linked.red === 1 ? "" : "s"}`);
+          chip.closest(".feed-row")?.classList.add("flag", "flag-linked");
+          return;
+        }
         chip.className = `rec-chip t-${L.tone}`;
         chip.replaceChildren(h("b", {}, TONE_SHORT[L.tone]), L.tone === "exits" || L.tone === "sold" ? ` · ${s.fastExits}/${s.launches} sold within an hour` : s.launches > 1 ? ` · ${s.launches} launches` : "");
         if (L.tone === "exits") chip.closest(".feed-row")?.classList.add("flag");

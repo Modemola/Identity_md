@@ -98,9 +98,10 @@ const tally = (pledges) => {
 
 const NAV = [
   ["/", "Check"],
+  ["/groups", "Groups"],
   ["/pledges", "Pledges"],
   ["/board", "Board"],
-  ["/teams", "For teams"],
+  ["/teams", "Teams"],
   ["/how", "How it works"],
 ];
 const navLinks = NAV.map(([p, l]) => h("a", { href: link(p), "data-p": p }, l));
@@ -2747,7 +2748,7 @@ function route({ quiet = false } = {}) {
   if (path === "/how") return viewHow({ quiet });
   if (path === "/pledges") return viewHome({ quiet });
   if (path === "/report") return paint("/", () => h("section", { class: "wrap" }, reportPage()), { quiet });
-  if (path === "/groups") return paint("/", () => h("section", { class: "wrap" }, groupsPage()), { quiet });
+  if (path === "/groups") return paint("/groups", () => h("section", { class: "wrap" }, groupsPage()), { quiet });
   if (path === "/integrate") return paint("/teams", () => h("section", { class: "wrap" }, integratePage({ example: "0x7e717f5e93334b69e17f488c1cd69586cdd34a33" })), { quiet });
   const c = path.match(/^\/check\/(.+)$/);
   if (c) return viewCheck(decodeURIComponent(c[1]), { quiet });

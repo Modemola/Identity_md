@@ -1357,3 +1357,26 @@ html.js .rv.in .mm-ring { transform-box: fill-box; transform-origin: center; ani
   .mm-swipe { display: block; }
   .mm-top { padding: 12px 14px; }
 }
+
+/* ---------------------------------------------------------------- 2.0 header breakpoints */
+@media (max-width: 1180px) { nav.links a { padding: 0 10px; } }
+@media (max-width: 1060px) {
+  :root { --head: 64px; }
+  nav.links { order: 3; position: fixed; left: 0; right: 0; top: var(--head); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line); overflow-x: auto; padding: 5px var(--gutter); scrollbar-width: none; gap: 2px;
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  nav.links::-webkit-scrollbar { display: none; }
+  nav.links a { height: 34px; flex: none; font-size: 11.5px; padding: 0 12px; }
+  .nav-ind { height: 34px; top: 5px; }
+  main { padding-top: 46px; }
+  header.top .spacer { display: block; }
+}
+.lc-st { border-radius: 10px; border-color: var(--line); }
+.tm-start .unit-input input, .quickstart textarea { border-radius: var(--r-s); }
+.feed-row .when { white-space: nowrap; font-size: 12px; }
+@media (max-width: 640px) {
+  .feed-row .who.hide-s { display: none; }
+  .feed-row { grid-template-columns: 58px minmax(0, 1fr); row-gap: 6px; padding-top: 12px; padding-bottom: 12px; }
+  .feed-row .tok b { font-size: 18px; }
+}
+.feed-row.flag.flag-linked { background: color-mix(in srgb, var(--caution) 7%, var(--paper)); box-shadow: inset 3px 0 0 var(--caution); }
