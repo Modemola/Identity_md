@@ -74,7 +74,7 @@ const save = () => DRY || writeFileSync(STATE, `${JSON.stringify(state, null, 2)
 
 // ------------------------------------------------------------------ Telegram
 
-async function tg(method, body) {
+async function tg(method, body, retried = false) {
   if (DRY) return console.log(`[dry] ${method} ${JSON.stringify(body).slice(0, 400)}`);
   const isForm = body instanceof FormData;
   const r = await fetch(`${API}/bot${TOKEN}/${method}`, {
@@ -83,6 +83,12 @@ async function tg(method, body) {
     body: isForm ? body : JSON.stringify(body),
   });
   const j = await r.json().catch(() => ({}));
+  // Telegram asks for a short wait now and then: wait once, then try again
+  const wait = j.parameters?.retry_after;
+  if (!j.ok && r.status === 429 && wait && wait <= 60 && !retried) {
+    await new Promise((ok) => setTimeout(ok, wait * 1000 + 500));
+    return tg(method, body, true);
+  }
   if (!j.ok) throw new Error(`telegram ${method}: ${j.description || r.status}`);
   return j.result;
 }
@@ -307,6 +313,18 @@ const pledges = [];
 for (const id of await pledgeIds(NET)) pledges.push(await readPledge(NET, id));
 const byId = new Map(pledges.map((p) => [p.id, p]));
 
+// which bot the token belongs to, once per run: a token left over from another bot is the
+// commonest setup slip, and the log should say so plainly
+if (!DRY && !process.env.KEPT_BOT_CHECKED) {
+  process.env.KEPT_BOT_CHECKED = "1";
+  try {
+    const me = await tg("getMe", {});
+    const match = !BOT || me.username.toLowerCase() === BOT.toLowerCase();
+    console.log(`bot: the token belongs to @${me.username}${match ? "" : `, but TELEGRAM_BOT_USERNAME says @${BOT}: update the TELEGRAM_BOT_TOKEN secret to the new bot's token`}`);
+  } catch (e) {
+    console.error(`bot: could not identify the token's bot: ${e.message}`);
+  }
+}
 // replies to commands never hold up the alerts: if Telegram won't hand over messages (another
 // program reading the same bot, a rate limit), the channel still gets this pass's alerts
 try {
