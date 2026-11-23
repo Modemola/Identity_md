@@ -44,7 +44,9 @@ const DRY = process.argv.includes("--dry");
 const CHAIN = process.env.KEPT_CHAIN || "4663";
 const NET = NETS[CHAIN];
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHANNEL = process.env.TELEGRAM_CHANNEL;
+// a public channel is "@name"; a bare "name" (an easy slip in the settings) gets its @ back.
+// A private channel's numeric id (-100…) is used as it is
+const CHANNEL = ((c) => (c && !/^@|^-?\d+$/.test(c) ? `@${c}` : c))((process.env.TELEGRAM_CHANNEL || "").trim().replace(/^https?:\/\/t\.me\//, ""));
 const BOT = (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "");
 const API = process.env.TELEGRAM_API || "https://api.telegram.org"; // overridable for tests
 const STATE = join(HERE, ".state.json");
