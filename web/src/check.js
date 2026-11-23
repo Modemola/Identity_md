@@ -6,6 +6,7 @@ import { reveal, words, countUp, magnetic, reduced, liveInterval } from "./fx.js
 import { icon } from "./icons.js";
 import { load } from "./store.js";
 import { config } from "./config.js";
+import { moneyMap } from "./moneymap.js";
 
 const HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
@@ -130,18 +131,16 @@ function imdGroups() {
 }
 
 /** The home page's short list of funding groups. */
-function groupsTeaser() {
+function groupsPanel() {
   const board = h("div", { class: "exit-board" }, ...Array.from({ length: 5 }, () => h("div", { class: "exit-row sk" })));
-  const sec = h(
-    "section",
-    { class: "exit-sec" },
-    h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Funding groups"), h("p", { class: "muted" }, "Fresh wallets, the same money. Launchers tied together by the wallets that funded them, where a quarter or more sell fast. ", h("a", { href: link("/groups") }, "All funding groups"), ".")),
-    board,
-  );
   getGroups()
-    .then((r) => (r.groups.length ? board.replaceChildren(groupHead(), ...r.groups.slice(0, 5).map(groupRow)) : sec.remove()))
-    .catch(() => sec.remove());
-  return reveal(sec);
+    .then((r) => board.replaceChildren(groupHead(), ...r.groups.slice(0, 8).map(groupRow)))
+    .catch(() => board.replaceChildren(h("div", { class: "empty" }, "Funding groups are being built. They're read hourly; try again shortly.")));
+  return {
+    desc: ["Fresh wallets, the same money. Launchers tied together by the wallets that funded them, where a quarter or more sell fast."],
+    board,
+    more: h("a", { class: "btn small", href: link("/groups") }, "All funding groups", icon("arrow", 14)),
+  };
 }
 export const getImd = () => getJSON(`${HOST}/api/record?view=imd`, "record:imd", 300_000);
 
@@ -172,7 +171,7 @@ export function reportPage() {
 }
 
 /** IMD on Robinhood Chain: every launch whose launcher sold its own tokens into its pool. */
-function imdSection() {
+function imdPanel() {
   const list = h("div", { class: "exit-board" }, ...Array.from({ length: 3 }, () => h("div", { class: "exit-row sk" })));
   const sub = h("p", { class: "muted" }, "Real money on Robinhood Chain. Every IMD launch names the wallet that gets the team's share of the supply: here are the launches where that wallet sold it into the launch's own pool.");
   const pct = (b) => `${(b / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}%`;
@@ -199,7 +198,7 @@ function imdSection() {
       );
     })
     .catch(() => list.replaceChildren(h("div", { class: "empty" }, "The IMD record is updating. Try again in a minute.")));
-  return reveal(h("section", { class: "exit-sec" }, h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "IMD launchers who sold"), sub), list));
+  return { desc: sub, board: list };
 }
 
 const TONE_WORD = { exits: "Sells into its own launches fast", sold: "Has sold into its own launches", clean: "No sells into its own launches", new: "First launch, no sells yet", linked: "Funded by the wallet behind red launchers" };
@@ -341,7 +340,7 @@ export function liveFeed() {
         if (!initial) el.classList.add("new");
         rows.unshift(el);
       }
-      rows.splice(14).forEach((el) => el.remove());
+      rows.splice(8).forEach((el) => el.remove());
       if (initial) list.replaceChildren(...rows);
       else if (fresh.length) list.prepend(...rows.slice(0, fresh.length));
       for (const el of rows) {
@@ -360,8 +359,14 @@ export function liveFeed() {
 
   const el = h(
     "section",
-    { class: "feed-sec" },
-    h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, h("span", { class: "lamp alarm blink" }), " New launches, checked"), h("p", { class: "muted" }, "Every vibe/vibe launch as it lands, next to its launcher's record. A red row is a launcher that has sold into its own launches within an hour, again and again. Records update hourly."), status),
+    { class: "feed-sec", id: "live" },
+    h(
+      "div",
+      { class: "board-head" },
+      h("div", {}, h("span", { class: "label live-label" }, h("span", { class: "lamp alarm blink" }), "Live"), h("h2", { class: "display-s" }, "New launches, checked")),
+      h("span", { class: "feed-status" }, status),
+    ),
+    h("p", { class: "muted tab-desc" }, "Every vibe/vibe launch as it lands, next to its launcher's record. A red row is a launcher that keeps selling into its own launches within an hour."),
     list,
   );
   poll(true);
@@ -404,19 +409,26 @@ export function checkHome({ examples, feed }) {
     })
     .catch(() => board.replaceChildren(h("div", { class: "empty" }, "The record is updating. Try again in a minute.")));
 
+  const imd = imdPanel();
+  const groups = groupsPanel();
   return [
     h(
       "div",
-      { class: "check-hero" },
-      h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Live record · every vibe/vibe and IMD launch"),
-      h("h1", { class: "display" }, words("Check before you buy.", { delay: 80, accent: ["buy."] })),
+      { class: "home-hero" },
       h(
-        "p",
-        { class: "lede rise", style: { animationDelay: "380ms" } },
-        "Paste any token, wallet or launch number. KEPT shows what the wallet behind it did with every launch before this one: what graduated, and how fast it sold into its own buyers.",
+        "div",
+        { class: "hh-main" },
+        h("span", { class: "eyebrow rise" }, h("span", { class: "lamp alarm blink" }), "Live on Robinhood Chain · vibe/vibe and IMD"),
+        h("h1", { class: "display" }, words("Check before you buy.", { delay: 80, accent: ["buy."] })),
+        h(
+          "p",
+          { class: "lede rise", style: { animationDelay: "380ms" } },
+          "Paste any token, wallet or launch number. KEPT shows what the wallet behind it did with every launch before, and whose money it's using.",
+        ),
+        h("div", { class: "rise", style: { animationDelay: "480ms" } }, searchBox({ big: true })),
+        h("div", { class: "check-try rise", style: { animationDelay: "560ms" } }, "Try ", ...examples.flatMap((e, i) => [i ? " · " : "", h("a", { href: link(`/check/${e.q}`) }, e.label)])),
       ),
-      h("div", { class: "rise", style: { animationDelay: "480ms" } }, searchBox({ big: true })),
-      h("div", { class: "check-try rise", style: { animationDelay: "560ms" } }, "Try ", ...examples.flatMap((e, i) => [i ? " · " : "", h("a", { href: link(`/check/${e.q}`) }, e.label)])),
+      whatsNew(),
     ),
     reveal(
       h(
@@ -428,18 +440,62 @@ export function checkHome({ examples, feed }) {
         h("div", {}, stats.graduated, h("span", {}, "of vibe/vibe launches ever graduated")),
       ),
     ),
-    imdSection(),
     feed,
-    reveal(
-      h(
-        "section",
-        { class: "exit-sec" },
-        h("div", { class: "sec-head" }, h("h2", { class: "display-s" }, "Fastest exits on vibe/vibe"), h("p", { class: "muted" }, "Launchers that most often sold into their own launch within an hour of creating it. Every number links to its record, and every record links to the chain. ", h("a", { href: link("/report") }, "This week's Exits report"), "."), updated),
+    boardTabs([
+      {
+        label: "Fastest exits",
+        icon: "flame",
+        desc: ["Launchers that most often sold into their own launch within an hour of creating it, on vibe/vibe. ", updated],
         board,
-      ),
-    ),
-    groupsTeaser(),
+        more: h("a", { class: "btn small", href: link("/report") }, "This week's Exits report", icon("arrow", 14)),
+      },
+      { label: "Funding groups", icon: "graph", ...groups },
+      { label: "IMD sellers", icon: "fund", ...imd },
+    ]),
   ];
+}
+
+/** What KEPT 2.0 does that the first one didn't, beside the search. */
+function whatsNew() {
+  const item = (ic, title, text, href, onclick) =>
+    h("a", { class: "wn-item", href, ...(onclick ? { onclick } : {}) }, h("span", { class: "wn-ic" }, icon(ic, 18)), h("span", { class: "wn-body" }, h("b", {}, title), h("span", {}, text)), icon("arrow", 14));
+  return h(
+    "aside",
+    { class: "wn rise", style: { animationDelay: "420ms" } },
+    h("div", { class: "wn-head" }, h("span", { class: "wn-tag" }, "2.0"), h("b", {}, "What KEPT does now")),
+    item("search", "A record for every launcher", "Every vibe/vibe launch and every IMD launch on mainnet, read from the chain.", link("/how")),
+    item("graph", "Follow the money", "Fresh wallets traced two funders back and grouped with the launchers they're tied to.", link("/groups")),
+    item("bell", "Warned as they launch", "New launches are checked as they land. Red launchers and red money are flagged first.", link("/"), (e) => {
+      e.preventDefault();
+      document.getElementById("live")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    }),
+    item("shield", "Promises with teeth", "Teams lock tokens behind milestones the IMD swarm checks. Missed ones burn.", link("/pledges")),
+  );
+}
+
+/** One card, several boards: tabs instead of a stack of tables. */
+function boardTabs(tabs) {
+  const panel = h("div", { class: "tab-panel" });
+  const btns = tabs.map((t, i) =>
+    h("button", { class: "tab", type: "button", role: "tab", "aria-selected": "false", onclick: () => select(i) }, t.icon ? icon(t.icon, 15) : null, t.label),
+  );
+  function select(i) {
+    btns.forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
+    const t = tabs[i];
+    panel.replaceChildren(h("p", { class: "muted tab-desc" }, ...[].concat(t.desc)), t.board, t.more ? h("div", { class: "tab-more" }, t.more) : null);
+    panel.classList.remove("swap");
+    void panel.offsetWidth;
+    panel.classList.add("swap");
+  }
+  select(0);
+  return reveal(
+    h(
+      "section",
+      { class: "board-sec" },
+      h("div", { class: "board-head" }, h("div", {}, h("span", { class: "label" }, "Leaderboards"), h("h2", { class: "display-s" }, "Who to watch")), h("div", { class: "tabs", role: "tablist" }, ...btns)),
+      panel,
+    ),
+  );
 }
 
 // ------------------------------------------------------------------ one record
@@ -551,34 +607,40 @@ function siblingRow(x) {
 const sumOf = (list) => list.reduce((a, x) => ({ launches: a.launches + x.launches, fastExits: a.fastExits + x.fastExits }), { launches: 0, fastExits: 0 });
 
 /** Who funded this launcher, and the other launchers the same wallet funded. */
-function fundingSection(fd, grouped = false) {
+/** One sentence on where a launcher's money came from. */
+function fundingLead(fd) {
   const f = fd.funder;
   const what = {
     faucet: ["Its first ETH came from the testnet faucet, which funds everyone.", "No link to anyone."],
     bridge: ["Its ETH came from its own deposit from Ethereum.", "No link to another wallet."],
     contract: [`Its biggest early deposit came from a contract, such as a swap paying out (${short(f.from)}).`, "No link to a person."],
   }[f.kind];
-  if (what) return reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Funding"), h("p", { class: "muted" }, what[0], " ", what[1])));
+  if (what) return h("p", { class: "muted" }, what[0], " ", what[1]);
   const sib = fd.siblings || [];
   const all = sumOf(sib);
+  return h(
+    "p",
+    { class: "fund-lead" },
+    "Its ETH came from ",
+    h("a", { href: link(`/check/${f.from}`) }, short(f.from)),
+    f.bridgedFrom ? [" (a deposit from the Ethereum account ", h("a", { href: link(`/check/${f.bridgedFrom}`) }, short(f.bridgedFrom)), ")"] : null,
+    sib.length
+      ? `, which also funded ${sib.length} other launcher${sib.length === 1 ? "" : "s"}. Together they made ${all.launches.toLocaleString("en-US")} launches and sold into ${all.fastExits.toLocaleString("en-US")} within an hour.`
+      : ". That wallet funded no other launcher on record.",
+  );
+}
+
+/** Who funded this launcher, when it belongs to no funding group. */
+function fundingSection(fd) {
+  const sib = fd.funder.kind === "wallet" ? fd.siblings || [] : [];
   return reveal(
     h(
       "section",
       { class: "check-sec" },
+      h("span", { class: "label sec-label" }, "Follow the money"),
       h("h2", { class: "display-s" }, "Funding"),
-      h(
-        "p",
-        { class: sib.length ? "fund-lead" : "muted" },
-        "Funded by ",
-        h("a", { href: link(`/check/${f.from}`) }, short(f.from)),
-        f.bridgedFrom ? [" (a deposit from the Ethereum account ", h("a", { href: link(`/check/${f.bridgedFrom}`) }, short(f.bridgedFrom)), ")"] : null,
-        sib.length
-          ? `, which also funded ${sib.length} other launcher${sib.length === 1 ? "" : "s"}. Together they made ${all.launches.toLocaleString("en-US")} launches and sold into ${all.fastExits.toLocaleString("en-US")} within an hour.`
-          : grouped
-            ? ". The launchers its money ties it to, up to two funders back, are below."
-            : ". That wallet funded no other launcher on record.",
-      ),
-      sib.length && !grouped ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
+      fundingLead(fd),
+      sib.length ? h("div", { class: "exit-board" }, ...sib.map(siblingRow)) : null,
     ),
   );
 }
@@ -588,14 +650,16 @@ const groupSentence = (t) =>
   `${t.launchers} launchers are tied together by the wallets that funded them, up to two funders back. ${t.red ? `${t.red} ${t.red === 1 ? "has" : "have"} a red record. ` : "None has a red record. "}Between them: ${t.launches.toLocaleString("en-US")} launches, ${t.fastExits.toLocaleString("en-US")} sold into within an hour.`;
 
 /** The launchers this wallet's money ties it to. */
-function groupSection(g, self) {
+function groupSection(g, self, fd = null) {
   const others = g.launchers.filter((x) => x.address !== self);
   const path = g.path.length > 1 ? g.path : null;
   return reveal(
     h(
       "section",
       { class: "check-sec", id: "funding-group" },
+      h("span", { class: "label sec-label" }, "Follow the money"),
       h("h2", { class: "display-s" }, "Funding group", h("span", { class: "faint" }, ` · ${g.totals.launchers} launchers`)),
+      fd ? fundingLead(fd) : null,
       h("p", { class: "fund-lead" }, groupSentence(g.totals)),
       path
         ? h(
@@ -605,8 +669,13 @@ function groupSection(g, self) {
             g.live ? h("span", { class: "faint" }, " · read live, newer than the hourly index") : null,
           )
         : null,
-      h("div", { class: "exit-board" }, ...others.map(siblingRow)),
-      g.totals.launchers > g.launchers.length ? h("p", { class: "fine muted" }, `Showing the ${g.launchers.length} with the most fast exits.`) : null,
+      moneyMap(g, self),
+      h(
+        "details",
+        { class: "mm-list" },
+        h("summary", {}, `Every launcher in the group, by fast exits${g.totals.launchers > g.launchers.length ? ` (top ${g.launchers.length})` : ""}`),
+        h("div", { class: "exit-board" }, ...others.map(siblingRow)),
+      ),
     ),
   );
 }
@@ -688,7 +757,15 @@ export function checkResult(q, rec) {
           h("p", { class: "muted" }, "This wallet launched nothing itself. ", groupSentence(t)),
         ),
       ),
-      reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "Its funding group"), h("div", { class: "exit-board" }, ...g.launchers.map(siblingRow)))),
+      reveal(
+        h(
+          "section",
+          { class: "check-sec" },
+          h("h2", { class: "display-s" }, "Its funding group"),
+          moneyMap(g, q),
+          h("details", { class: "mm-list" }, h("summary", {}, "Every launcher in the group, by fast exits"), h("div", { class: "exit-board" }, ...g.launchers.map(siblingRow))),
+        ),
+      ),
       h(
         "div",
         { class: "vp-actions check-sec" },
@@ -811,8 +888,8 @@ export function checkResult(q, rec) {
       ),
     ),
     lead ? reveal(h("section", { class: "check-sec" }, h("h2", { class: "display-s" }, "This launch"), launchCard(lead, { lead: true, hold: rec.holdings }))) : null,
-    rec.funding ? fundingSection(rec.funding, Boolean(rec.group)) : null,
-    rec.group ? groupSection(rec.group, L.address) : null,
+    rec.funding && !rec.group ? fundingSection(rec.funding) : null,
+    rec.group ? groupSection(rec.group, L.address, rec.funding) : null,
     rec.kept && rec.kept.pledges.length
       ? reveal(
           h(
