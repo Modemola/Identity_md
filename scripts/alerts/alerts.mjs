@@ -120,7 +120,17 @@ const render = (svg) => new Resvg(svg, { fitTo: { mode: "width", value: 1200 }, 
 
 async function commands(pledgeIds) {
   if (DRY) return;
-  const updates = await tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message"] });
+  let updates;
+  try {
+    updates = await tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message"] });
+  } catch (e) {
+    // a bot once connected to a webhook service can't be read this way: KEPT owns this bot, so it
+    // turns the webhook off and reads again
+    if (!/webhook is active/i.test(e.message)) throw e;
+    await tg("deleteWebhook", { drop_pending_updates: false });
+    console.log("bot: turned off an old webhook so KEPT can read commands");
+    updates = await tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message"] });
+  }
   for (const u of updates) {
     state.offset = u.update_id + 1;
     const msg = u.message;
@@ -295,7 +305,13 @@ const pledges = [];
 for (const id of await pledgeIds(NET)) pledges.push(await readPledge(NET, id));
 const byId = new Map(pledges.map((p) => [p.id, p]));
 
-await commands(pledges.map((p) => p.id));
+// replies to commands never hold up the alerts: if Telegram won't hand over messages (another
+// program reading the same bot, a rate limit), the channel still gets this pass's alerts
+try {
+  await commands(pledges.map((p) => p.id));
+} catch (e) {
+  console.error(`bot commands skipped: ${e.message}${/Too Many Requests|Conflict/i.test(e.message) ? " (is another program reading this bot's messages? Each bot should be used by KEPT alone)" : ""}`);
+}
 // the first run starts at the current block: no flood of old verdicts
 const from = state.block == null ? latest : state.block + 1;
 if (from <= latest) await eventAlerts(byId, from, latest);
