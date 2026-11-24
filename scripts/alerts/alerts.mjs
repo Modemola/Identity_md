@@ -313,12 +313,12 @@ const pledges = [];
 for (const id of await pledgeIds(NET)) pledges.push(await readPledge(NET, id));
 const byId = new Map(pledges.map((p) => [p.id, p]));
 
-// which bot the token belongs to, once per run: a token left over from another bot is the
+// which bot the token belongs to, every six hours: a token left over from another bot is the
 // commonest setup slip, and the log should say so plainly
-if (!DRY && !process.env.KEPT_BOT_CHECKED) {
-  process.env.KEPT_BOT_CHECKED = "1";
+if (!DRY && Date.now() - (state.botCheckedAt ?? 0) > 6 * 3600_000) {
   try {
     const me = await tg("getMe", {});
+    state.botCheckedAt = Date.now();
     const match = !BOT || me.username.toLowerCase() === BOT.toLowerCase();
     console.log(`bot: the token belongs to @${me.username}${match ? "" : `, but TELEGRAM_BOT_USERNAME says @${BOT}: update the TELEGRAM_BOT_TOKEN secret to the new bot's token`}`);
   } catch (e) {
