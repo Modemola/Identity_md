@@ -10,7 +10,7 @@ import { moneyMap } from "./moneymap.js";
 
 const HOST = /(^|\.)vercel\.app$/.test(location.hostname) ? location.origin : "https://keptmd.vercel.app";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
-const MAINNET_EXPLORER = "https://robin.etherscan.io";
+const MAINNET_EXPLORER = "https://robinhoodchain.blockscout.com";
 /** Records come from two sources: vibe/vibe on the testnet, IMD launches on Robinhood mainnet. */
 const SOURCE = config.net === "vibevibe" ? "vibevibe" : "imd";
 const SOURCE_NAME = { vibevibe: "vibe/vibe", imd: "IMD" };
@@ -856,8 +856,8 @@ export function checkResult(q, rec) {
   const tone = TONE_CLASS[shown];
   const share = `https://x.com/intent/post?text=${encodeURIComponent(
     imd
-      ? `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher on IMD: ${s.launches} launch${s.launches === 1 ? "" : "es"}, sold into its own pool on ${s.sold}, within an hour on ${s.fastExits}.`
-      : `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher: ${s.launches} launches, ${s.graduated} graduated, sold into ${s.fastExits} within an hour of launching.`,
+      ? `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher on IMD: ${s.launches} launch${s.launches === 1 ? "" : "es"}, sold into its own pool on ${s.sold}, within an hour on ${s.fastExits}.${rec.linked ? ` Its funding ties it to ${rec.linked.red} red launcher${rec.linked.red === 1 ? "" : "s"}.` : ""}`
+      : `Checked ${lead ? `$${lead.symbol}` : short(L.address)} on @keptonchainn. Its launcher: ${s.launches} launch${s.launches === 1 ? "" : "es"}, ${s.graduated} graduated, sold into ${s.fastExits} within an hour of launching.${rec.linked ? ` Its funding ties it to ${rec.linked.red} red launcher${rec.linked.red === 1 ? "" : "s"}.` : ""}`,
   )}&url=${encodeURIComponent(shareUrl(q, L.source))}`;
   const nums = imd
     ? [

@@ -91,7 +91,7 @@ export function moneyMap(group, self) {
   const nodesSvg = shown.map((n) => {
     const p = pos.get(n.addr);
     const isMe = n.addr === me;
-    const title = n.kind === "funder" ? `${n.addr}\nfunding wallet${n.funded ? `, funded ${n.funded} wallets` : ""}` : `${n.addr}\nlauncher: ${TONE_WORD[n.tone] ?? n.tone}, ${n.fastExits} of ${n.launches} launches sold within an hour`;
+    const title = n.kind === "funder" ? `${n.addr}\nfunding wallet${n.funded ? `, funded ${n.funded} wallets` : ""}` : `${n.addr}\nlauncher: ${TONE_WORD[n.tone] ?? n.tone}, ${n.fastExits} of ${n.launches} launch${n.launches === 1 ? "" : "es"} sold within an hour`;
     const shape =
       n.kind === "funder"
         ? s("rect", { class: "mm-funder", x: p.x - 11, y: p.y - 11, width: 22, height: 22, rx: 6 })

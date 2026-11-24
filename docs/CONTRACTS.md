@@ -6,9 +6,9 @@ was handled is in [launches/](launches) and summarised in [SECURITY.md](SECURITY
 
 | Contract | Address | IMD launch |
 | --- | --- | --- |
-| `KeptVault` | [`0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`](https://robin.etherscan.io/address/0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896) | #2172, contracts only |
-| `KeptToken` (KEPT) | [`0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3`](https://robin.etherscan.io/address/0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3) | #2185, Uniswap v4 hook launch |
-| `KeptHook` | [`0xb5f28198750864e199477a6898bad44ae4d1e0cc`](https://robin.etherscan.io/address/0xb5f28198750864e199477a6898bad44ae4d1e0cc) | #2185, deployed with the token |
+| `KeptVault` | [`0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896`](https://robinhoodchain.blockscout.com/address/0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896) | #2172, contracts only |
+| `KeptToken` (KEPT) | [`0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3`](https://robinhoodchain.blockscout.com/address/0x9b8fd5aa7ac4fe302cb1a50ad90b4900b2924fa3) | #2185, Uniswap v4 hook launch |
+| `KeptHook` | [`0xb5f28198750864e199477a6898bad44ae4d1e0cc`](https://robinhoodchain.blockscout.com/address/0xb5f28198750864e199477a6898bad44ae4d1e0cc) | #2185, deployed with the token |
 
 ## How the token and hook launched
 
