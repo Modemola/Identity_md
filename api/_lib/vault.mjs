@@ -13,7 +13,7 @@ export const NETS = {
     // KeptVault v2: fill in after `launch.mjs vault-v2`
     vault2: process.env.KEPT_VAULT2 || "",
     vault2From: Number(process.env.KEPT_VAULT2_FROM_BLOCK || 0),
-    explorer: "https://explorer.mainnet.chain.robinhood.com",
+    explorer: "https://robinhoodchain.blockscout.com",
   },
   1: {
     name: "Ethereum",

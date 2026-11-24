@@ -39,7 +39,7 @@ Every claim on the site can be read from chain.
 
 | Claim | Check |
 |---|---|
-| The vault, token and hook are deployed | Open each address in [CONTRACTS.md](CONTRACTS.md) on robin.etherscan.io |
+| The vault, token and hook are deployed | Open each address in [CONTRACTS.md](CONTRACTS.md) on robinhoodchain.blockscout.com |
 | The team cannot take locked tokens | Read `src/KeptVault.sol`: tokens leave only through `settle`, to the beneficiary or the burn address |
 | Verdicts are verified onchain | `onOracleResult` in `src/KeptVault.sol` checks the EIP-712 signature, chain, panel size and quorum |
 | KEPT's pledge locks 300,000,000 KEPT | `cast call 0x3152f9cbf64d0c1ac24ea7e101db3e4d8da86896 "pledge(uint256)" 1 --rpc-url https://rpc.mainnet.chain.robinhood.com` |
@@ -55,7 +55,7 @@ Every claim on the site can be read from chain.
 | Chain ID | `4663` |
 | RPC | `https://rpc.mainnet.chain.robinhood.com` |
 | Currency | ETH |
-| Explorer | `https://robin.etherscan.io` |
+| Explorer | `https://robinhoodchain.blockscout.com` |
 
 Press **Connect**. On your first transaction the site asks your wallet to switch to Robinhood
 Chain, or to add it. This is mainnet: transactions cost real

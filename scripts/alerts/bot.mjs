@@ -75,7 +75,7 @@ function card(r, q) {
   const lines = [
     `${dot} <b>${word.toUpperCase()}</b>`,
     [lead ? `<b>$${esc(lead.symbol)}</b>` : null, lead ? `launch #${lead.id}` : null, imd ? "IMD · Robinhood Chain" : "vibe/vibe"].filter(Boolean).join(" · "),
-    `Launcher <code>${L.address}</code>`,
+    `Launcher <code>${short(L.address)}</code>`,
     "",
     imd
       ? `<b>${s.launches}</b> IMD launch${s.launches === 1 ? "" : "es"} · <b>${s.sold}</b> sold into its pool · <b>${s.fastExits}</b> within an hour`
@@ -111,7 +111,7 @@ async function check(q, chat, state) {
   return {
     text,
     markup: keyboard([
-      [...(wallet ? [watching ? btn("✖ Stop watching", `u:${wallet}`) : btn("👁 Watch this launcher", `w:${wallet}`)] : []), url("🔗 Full record", recordUrl(q))],
+      [...(wallet ? [watching ? btn("✖ Unwatch", `u:${wallet}`) : btn("👁 Watch", `w:${wallet}`)] : []), url("🔗 Full record", recordUrl(q))],
       [btn("🔎 Check another", "m:check"), home],
     ]),
   };
@@ -120,7 +120,14 @@ async function check(q, chat, state) {
 /** A command reply with its bare links turned into a button. */
 const tidy = (html) => {
   const links = String(html).match(/https?:\/\/\S+/g) || [];
-  return { text: String(html).split("\n").filter((l) => !/^https?:\/\//.test(l.trim())).join("\n").trim(), link: links[0] };
+  const text = String(html)
+    .split("\n")
+    .filter((l) => !/^https?:\/\//.test(l.trim()))
+    .join("\n")
+    .trim()
+    // full addresses wrap on a phone: the record behind the button has them in full
+    .replace(/<code>(0x[0-9a-fA-F]{40})<\/code>/g, (_, a) => `<code>${short(a)}</code>`);
+  return { text, link: links[0] };
 };
 
 async function watchlist(chat, state) {
@@ -132,7 +139,7 @@ async function watchlist(chat, state) {
       markup: keyboard([[btn("🔎 Check a token", "m:check"), home]]),
     };
   const lines = ["<b>👁 Your watchlist</b>", ""];
-  if (wallets.length) lines.push(`Launchers (${wallets.length}):`, ...wallets.map((w) => `· <code>${w}</code>`), "");
+  if (wallets.length) lines.push(`Launchers (${wallets.length}):`, ...wallets.map((w) => `· <code>${short(w)}</code>`), "");
   if (pledges.length) lines.push(`Pledges: ${pledges.map((x) => `#${x}`).join(", ")}`, "");
   lines.push("Tap a launcher to open its record, or ✖ to stop.");
   return {
@@ -228,7 +235,7 @@ export async function handleUpdate(u, { tg, state, channel }) {
       const reply = await watchCommand(kind === "w" ? "/watch" : "/unwatch", arg, chat, state).catch(() => null);
       toast = kind === "w" ? `Watching ${short(arg)}` : `Stopped watching ${short(arg)}`;
       const t = reply && tidy(reply);
-      view = t ? { text: t.text, markup: keyboard([[kind === "w" ? btn("✖ Stop watching", `u:${arg}`) : btn("👁 Watch again", `w:${arg}`), btn("👁 Watchlist", "m:list")], [url("🔗 Full record", recordUrl(arg)), home]]) } : failed;
+      view = t ? { text: t.text, markup: keyboard([[kind === "w" ? btn("✖ Unwatch", `u:${arg}`) : btn("👁 Watch again", `w:${arg}`), btn("👁 Watchlist", "m:list")], [url("🔗 Full record", recordUrl(arg)), home]]) } : failed;
     } else if (kind === "f" || kind === "uf") {
       toast = follow(chat, state, Number(arg), kind === "f");
       view = pledgeMenu(chat, state);
