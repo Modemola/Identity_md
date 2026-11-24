@@ -336,7 +336,8 @@ export function liveFeed() {
     busy = true;
     try {
       head = parseInt(await rpc("eth_blockNumber", []), 16);
-      const from = initial ? head - 20_000 : last + 1;
+      // the first read looks back about five hours (the RPC reads at most 100,000 blocks at once)
+      const from = initial ? head - 95_000 : last + 1;
       if (from > head) return;
       const got = (await Promise.all(FACTORIES.map((a) => rpc("eth_getLogs", [{ address: a, topics: [LAUNCHED], fromBlock: `0x${from.toString(16)}`, toBlock: `0x${head.toString(16)}` }])))).flat();
       last = head;
@@ -349,8 +350,12 @@ export function liveFeed() {
         rows.unshift(el);
       }
       rows.splice(8).forEach((el) => el.remove());
-      if (initial) list.replaceChildren(...rows);
-      else if (fresh.length) list.prepend(...rows.slice(0, fresh.length));
+      if (initial)
+        list.replaceChildren(...(rows.length ? rows : [h("div", { class: "empty feed-empty" }, "No new launches on vibe/vibe in the last few hours. This feed fills in the moment one lands.")]));
+      else if (fresh.length) {
+        list.querySelector(".feed-empty")?.remove();
+        list.prepend(...rows.slice(0, fresh.length));
+      }
       for (const el of rows) {
         el.querySelector(".when").textContent = age(Number(el.dataset.block));
         const n = recent.get(el.dataset.creator) || 0;

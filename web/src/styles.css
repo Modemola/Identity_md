@@ -1380,3 +1380,4 @@ html.js .rv.in .mm-ring { transform-box: fill-box; transform-origin: center; ani
   .feed-row .tok b { font-size: 18px; }
 }
 .feed-row.flag.flag-linked { background: color-mix(in srgb, var(--caution) 7%, var(--paper)); box-shadow: inset 3px 0 0 var(--caution); }
+.feed-empty { padding: 28px 18px; border-bottom: 0; text-align: center; }
