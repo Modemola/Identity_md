@@ -21,8 +21,8 @@
 //   - IMD launchers on mainnet (imdwatch.mjs): to the channel and watchers, every sale into a
 //     launch's own pool; to watchers, a share moved to another wallet
 //   - the weekly Exits report card (api/_lib/report.mjs), to the channel on Mondays
-// Bot commands (in a private chat): /check 7836, /watch 0x…, /unwatch 0x…, /follow 1, /unfollow 1,
-// /list, /start (also start=follow_1 and start=watch_0x… links from the site).
+// The bot's conversation (menus, buttons, a pasted token checked) is in bot.mjs; between passes
+// listen.mjs answers it within seconds.
 //
 // What it has sent, and who follows what, is kept in .state.json, so nothing is sent twice.
 
@@ -32,7 +32,8 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 import { verdictCard } from "../../api/_lib/cards.mjs";
 import { NETS, SITE, TOPIC, allVaultLogs, amount, lastVerdict, pledgeIds, readPledge, rpc, uint } from "../../api/_lib/vault.mjs";
-import { watchCommand, watchedBy, watchPass } from "./watch.mjs";
+import { watchPass } from "./watch.mjs";
+import { handleUpdate, BOT_COMMANDS } from "./bot.mjs";
 import { imdPass } from "./imdwatch.mjs";
 import { weeklyReport, reportCard, reportText } from "../../api/_lib/report.mjs";
 
@@ -128,65 +129,24 @@ const render = (svg) => new Resvg(svg, { fitTo: { mode: "width", value: 1200 }, 
 
 async function commands(pledgeIds) {
   if (DRY) return;
+  // the bot's menus offer these pledges to follow
+  state.pledgeIds = pledgeIds;
+  const read = () => tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message", "callback_query"] });
   let updates;
   try {
-    updates = await tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message"] });
+    updates = await read();
   } catch (e) {
     // a bot once connected to a webhook service can't be read this way: KEPT owns this bot, so it
     // turns the webhook off and reads again
     if (!/webhook is active/i.test(e.message)) throw e;
     await tg("deleteWebhook", { drop_pending_updates: false });
     console.log("bot: turned off an old webhook so KEPT can read commands");
-    updates = await tg("getUpdates", { offset: state.offset, timeout: 0, allowed_updates: ["message"] });
+    updates = await read();
   }
   for (const u of updates) {
     state.offset = u.update_id + 1;
-    const msg = u.message;
-    if (!msg?.text || msg.chat?.type !== "private") continue;
-    const chat = String(msg.chat.id);
-    let [cmd, arg] = msg.text.trim().split(/\s+/);
-    // a t.me/<bot>?start=follow_1 link arrives as "/start follow_1", and start=watch_0x… as "/start watch_0x…"
-    if (/^\/start/.test(cmd) && /^follow_\d+$/.test(arg || "")) [cmd, arg] = ["/follow", arg.slice(7)];
-    if (/^\/start/.test(cmd) && /^watch_/.test(arg || "")) [cmd, arg] = ["/watch", arg.slice(6)];
-    const launcherReply = await watchCommand(cmd, arg, chat, state).catch(() => "KEPT's launcher records are updating. Try again in a minute.");
-    if (launcherReply) {
-      await tg("sendMessage", { chat_id: msg.chat.id, text: launcherReply, parse_mode: "HTML", link_preview_options: { is_disabled: true } }).catch((e) => console.error(e.message));
-      continue;
-    }
-    const id = Number(arg);
-    const mine = (state.follows[chat] ??= []);
-    let reply;
-    if (/^\/follow/.test(cmd)) {
-      if (!pledgeIds.includes(id)) reply = `There is no pledge #${esc(arg ?? "")}. Try /follow 1.`;
-      else {
-        if (!mine.includes(id)) mine.push(id);
-        reply = `Following pledge #${id}. You'll get its due dates, verdicts and burns here.\n${link(id)}`;
-      }
-    } else if (/^\/unfollow/.test(cmd)) {
-      state.follows[chat] = mine.filter((x) => x !== id);
-      reply = `Stopped following pledge #${esc(arg ?? "")}.`;
-    } else if (/^\/list/.test(cmd)) {
-      const watched = watchedBy(state, chat);
-      reply =
-        [mine.length ? `Pledges you follow: ${mine.map((x) => `#${x}`).join(", ")}` : "", watched.length ? `Launchers you watch:\n${watched.map((w) => `<code>${w}</code>`).join("\n")}` : ""].filter(Boolean).join("\n\n") ||
-        "You don't follow anything yet. Try /watch 7836 or /follow 1.";
-    } else {
-      reply = [
-        "<b>KEPT alerts</b>: check the wallet behind a token before you buy, and hear when it sells into its own launch.",
-        "",
-        "/check 0x… or /check 7836: a launcher's record (a token, a wallet or a vibe/vibe launch number)",
-        "/watch 0x…: alerts when that launcher sells into its own launch, or launches again",
-        "/unwatch 0x…: stop them",
-        "",
-        "/follow 1: alerts for KEPT pledge #1 (due dates, verdicts, burns)",
-        "/unfollow 1: stop them",
-        "/list: everything you follow",
-        "",
-        `Every pledge: https://${SITE}/#/board`,
-      ].join("\n");
-    }
-    if (!state.follows[chat]?.length) delete state.follows[chat];
-    await tg("sendMessage", { chat_id: msg.chat.id, text: reply, parse_mode: "HTML", link_preview_options: { is_disabled: true } }).catch((e) => console.error(e.message));
+    await handleUpdate(u, { tg, state, channel: CHANNEL }).catch((e) => console.error(`bot reply failed: ${e.message}`));
+    save();
   }
 }
 
@@ -313,12 +273,15 @@ const pledges = [];
 for (const id of await pledgeIds(NET)) pledges.push(await readPledge(NET, id));
 const byId = new Map(pledges.map((p) => [p.id, p]));
 
-// which bot the token belongs to, once per run: a token left over from another bot is the
+// which bot the token belongs to, every six hours: a token left over from another bot is the
 // commonest setup slip, and the log should say so plainly
-if (!DRY && !process.env.KEPT_BOT_CHECKED) {
-  process.env.KEPT_BOT_CHECKED = "1";
+if (!DRY && Date.now() - (state.botCheckedAt ?? 0) > 6 * 3600_000) {
   try {
     const me = await tg("getMe", {});
+    state.botCheckedAt = Date.now();
+    // the commands Telegram lists under the Menu button beside the message box
+    await tg("setMyCommands", { commands: BOT_COMMANDS }).catch((e) => console.error(`bot: could not set its commands: ${e.message}`));
+    await tg("setChatMenuButton", { menu_button: { type: "commands" } }).catch(() => {});
     const match = !BOT || me.username.toLowerCase() === BOT.toLowerCase();
     console.log(`bot: the token belongs to @${me.username}${match ? "" : `, but TELEGRAM_BOT_USERNAME says @${BOT}: update the TELEGRAM_BOT_TOKEN secret to the new bot's token`}`);
   } catch (e) {

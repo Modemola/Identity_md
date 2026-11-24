@@ -98,7 +98,7 @@ export const config = {
   testOracle: Boolean(n.testOracle),
   vibeFactories: (n.vibeFactories || []).map((f) => ({ address: f.address, from: BigInt(f.from) })),
   // the KEPT alerts bot's username (scripts/alerts); a pledge page offers one-tap Telegram alerts once set
-  telegramBot: "",
+  telegramBot: "kept_alerts_bot",
   imdApi: "https://api.imd.fun",
   imdExplorer: "https://explorer.imd.fun",
   repo: "https://github.com/modemola/identity_md",

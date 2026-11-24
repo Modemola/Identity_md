@@ -65,7 +65,8 @@ jobs:
           end=$((SECONDS + 5 * 3600 + 20 * 60))
           while [ $SECONDS -lt $end ]; do
             node alerts.mjs || echo "pass failed; the next one retries"
-            sleep 180
+            # between passes, answer the bot within seconds
+            node listen.mjs 175 || sleep 175
           done
 
       - name: Start the next run
