@@ -1,0 +1,55 @@
+{
+  "voice": "af_heart",
+  "speed": 1.04,
+  "scenes": [
+    { "id": "launch", "lines": [
+      { "id": "K1", "text": "A new token launches. The chart goes up. Everyone piles in.", "caption": "A new token launches. The chart goes up. Everyone piles in." },
+      { "id": "K2", "text": "Then the wallet that launched it sells. And just like that, the chart is gone.", "caption": "Then the wallet that launched it sells. And just like that, the chart is gone." }
+    ]},
+    { "id": "again", "lines": [
+      { "id": "K3", "text": "So they do it again. And again. With a brand new wallet every time.", "caption": "So they do it again. And again. With a brand new wallet every time." },
+      { "id": "K4", "text": "And on launch day, there's no way to tell. Every token looks the same.", "caption": "And on launch day, there's no way to tell. Every token looks the same." }
+    ]},
+    { "id": "meet", "lines": [
+      { "id": "K5", "text": "Until now. This is KEPT two point oh.", "caption": "Until now. This is KEPT 2.0." },
+      { "id": "K6", "text": "Check before you buy.", "caption": "Check before you buy." }
+    ]},
+    { "id": "record", "lines": [
+      { "id": "K7", "text": "Paste any token, wallet, or launch number.", "caption": "Paste any token, wallet or launch number." },
+      { "id": "K8", "text": "KEPT pulls up the record of the wallet behind it, straight from the chain. Every launch it made, and how fast it sold into its own buyers.", "caption": "KEPT pulls up the record of the wallet behind it, straight from the chain. Every launch it made, and how fast it sold into its own buyers." },
+      { "id": "K9", "text": "Red sells fast. Amber has sold. Green never sold. Grey is a first launch.", "caption": "Red sells fast. Amber has sold. Green never sold. Grey is a first launch." },
+      { "id": "K10", "text": "This one started selling sixty three seconds after launch, and sold ninety eight percent of its share.", "caption": "This one started selling 63 seconds after launch, and sold 98% of its share." }
+    ]},
+    { "id": "money", "lines": [
+      { "id": "K11", "text": "But a bad actor can just make a fresh wallet. Clean record. No history.", "caption": "But a bad actor can just make a fresh wallet. Clean record. No history." },
+      { "id": "K12", "text": "Here's the thing. A fresh wallet still needs money from somewhere.", "caption": "Here's the thing. A fresh wallet still needs money from somewhere." },
+      { "id": "K13", "text": "So KEPT follows the money. Two wallets back.", "caption": "So KEPT follows the money. Two wallets back." },
+      { "id": "K14", "text": "This wallet never sold. But its money ties it to eight other launchers, and six of them sell fast.", "caption": "This wallet never sold. But its money ties it to 8 other launchers, and 6 of them sell fast." },
+      { "id": "K15", "text": "Fresh wallet. Same money. KEPT flags it amber, from its very first launch.", "caption": "Fresh wallet. Same money. KEPT flags it amber, from its very first launch." }
+    ]},
+    { "id": "groups", "lines": [
+      { "id": "K16", "text": "Then it groups them. One source of money. Five launchers. A hundred and thirty nine fast exits.", "caption": "Then it groups them. One source of money. 5 launchers. 139 fast exits." },
+      { "id": "K17", "text": "And it's fair. A group only counts against you when a quarter or more of it is red.", "caption": "And it's fair. A group only counts against you when a quarter or more of it is red." }
+    ]},
+    { "id": "live", "lines": [
+      { "id": "K18", "text": "It covers every launch on vibe vibe, and every IMD launch on Robinhood Chain.", "caption": "It covers every launch on vibe/vibe, and every IMD launch on Robinhood Chain." },
+      { "id": "K19", "text": "And it watches as it happens. Every new launch is checked the moment it lands.", "caption": "And it watches as it happens. Every new launch is checked the moment it lands." },
+      { "id": "K20", "text": "Red launchers and red money light up the live feed, and our alerts channel.", "caption": "Red launchers and red money light up the live feed, and our alerts channel." }
+    ]},
+    { "id": "telegram", "lines": [
+      { "id": "K21", "text": "On Telegram, paste a token to the KEPT bot and get the record in seconds. Tap watch, and you'll know when they sell.", "caption": "On Telegram, paste a token to the KEPT bot and get the record in seconds. Tap Watch, and you'll know when they sell." }
+    ]},
+    { "id": "launchpads", "lines": [
+      { "id": "K22", "text": "Launchpads can show the record right where people buy. A free badge, a share card, and an open API.", "caption": "Launchpads can show the record right where people buy. A free badge, a share card and an open API." }
+    ]},
+    { "id": "promises", "lines": [
+      { "id": "K23", "text": "And for teams with nothing to hide, KEPT still does what it started with.", "caption": "And for teams with nothing to hide, KEPT still does what it started with." },
+      { "id": "K24", "text": "Lock your tokens behind public promises. The IMD swarm checks every one.", "caption": "Lock your tokens behind public promises. The IMD swarm checks every one." },
+      { "id": "K25", "text": "Kept, the tokens unlock. Missed, they burn. Even ours.", "caption": "Kept, the tokens unlock. Missed, they burn. Even ours." }
+    ]},
+    { "id": "end", "lines": [
+      { "id": "K26", "text": "Facts from the chain. Never accusations.", "caption": "Facts from the chain. Never accusations." },
+      { "id": "K27", "text": "KEPT. Check before you buy.", "caption": "KEPT. Check before you buy." }
+    ]}
+  ]
+}

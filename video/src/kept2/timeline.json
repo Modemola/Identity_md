@@ -1,0 +1,253 @@
+{
+  "fps": 30,
+  "duration": 178.772,
+  "frames": 5363,
+  "scenes": [
+    {
+      "id": "launch",
+      "start": 0.0,
+      "end": 14.901
+    },
+    {
+      "id": "again",
+      "start": 14.901,
+      "end": 27.916
+    },
+    {
+      "id": "meet",
+      "start": 27.916,
+      "end": 37.993
+    },
+    {
+      "id": "record",
+      "start": 37.993,
+      "end": 66.301
+    },
+    {
+      "id": "money",
+      "start": 66.301,
+      "end": 95.168
+    },
+    {
+      "id": "groups",
+      "start": 95.168,
+      "end": 110.016
+    },
+    {
+      "id": "live",
+      "start": 110.016,
+      "end": 127.801
+    },
+    {
+      "id": "telegram",
+      "start": 127.801,
+      "end": 138.301
+    },
+    {
+      "id": "launchpads",
+      "start": 138.301,
+      "end": 148.508
+    },
+    {
+      "id": "promises",
+      "start": 148.508,
+      "end": 167.14
+    },
+    {
+      "id": "end",
+      "start": 167.14,
+      "end": 178.772
+    }
+  ],
+  "lines": [
+    {
+      "id": "K1",
+      "scene": "launch",
+      "start": 1.6,
+      "end": 5.333,
+      "caption": "A new token launches. The chart goes up. Everyone piles in."
+    },
+    {
+      "id": "K2",
+      "scene": "launch",
+      "start": 7.933,
+      "end": 11.901,
+      "caption": "Then the wallet that launched it sells. And just like that, the chart is gone."
+    },
+    {
+      "id": "K3",
+      "scene": "again",
+      "start": 15.801,
+      "end": 19.705,
+      "caption": "So they do it again. And again. With a brand new wallet every time."
+    },
+    {
+      "id": "K4",
+      "scene": "again",
+      "start": 21.505,
+      "end": 25.516,
+      "caption": "And on launch day, there's no way to tell. Every token looks the same."
+    },
+    {
+      "id": "K5",
+      "scene": "meet",
+      "start": 29.116,
+      "end": 31.356,
+      "caption": "Until now. This is KEPT 2.0."
+    },
+    {
+      "id": "K6",
+      "scene": "meet",
+      "start": 32.956,
+      "end": 34.193,
+      "caption": "Check before you buy."
+    },
+    {
+      "id": "K7",
+      "scene": "record",
+      "start": 38.893,
+      "end": 41.389,
+      "caption": "Paste any token, wallet or launch number."
+    },
+    {
+      "id": "K8",
+      "scene": "record",
+      "start": 43.189,
+      "end": 50.976,
+      "caption": "KEPT pulls up the record of the wallet behind it, straight from the chain. Every launch it made, and how fast it sold into its own buyers."
+    },
+    {
+      "id": "K9",
+      "scene": "record",
+      "start": 51.876,
+      "end": 56.825,
+      "caption": "Red sells fast. Amber has sold. Green never sold. Grey is a first launch."
+    },
+    {
+      "id": "K10",
+      "scene": "record",
+      "start": 58.125,
+      "end": 63.501,
+      "caption": "This one started selling 63 seconds after launch, and sold 98% of its share."
+    },
+    {
+      "id": "K11",
+      "scene": "money",
+      "start": 67.201,
+      "end": 71.425,
+      "caption": "But a bad actor can just make a fresh wallet. Clean record. No history."
+    },
+    {
+      "id": "K12",
+      "scene": "money",
+      "start": 72.325,
+      "end": 75.653,
+      "caption": "Here's the thing. A fresh wallet still needs money from somewhere."
+    },
+    {
+      "id": "K13",
+      "scene": "money",
+      "start": 76.353,
+      "end": 78.935,
+      "caption": "So KEPT follows the money. Two wallets back."
+    },
+    {
+      "id": "K14",
+      "scene": "money",
+      "start": 81.135,
+      "end": 86.831,
+      "caption": "This wallet never sold. But its money ties it to 8 other launchers, and 6 of them sell fast."
+    },
+    {
+      "id": "K15",
+      "scene": "money",
+      "start": 88.131,
+      "end": 92.568,
+      "caption": "Fresh wallet. Same money. KEPT flags it amber, from its very first launch."
+    },
+    {
+      "id": "K16",
+      "scene": "groups",
+      "start": 96.068,
+      "end": 101.657,
+      "caption": "Then it groups them. One source of money. 5 launchers. 139 fast exits."
+    },
+    {
+      "id": "K17",
+      "scene": "groups",
+      "start": 102.957,
+      "end": 107.416,
+      "caption": "And it's fair. A group only counts against you when a quarter or more of it is red."
+    },
+    {
+      "id": "K18",
+      "scene": "live",
+      "start": 110.916,
+      "end": 115.631,
+      "caption": "It covers every launch on vibe/vibe, and every IMD launch on Robinhood Chain."
+    },
+    {
+      "id": "K19",
+      "scene": "live",
+      "start": 116.731,
+      "end": 120.933,
+      "caption": "And it watches as it happens. Every new launch is checked the moment it lands."
+    },
+    {
+      "id": "K20",
+      "scene": "live",
+      "start": 121.633,
+      "end": 125.601,
+      "caption": "Red launchers and red money light up the live feed, and our alerts channel."
+    },
+    {
+      "id": "K21",
+      "scene": "telegram",
+      "start": 128.701,
+      "end": 135.101,
+      "caption": "On Telegram, paste a token to the KEPT bot and get the record in seconds. Tap Watch, and you'll know when they sell."
+    },
+    {
+      "id": "K22",
+      "scene": "launchpads",
+      "start": 139.201,
+      "end": 145.708,
+      "caption": "Launchpads can show the record right where people buy. A free badge, a share card and an open API."
+    },
+    {
+      "id": "K23",
+      "scene": "promises",
+      "start": 149.408,
+      "end": 153.248,
+      "caption": "And for teams with nothing to hide, KEPT still does what it started with."
+    },
+    {
+      "id": "K24",
+      "scene": "promises",
+      "start": 154.148,
+      "end": 159.033,
+      "caption": "Lock your tokens behind public promises. The IMD swarm checks every one."
+    },
+    {
+      "id": "K25",
+      "scene": "promises",
+      "start": 160.433,
+      "end": 163.74,
+      "caption": "Kept, the tokens unlock. Missed, they burn. Even ours."
+    },
+    {
+      "id": "K26",
+      "scene": "end",
+      "start": 168.34,
+      "end": 170.857,
+      "caption": "Facts from the chain. Never accusations."
+    },
+    {
+      "id": "K27",
+      "scene": "end",
+      "start": 172.257,
+      "end": 173.772,
+      "caption": "KEPT. Check before you buy."
+    }
+  ]
+}
