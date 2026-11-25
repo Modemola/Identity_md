@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill } from "remotion";
 import { INOUT, L, LE, OUT, rnd, scene, tw, useSeconds, wt } from "./kit";
 import { Glass, Kicker, Mark, Mesh, MONO, rise, SANS, SERIF, V, Words, HEAD } from "./mg";
+import { ACC } from "./mg";
 
 // ---------------------------------------------------------------------------------- a clean chart
 /// A price line that climbs with small wiggles; after `crash` it drops off a cliff and turns red.
@@ -98,23 +99,23 @@ export const Launch: React.FC = () => {
       </div>
       {/* the launcher sells */}
       <div style={{ position: "absolute", left: 1130, top: 190, ...rise(t, sells - 0.25, cardOut, 30) }}>
-        <Glass dark r={999} style={{ padding: "16px 28px", fontFamily: MONO, fontSize: 24, color: "#fff", display: "flex", gap: 14, alignItems: "center" }}>
+        <Glass r={999} style={{ padding: "16px 28px", fontFamily: MONO, fontSize: 24, color: V.ink, display: "flex", gap: 14, alignItems: "center" }}>
           <span style={{ width: 12, height: 12, borderRadius: 6, background: V.red, boxShadow: `0 0 16px ${V.red}` }} />
           Launcher 0x7a3f…e1b9 <span style={{ color: V.red, fontWeight: 600 }}>SELL 98%</span>
         </Glass>
       </div>
       {/* headlines */}
       <div style={{ position: "absolute", left: 0, right: 0, top: 128 }}>
-        <Words text="A new token *launches.*" t={t} at={L("K1") - 0.1} out={wt("K1", "chart") - 0.2} size={88} color={V.ink} accent="#e2456a" />
+        <Words text="A new token *launches.*" t={t} at={L("K1") - 0.1} out={wt("K1", "chart") - 0.2} size={88} color={V.ink} accent={ACC} />
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 128 }}>
-        <Words text="Everyone *piles in.*" t={t} at={piles - 0.15} out={LE("K1") + 1.4} size={88} color={V.ink} accent="#e2456a" />
+        <Words text="Everyone *piles in.*" t={t} at={piles - 0.15} out={LE("K1") + 1.4} size={88} color={V.ink} accent={ACC} />
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 860 }}>
-        <Words text="Then the launcher *sells.*" t={t} at={sells - 0.35} out={gone - 0.3} size={76} color="#fff" accent="#ff7b8c" />
+        <Words text="Then the launcher *sells.*" t={t} at={sells - 0.35} out={gone - 0.3} size={76} color={V.ink} accent={V.red} />
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 400 }}>
-        <Words text="*Gone.*" t={t} at={gone} out={sc.end - 0.45} size={240} color="#fff" accent="#fff" />
+        <Words text="*Gone.*" t={t} at={gone} out={sc.end - 0.45} size={240} color={V.ink} accent={V.ink} />
       </div>
     </AbsoluteFill>
   );
@@ -133,7 +134,7 @@ export const Again: React.FC = () => {
     <AbsoluteFill>
       <Mesh t={t} colors={["#7b5cff", "#d35cff", "#3f7cff", "#ff6fb5"]} base="#1b1033" seed={3} />
       <div style={{ position: "absolute", left: 0, right: 0, top: 150 }}>
-        <Words text="Again. And *again.*" t={t} at={wt("K3", "again") - 0.2} out={grid - 0.4} size={110} color="#fff" accent="#ffc2ef" stagger={0.18} />
+        <Words text="Again. And *again.*" t={t} at={wt("K3", "again") - 0.2} out={grid - 0.4} size={110} color={V.ink} accent={V.ink} stagger={0.18} />
       </div>
       {/* three launches, three wallets, the same ending */}
       <div style={{ opacity: 1 - g, filter: g > 0.01 ? `blur(${g * 14}px)` : undefined }}>
@@ -180,7 +181,7 @@ export const Again: React.FC = () => {
             );
           })}
           <div style={{ position: "absolute", left: 0, right: 0, top: 150 }}>
-            <Words text="No way to *tell.*" t={t} at={wt("K4", "way") - 0.2} size={110} color="#fff" accent="#ffc2ef" />
+            <Words text="No way to *tell.*" t={t} at={wt("K4", "way") - 0.2} size={110} color={V.ink} accent={V.ink} />
           </div>
         </>
       ) : null}
@@ -218,7 +219,7 @@ export const Meet: React.FC = () => {
             fontStyle: "italic",
             fontSize: 190,
             marginLeft: -20,
-            background: "linear-gradient(120deg,#ff6a88,#7b5cff 50%,#19b46b)",
+            background: "linear-gradient(120deg,#1cc074,#0e7a47)",
             WebkitBackgroundClip: "text",
             backgroundClip: "text",
             color: "transparent",
@@ -231,7 +232,7 @@ export const Meet: React.FC = () => {
         </div>
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 640 }}>
-        <Words text="Check before you *buy.*" t={t} at={check - 0.1} size={92} color={V.ink} accent="#7b5cff" stagger={0.1} />
+        <Words text="Check before you *buy.*" t={t} at={check - 0.1} size={92} color={V.ink} accent={ACC} stagger={0.1} />
       </div>
     </AbsoluteFill>
   );

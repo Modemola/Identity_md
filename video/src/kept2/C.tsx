@@ -3,6 +3,7 @@ import { AbsoluteFill, Img, staticFile } from "remotion";
 import { pt, WIN } from "./B";
 import { INOUT, L, LE, OUT, scene, tw, useSeconds, wt } from "./kit";
 import { Browser, Cam, cam, Cursor, focusAt, Glass, HEAD, LowerThird, Mark, Mesh, MONO, rise, SANS, SERIF, Stage3D, V, Verdict, Words } from "./mg";
+import { ACC } from "./mg";
 
 // ---------------------------------------------------------------------------------- 7. live
 const FEED = [
@@ -120,10 +121,10 @@ export const Live: React.FC = () => {
         </Glass>
       </div>
       <div style={{ position: "absolute", left: 120, top: 300, width: 760 }}>
-        <Words text="Every new launch, / checked the moment / it *lands.*" t={t} at={wt("K19", "Every") - 0.2} out={red - 0.4} size={76} color="#fff" accent="#b9fff0" align="left" />
+        <Words text="Every new launch, / checked the moment / it *lands.*" t={t} at={wt("K19", "Every") - 0.2} out={red - 0.4} size={76} color={V.ink} accent={ACC} align="left" />
       </div>
       <div style={{ position: "absolute", left: 120, top: 330, width: 760 }}>
-        <Words text="Red lights up / the *feed.*" t={t} at={red - 0.15} out={sc.end - 0.5} size={76} color="#fff" accent="#ffb3bd" align="left" />
+        <Words text="Red lights up / the *feed.*" t={t} at={red - 0.15} out={sc.end - 0.5} size={76} color={V.ink} accent={V.red} align="left" />
       </div>
       <LowerThird t={t} at={sc.start + 0.8} out={k19 - 0.2} n={4} title="Checked as they *land*" sub="Every vibe/vibe launch, and every IMD launch on Robinhood Chain." />
     </AbsoluteFill>
@@ -158,16 +159,16 @@ export const Telegram: React.FC = () => {
     <AbsoluteFill>
       <Mesh t={t} colors={["#2aa3ef", "#6a8cff", "#36d1dc", "#9bd8ff"]} base="#06243f" seed={15} />
       <div style={{ position: "absolute", left: 140, top: 230, width: 820 }}>
-        <Words text="On *Telegram.*" t={t} at={L("K21") - 0.15} out={paste - 0.3} size={110} color="#fff" accent="#d4ecff" align="left" />
+        <Words text="On *Telegram.*" t={t} at={L("K21") - 0.15} out={paste - 0.3} size={110} color={V.ink} accent={ACC} align="left" />
       </div>
       <div style={{ position: "absolute", left: 140, top: 230, width: 820 }}>
-        <Words text="Paste a token. / Get the *record.*" t={t} at={paste - 0.15} out={watch - 0.35} size={100} color="#fff" accent="#d4ecff" align="left" />
+        <Words text="Paste a token. / Get the *record.*" t={t} at={paste - 0.15} out={watch - 0.35} size={100} color={V.ink} accent={ACC} align="left" />
       </div>
       <div style={{ position: "absolute", left: 140, top: 230, width: 820 }}>
-        <Words text="Tap *Watch.* / Know when / they *sell.*" t={t} at={watch - 0.15} size={100} color="#fff" accent="#d4ecff" align="left" stagger={0.12} />
+        <Words text="Tap *Watch.* / Know when / they *sell.*" t={t} at={watch - 0.15} size={100} color={V.ink} accent={ACC} align="left" stagger={0.12} />
       </div>
       <div style={{ position: "absolute", left: 140, top: 820, ...rise(t, rec, undefined, 20) }}>
-        <Glass dark r={999} style={{ padding: "14px 26px", fontFamily: MONO, fontSize: 26, color: "#fff" }}>t.me/kept_alerts_bot</Glass>
+        <Glass r={999} style={{ padding: "14px 26px", fontFamily: MONO, fontSize: 26, color: V.ink }}>t.me/kept_alerts_bot</Glass>
       </div>
       <Stage3D t={t} at={sc.start + 0.1} x={260} y={20} scale={1 + push * 0.04} tilt={-2}>
         <div style={{ width: PW, height: SH + 28, borderRadius: 70, background: "linear-gradient(145deg,#3a3d47,#15161b)", padding: 14, boxSizing: "border-box", boxShadow: "0 60px 120px rgba(0,10,40,0.5), inset 0 0 0 2px rgba(255,255,255,0.12)" }}>
@@ -278,7 +279,7 @@ export const Promises: React.FC = () => {
     <AbsoluteFill>
       <Mesh t={t} colors={["#6a3cff", "#ff6fb5", "#ffb020", "#9b5cff"]} base="#170b33" seed={19} />
       <div style={{ position: "absolute", left: 0, right: 0, top: 400 }}>
-        <Words text="For teams with / *nothing to hide.*" t={t} at={wt("K23", "teams") - 0.3} out={app - 0.2} size={110} color="#fff" accent="#ffd36e" />
+        <Words text="For teams with / *nothing to hide.*" t={t} at={wt("K23", "teams") - 0.3} out={app - 0.2} size={110} color={V.ink} accent={ACC} />
       </div>
       {t > app - 0.2 ? (
         <Stage3D t={t} at={app} out={missed - 0.35} y={WIN.y} scale={WIN.scale}>
@@ -297,17 +298,17 @@ export const Promises: React.FC = () => {
             </Glass>
           </div>
           <div style={{ position: "absolute", left: 1020, top: 330, ...rise(t, missed, undefined, 40) }}>
-            <Glass dark style={{ width: 600, padding: "40px 44px", background: `linear-gradient(160deg, rgba(40,8,16,0.75), rgba(239,59,79,${0.25 + 0.1 * Math.sin(t * 7)}))` }}>
-              <Verdict color={V.red} text="Missed" size={26} dark />
-              <div style={{ fontFamily: SERIF, fontSize: 76, lineHeight: 1.05, color: "#fff", marginTop: 22 }}>
-                They <i style={{ color: "#ff8a8a" }}>burn.</i>
+            <Glass style={{ width: 600, padding: "40px 44px", background: "rgba(255,244,244,0.92)" }}>
+              <Verdict color={V.red} text="Missed" size={26} />
+              <div style={{ fontFamily: SERIF, fontSize: 76, lineHeight: 1.05, color: V.ink, marginTop: 22 }}>
+                They <i style={{ color: V.red }}>burn.</i>
               </div>
             </Glass>
           </div>
         </AbsoluteFill>
       ) : null}
       <div style={{ position: "absolute", left: 0, right: 0, top: 420 }}>
-        <Words text="Even *ours.*" t={t} at={ours - 0.05} out={sc.end - 0.45} size={200} color="#fff" accent="#ffd36e" stagger={0.2} />
+        <Words text="Even *ours.*" t={t} at={ours - 0.05} out={sc.end - 0.45} size={200} color={V.ink} accent={ACC} stagger={0.2} />
       </div>
       <LowerThird t={t} at={app + 0.6} out={missed - 0.35} n={7} title="Promises with *teeth*" sub="Tokens locked behind public milestones. The IMD swarm checks each one." />
     </AbsoluteFill>
@@ -328,14 +329,14 @@ export const End: React.FC = () => {
         <Mesh t={t} colors={["#ffd1b3", "#d9ccff", "#c4f5e4", "#ffd0e6"]} base="#ffffff" seed={21} grain={0.04} />
       </AbsoluteFill>
       <div style={{ position: "absolute", left: 0, right: 0, top: 400 }}>
-        <Words text="Facts from the chain. / *Never accusations.*" t={t} at={L("K26") - 0.1} out={logo - 0.5} size={100} color={V.ink} accent="#7b5cff" />
+        <Words text="Facts from the chain. / *Never accusations.*" t={t} at={L("K26") - 0.1} out={logo - 0.5} size={100} color={V.ink} accent={ACC} />
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 330, display: "flex", justifyContent: "center", alignItems: "center", gap: 36, opacity: lp, filter: lp < 1 ? `blur(${(1 - lp) * 16}px)` : undefined, transform: `scale(${0.94 + 0.06 * lp})` }}>
         <Mark size={150} draw={tw(t, logo + 0.2, logo + 0.9, 0, 1, OUT)} />
         <div style={{ fontFamily: HEAD, fontWeight: 800, fontSize: 136, letterSpacing: "0.16em", color: V.ink, fontStretch: "110%" }}>KEPT</div>
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 560 }}>
-        <Words text="Check before you *buy.*" t={t} at={wt("K27", "Check") - 0.05} size={84} color={V.ink} accent="#7b5cff" stagger={0.1} />
+        <Words text="Check before you *buy.*" t={t} at={wt("K27", "Check") - 0.05} size={84} color={V.ink} accent={ACC} stagger={0.1} />
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 740, display: "flex", justifyContent: "center", gap: 18, ...rise(t, LE("K27") + 0.4, undefined, 16) }}>
         <Glass r={999} style={{ padding: "14px 28px", fontFamily: MONO, fontSize: 26, color: V.ink }}>keptmd.vercel.app</Glass>

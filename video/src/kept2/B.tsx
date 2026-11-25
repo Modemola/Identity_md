@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill } from "remotion";
 import { INOUT, L, LE, OUT, scene, tw, useSeconds, wt } from "./kit";
 import { Browser, Cam, cam, Cursor, focusAt, Glass, Kicker, LowerThird, Mesh, MONO, rise, SANS, SERIF, Stage3D, V, Verdict, Words } from "./mg";
+import { ACC } from "./mg";
 
 const W = 1560;
 const H = 900;
@@ -115,11 +116,11 @@ export const Record: React.FC = () => {
         const at = wt("K9", c.w) - 0.15;
         return (
           <div key={i} style={{ position: "absolute", left: 1190, top: 250 + i * 150, ...rise(t, at, k10 - 0.2, 30) }}>
-            <Glass dark style={{ width: 560, padding: "22px 30px", display: "flex", alignItems: "center", gap: 24 }}>
+            <Glass style={{ width: 560, padding: "22px 30px", display: "flex", alignItems: "center", gap: 24 }}>
               <div style={{ width: 58, height: 58, borderRadius: 29, background: c.c, boxShadow: `0 0 40px ${c.c}` }} />
               <div>
-                <div style={{ fontFamily: SERIF, fontSize: 52, lineHeight: 1, color: "#fff" }}>{c.w}</div>
-                <div style={{ fontFamily: SANS, fontSize: 22, fontWeight: 500, color: "rgba(255,255,255,0.72)", marginTop: 4 }}>{c.s}</div>
+                <div style={{ fontFamily: SERIF, fontSize: 52, lineHeight: 1, color: V.ink }}>{c.w}</div>
+                <div style={{ fontFamily: SANS, fontSize: 22, fontWeight: 500, color: "#6b6676", marginTop: 4 }}>{c.s}</div>
               </div>
             </Glass>
           </div>
@@ -172,21 +173,21 @@ export const Money: React.FC = () => {
       {intro > 0.01 ? (
         <AbsoluteFill style={{ opacity: intro, filter: intro < 1 ? `blur(${(1 - intro) * 16}px)` : undefined }}>
           <div style={{ position: "absolute", left: 0, right: 0, top: 150 }}>
-            <Words text="A fresh wallet. *Clean* record." t={t} at={wt("K11", "fresh") - 0.2} out={L("K12") - 0.4} size={92} color="#fff" accent="#ffd0ea" />
+            <Words text="A fresh wallet. *Clean* record." t={t} at={wt("K11", "fresh") - 0.2} out={L("K12") - 0.4} size={92} color={V.ink} accent={ACC} />
           </div>
           <div style={{ position: "absolute", left: 0, right: 0, top: 150 }}>
-            <Words text="It still needs *money.*" t={t} at={wt("K12", "needs") - 0.2} size={92} color="#fff" accent="#ffd0ea" />
+            <Words text="It still needs *money.*" t={t} at={wt("K12", "needs") - 0.2} size={92} color={V.ink} accent={ACC} />
           </div>
           {/* the money arriving from somewhere above */}
           <svg width={1920} height={1080} style={{ position: "absolute" }}>
             <defs>
               <linearGradient id="mline" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fff" stopOpacity={0} />
-                <stop offset="100%" stopColor="#fff" stopOpacity={0.9} />
+                <stop offset="0%" stopColor={ACC} stopOpacity={0} />
+                <stop offset="100%" stopColor={ACC} stopOpacity={0.9} />
               </linearGradient>
             </defs>
             <path d="M 960 -20 L 960 420" stroke="url(#mline)" strokeWidth={3} pathLength={1} strokeDasharray={1} strokeDashoffset={1 - tw(t, fund, fund + 0.9, 0, 1, OUT)} />
-            {t > fund ? <circle cx={960} cy={-20 + ((t - fund) * 340) % 440} r={9} fill="#fff" opacity={0.9} /> : null}
+            {t > fund ? <circle cx={960} cy={-20 + ((t - fund) * 340) % 440} r={9} fill={ACC} opacity={0.9} /> : null}
           </svg>
           <div style={{ position: "absolute", left: 660, top: 420, ...rise(t, wt("K11", "fresh") - 0.1, undefined, 50) }}>
             <Glass style={{ width: 600, padding: "34px 40px", boxSizing: "border-box" }}>
@@ -289,19 +290,19 @@ export const Groups: React.FC = () => {
       {t > fair - 0.5 ? (
         <>
           <div style={{ position: "absolute", left: 0, right: 0, top: 130 }}>
-            <Words text="And it's *fair.*" t={t} at={wt("K17", "fair") - 0.25} size={96} color="#fff" accent="#fff3c4" />
+            <Words text="And it's *fair.*" t={t} at={wt("K17", "fair") - 0.25} size={96} color={V.ink} accent={ACC} />
           </div>
           <svg width={1920} height={1080} style={{ position: "absolute", ...rise(t, fair + 0.2, undefined, 40) }}>
             <g transform="translate(960 560) rotate(-90)">
-              <circle r={190} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth={34} />
+              <circle r={190} fill="none" stroke="rgba(15,13,26,0.08)" strokeWidth={34} />
               <circle r={190} fill="none" stroke={V.red} strokeWidth={34} strokeLinecap="round" pathLength={100} strokeDasharray={`${25 * ring} 100`} style={{ filter: `drop-shadow(0 0 18px ${V.red})` }} />
             </g>
-            <text x={960} y={590} textAnchor="middle" fontFamily={SERIF} fontSize={110} fill="#fff" opacity={ring}>
+            <text x={960} y={590} textAnchor="middle" fontFamily={SERIF} fontSize={110} fill={V.ink} opacity={ring}>
               25%
             </text>
           </svg>
           <div style={{ position: "absolute", left: 0, right: 0, top: 820 }}>
-            <Words text="A group counts against you only when / *a quarter or more* of it is red." t={t} at={q - 0.2} size={50} color="#fff" accent="#ffe08a" stagger={0.05} />
+            <Words text="A group counts against you only when / *a quarter or more* of it is red." t={t} at={q - 0.2} size={50} color={V.ink} accent={V.red} stagger={0.05} />
           </div>
         </>
       ) : null}

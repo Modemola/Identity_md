@@ -10,6 +10,7 @@ export const SANS = "Inter, system-ui, sans-serif";
 export const MONO = "'IBM Plex Mono', monospace";
 export const HEAD = "Archivo, 'Arial Narrow', sans-serif";
 
+export const ACC = "#12a15e";
 export const V = {
   red: "#ef3b4f",
   amber: "#f5a524",
@@ -21,29 +22,15 @@ export const V = {
 const clamp = (x: number) => Math.max(0, Math.min(1, x));
 
 // ---------------------------------------------------------------------------------- gradient field
-/// Four soft colour pools drifting over a base, then grain. `k` fades the whole field in.
-export const Mesh: React.FC<{ t: number; colors: string[]; base?: string; seed?: number; k?: number; grain?: number }> = ({ t, colors, base = "#ffffff", seed = 0, k = 1, grain = 0.07 }) => {
-  const pos = [
-    [18, 22],
-    [82, 18],
-    [78, 86],
-    [16, 82],
-  ];
+/// The film's one field: warm off-white with two soft glows, a hint of mint and a hint of warmth.
+/// (`colors` and `base` are kept for call sites; the look is the same everywhere on purpose.)
+export const Mesh: React.FC<{ t: number; colors?: string[]; base?: string; seed?: number; k?: number; grain?: number }> = ({ t, seed = 0, grain = 0.035 }) => {
+  const a = [22 + Math.sin(t * 0.13 + seed) * 6, 20 + Math.cos(t * 0.11 + seed) * 5];
+  const b = [80 + Math.cos(t * 0.12 + seed) * 6, 84 + Math.sin(t * 0.1 + seed) * 5];
   return (
-    <AbsoluteFill style={{ background: base, overflow: "hidden" }}>
-      <AbsoluteFill style={{ opacity: k, filter: "blur(40px)", transform: "scale(1.15)" }}>
-        {colors.map((c, i) => {
-          const [x, y] = pos[i % 4];
-          const dx = Math.sin(t * 0.21 + i * 1.7 + seed) * 9;
-          const dy = Math.cos(t * 0.17 + i * 2.3 + seed) * 8;
-          return (
-            <AbsoluteFill
-              key={i}
-              style={{ background: `radial-gradient(${900 + (i % 2) * 260}px ${720 + (i % 3) * 120}px at ${x + dx}% ${y + dy}%, ${c} 0%, ${c}00 70%)` }}
-            />
-          );
-        })}
-      </AbsoluteFill>
+    <AbsoluteFill style={{ background: "#f8f7f3", overflow: "hidden" }}>
+      <AbsoluteFill style={{ background: `radial-gradient(1100px 800px at ${a[0]}% ${a[1]}%, rgba(176,236,206,0.55), rgba(176,236,206,0) 70%)` }} />
+      <AbsoluteFill style={{ background: `radial-gradient(1100px 820px at ${b[0]}% ${b[1]}%, rgba(255,222,186,0.5), rgba(255,222,186,0) 70%)` }} />
       <Grain amount={grain} />
     </AbsoluteFill>
   );
@@ -140,15 +127,14 @@ export const LowerThird: React.FC<{ t: number; at: number; out: number; title: s
   sub,
   n,
   of = 7,
-  color = "#fff",
-  accent = "#fff",
+  color = "#0f0d1a",
+  accent = ACC,
 }) => {
   const p = tw(t, at, at + 0.8, 0, 1, OUT);
   const g = tw(t, out - 0.5, out, 0, 1, INOUT);
   if (p <= 0 || g >= 1) return null;
   return (
     <>
-      <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(10,8,20,0) 72%, rgba(10,8,20,0.28) 100%)", opacity: p * (1 - g) }} />
       <div style={{ position: "absolute", left: 96, bottom: 64, opacity: 1 - g, filter: g > 0 ? `blur(${g * 10}px)` : undefined }}>
         <Words text={title} t={t} at={at} size={58} color={color} accent={accent} align="left" stagger={0.06} />
         <div style={{ fontFamily: SANS, fontSize: 22, fontWeight: 500, color, opacity: 0.78 * tw(t, at + 0.4, at + 1.1), marginTop: 10, letterSpacing: "0.005em" }}>{sub}</div>
@@ -169,12 +155,12 @@ export const LowerThird: React.FC<{ t: number; at: number; out: number; title: s
 export const Glass: React.FC<{ style?: React.CSSProperties; children?: React.ReactNode; dark?: boolean; r?: number }> = ({ style, children, dark, r = 28 }) => (
   <div
     style={{
-      background: dark ? "rgba(16,14,28,0.55)" : "rgba(255,255,255,0.72)",
+      background: dark ? "rgba(16,14,28,0.55)" : "rgba(255,255,255,0.86)",
       backdropFilter: "blur(30px) saturate(1.4)",
       WebkitBackdropFilter: "blur(30px) saturate(1.4)",
-      border: dark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(255,255,255,0.75)",
+      border: dark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(15,13,26,0.07)",
       borderRadius: r,
-      boxShadow: "0 30px 80px rgba(20,10,40,0.22), 0 4px 14px rgba(20,10,40,0.08)",
+      boxShadow: "0 30px 80px rgba(20,10,40,0.10), 0 4px 14px rgba(20,10,40,0.05)",
       ...style,
     }}
   >
@@ -283,7 +269,7 @@ export const Browser: React.FC<{
   const cur = shots[i];
   const swap = i > 0 ? tw(t, cur.at, cur.at + 0.55, 0, 1, INOUT) : 1;
   return (
-    <div style={{ width: w, height: h, borderRadius: 22, overflow: "hidden", background: "#f7f6f9", boxShadow: "0 60px 140px rgba(20,8,40,0.35), 0 10px 30px rgba(20,8,40,0.15), 0 0 0 1px rgba(255,255,255,0.5)" }}>
+    <div style={{ width: w, height: h, borderRadius: 22, overflow: "hidden", background: "#f7f6f9", boxShadow: "0 50px 120px rgba(20,8,40,0.16), 0 8px 24px rgba(20,8,40,0.08), 0 0 0 1px rgba(15,13,26,0.08)" }}>
       <div style={{ height: BAR, background: "#ecebf0", display: "flex", alignItems: "center", padding: "0 20px", gap: 9, borderBottom: "1px solid #dddce3" }}>
         {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
           <div key={c} style={{ width: 13, height: 13, borderRadius: 7, background: c }} />
@@ -365,7 +351,7 @@ export const Cursor: React.FC<{ t: number; keys: CurKey[]; show?: [number, numbe
     <div style={{ position: "absolute", left: 0, top: 0, width: 1920, height: 1080, pointerEvents: "none", opacity: o }}>
       {clicks.map((k, i) => {
         const u = clamp((t - k.t) / 0.55);
-        return <div key={i} style={{ position: "absolute", left: k.x - 40 * u - 6, top: k.y - 40 * u - 6, width: 12 + 80 * u, height: 12 + 80 * u, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.9)", background: "rgba(255,255,255,0.18)", opacity: 1 - u }} />;
+        return <div key={i} style={{ position: "absolute", left: k.x - 40 * u - 6, top: k.y - 40 * u - 6, width: 12 + 80 * u, height: 12 + 80 * u, borderRadius: "50%", border: "2px solid rgba(15,13,26,0.35)", background: "rgba(18,161,94,0.12)", opacity: 1 - u }} />;
       })}
       <svg width={40} height={46} style={{ position: "absolute", left: x - 4, top: y - 2, transform: `scale(${press})`, transformOrigin: "4px 2px", filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.3))" }}>
         <path d="M 5 3 L 5 34 L 13 26.5 L 18.5 39 L 24 36.6 L 18.6 24.4 L 29.5 24 Z" fill="#111" stroke="#fff" strokeWidth={2.4} strokeLinejoin="round" />
