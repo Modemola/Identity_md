@@ -10,6 +10,11 @@ const families = [
 const variable: [string, string, FontFaceDescriptors][] = [
   ["Archivo", "archivo-latin-wdth.woff2", { weight: "100 900", stretch: "62% 125%" }],
   ["Inter", "inter-latin-opsz.woff2", { weight: "100 900" }],
+  // the editorial serif for the KEPT 2.0 film
+  ["Newsreader", "newsreader-latin-opsz-normal.woff2", { weight: "200 800" }],
+  ["Newsreader", "newsreader-latin-opsz-italic.woff2", { weight: "200 800", style: "italic" }],
+  ["Instrument Serif", "instrument-serif-latin-400-normal.woff2", { weight: "400" }],
+  ["Instrument Serif", "instrument-serif-latin-400-italic.woff2", { weight: "400", style: "italic" }],
 ];
 Promise.all([
   ...variable.map(([family, file, desc]) => {
