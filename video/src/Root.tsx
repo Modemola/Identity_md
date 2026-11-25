@@ -12,6 +12,7 @@ import { Verdict } from "./scenes/Verdict";
 import { Explainer } from "./explainer/Explainer";
 import { Kept2 } from "./kept2/Kept2";
 import K2 from "./kept2/timeline.json";
+import { Teaser as Kept2Teaser } from "./kept2/Teaser";
 import ET from "./explainer/timeline.json";
 import { Imdelivering } from "./shorts/Imdelivering";
 import S1 from "./shorts/imdelivering.json";
@@ -56,6 +57,7 @@ export const Root: React.FC = () => (
   <>
     <Composition id="Film" component={Film} defaultProps={{ clean: false }} durationInFrames={TL.frames} fps={TL.fps} width={1920} height={1080} />
     <Composition id="Kept2" component={Kept2} defaultProps={{ clean: false }} durationInFrames={K2.frames} fps={K2.fps} width={1920} height={1080} />
+    <Composition id="Kept2Teaser" component={Kept2Teaser} durationInFrames={450} fps={30} width={1920} height={1080} />
     <Composition id="Explainer" component={Explainer} defaultProps={{ clean: false }} durationInFrames={ET.frames} fps={ET.fps} width={1920} height={1080} />
     <Composition id="Imdelivering" component={Imdelivering} durationInFrames={S1.frames} fps={S1.fps} width={1080} height={1080} />
     <Composition id="RoadmapMeetsSwarm" component={RoadmapMeetsSwarm} durationInFrames={S2.frames} fps={S2.fps} width={1080} height={1080} />
